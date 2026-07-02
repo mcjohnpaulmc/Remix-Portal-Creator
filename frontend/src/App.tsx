@@ -579,9 +579,9 @@ export default function App() {
                       onClick={() => {
                         setSubdomain(subObj.name);
                       }}
-                      className={`text-[8.5px] font-mono font-bold px-1.5 py-0.5 rounded-sm border transition-all cursor-pointer ${
+                      className={`text-[11px] font-mono font-bold px-3 py-1 rounded-md border transition-all cursor-pointer ${
                         subdomain === subObj.name
-                          ? "bg-indigo-650 border-indigo-650 text-white shadow-3xs"
+                          ? "bg-indigo-600 border-indigo-600 text-white shadow-sm"
                           : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
                       }`}
                       title={`Simulate ${subObj.name}.mobiusservices.co.in (${subObj.displayName})`}
@@ -595,10 +595,10 @@ export default function App() {
                     onClick={() => {
                       setSubdomain("all");
                     }}
-                    className={`text-[8.5px] font-mono font-bold px-1.5 py-0.5 rounded-sm border transition-all cursor-pointer ${
+                    className={`text-[11px] font-mono font-bold px-3 py-1 rounded-md border transition-all cursor-pointer ${
                       subdomain === "all"
-                        ? "bg-indigo-650 border-indigo-650 text-white shadow-3xs"
-                        : "bg-slate-50 border-slate-200 text-slate-550 hover:bg-slate-100"
+                        ? "bg-indigo-600 border-indigo-600 text-white shadow-sm"
+                        : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
                     }`}
                     title="Simulate all subdomains active simultaneously"
                   >
@@ -1334,7 +1334,7 @@ export default function App() {
 
                             <button
                               type="submit"
-                              className="w-full py-2 bg-gradient-to-r from-indigo-600 to-indigo-800 hover:from-indigo-650 hover:to-indigo-800 text-white font-semibold text-xs rounded-lg transition-all"
+                              className="w-full py-2 bg-gradient-to-r from-indigo-600 to-indigo-800 hover:from-indigo-700 hover:to-indigo-900 text-white font-semibold text-xs rounded-lg transition-all"
                             >
                               🌟 Create Customer Subdomain
                             </button>
@@ -1483,7 +1483,7 @@ export default function App() {
                               return (
                                 <div key={idx} className="p-4 bg-slate-50/80 border border-slate-200/60 rounded-xl space-y-3">
                                   <div className="flex items-center gap-2">
-                                    <span className="h-5 w-5 rounded bg-indigo-650 text-white text-[10px] font-mono font-bold flex items-center justify-center">
+                                    <span className="h-5 w-5 rounded bg-indigo-600 text-white text-[10px] font-mono font-bold flex items-center justify-center">
                                       {idx + 1}
                                     </span>
                                     <span className="text-xs font-bold text-slate-800">

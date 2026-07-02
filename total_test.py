@@ -667,6 +667,19 @@ def test_collateral_modal_is_full_screen():
         fail(name, str(e))
 
 
+def test_header_subdomain_filters_use_valid_tailwind_color():
+    name = "Fix-17 (static): Header subdomain filter buttons use bg-indigo-600 not the invalid bg-indigo-650"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        assert "bg-indigo-650" not in src, \
+            "Header filter buttons still use bg-indigo-650 which is not a valid Tailwind class (renders transparent)"
+        assert "bg-indigo-600" in src, \
+            "Header filter buttons should use bg-indigo-600 for the selected state"
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 def test_carousel_bg_image_has_no_alt_text():
     name = "Fix-16g (static): HeroCarousel background img has empty alt to prevent ghost text on broken images"
     try:
@@ -753,6 +766,7 @@ TESTS = [
     test_auth_modal_is_horizontal_two_column,
     test_auth_modal_esc_key_in_app,
     test_collateral_modal_is_full_screen,
+    test_header_subdomain_filters_use_valid_tailwind_color,
     test_carousel_bg_image_has_no_alt_text,
     test_solution_with_empty_thumbnail_accepted,
 ]
