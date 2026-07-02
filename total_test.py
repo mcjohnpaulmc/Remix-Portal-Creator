@@ -667,6 +667,19 @@ def test_collateral_modal_is_full_screen():
         fail(name, str(e))
 
 
+def test_carousel_bg_image_has_no_alt_text():
+    name = "Fix-16g (static): HeroCarousel background img has empty alt to prevent ghost text on broken images"
+    try:
+        src = read_file("frontend/src/components/HeroCarousel.tsx")
+        assert 'alt=""' in src, \
+            "HeroCarousel background img still uses alt={current.title} — causes ghost text on broken image load"
+        assert 'onError' in src, \
+            "HeroCarousel background img has no onError handler to hide it when image fails to load"
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 def test_solution_with_empty_thumbnail_accepted():
     name = "Fix-16f: API accepts solution creation with empty thumbnail"
     if not SERVER_UP:
@@ -740,6 +753,7 @@ TESTS = [
     test_auth_modal_is_horizontal_two_column,
     test_auth_modal_esc_key_in_app,
     test_collateral_modal_is_full_screen,
+    test_carousel_bg_image_has_no_alt_text,
     test_solution_with_empty_thumbnail_accepted,
 ]
 

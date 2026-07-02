@@ -57,11 +57,12 @@ export function HeroCarousel({ items, onLink }: HeroCarouselProps) {
     >
       {/* Background slide graphics with crossfade transition */}
       <div className="absolute inset-0 z-0">
-        <img 
-          src={current.imageUrl || "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=1200"} 
-          alt={current.title} 
+        <img
+          src={current.imageUrl || "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=1200"}
+          alt=""
           className="w-full h-full object-cover brightness-[0.35] transition-all duration-1000 scale-102"
           referrerPolicy="no-referrer"
+          onError={(e) => { e.currentTarget.style.display = "none"; }}
         />
         {/* Subtle color accents overlay */}
         <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-900/60 to-transparent"></div>
