@@ -130,8 +130,8 @@ export function AdminSolutions({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !appUrl || !thumbnail) {
-      alert("Please complete all primary fields (Title, Application URL, Visual Thumbnail).");
+    if (!title || !thumbnail) {
+      alert("Please complete all primary fields (Title, Visual Thumbnail).");
       return;
     }
 
@@ -265,15 +265,14 @@ export function AdminSolutions({
             {/* URL */}
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1 flex items-center gap-1">
-                <Globe className="h-3 w-3" /> Application URL
+                <Globe className="h-3 w-3" /> Application URL <span className="text-slate-400 font-normal">(optional)</span>
               </label>
               <input
                 type="url"
                 value={appUrl}
                 onChange={(e) => setAppUrl(e.target.value)}
-                placeholder="https://dashboard.mobiusservices.co.in"
+                placeholder="https://dashboard.mobiusservices.co.in or http://localhost:8080"
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-1 focus:ring-slate-800"
-                required
               />
             </div>
 
