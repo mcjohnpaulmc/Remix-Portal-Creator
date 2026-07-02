@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { X, Download, FileText, LayoutTemplate, Film, CheckCircle2, AlertOctagon, TrendingUp, Cpu, Play, ExternalLink, RefreshCw, FileSpreadsheet, Eye } from "lucide-react";
 import { Collateral } from "../../../shared/types";
 import { motion } from "motion/react";
@@ -14,6 +14,12 @@ interface CollateralDetailModalProps {
 }
 
 export function CollateralDetailModal({ collateral, onClose }: CollateralDetailModalProps) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+
   if (!collateral) return null;
 
   // Render file Icons based on document names
@@ -220,13 +226,13 @@ export function CollateralDetailModal({ collateral, onClose }: CollateralDetailM
   };
 
   return (
-    <div id="collateral-modal-container" className="fixed inset-0 z-50 flex items-center justify-end p-0 md:p-4 bg-slate-900/60 backdrop-blur-xs">
+    <div id="collateral-modal-container" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
       <motion.div
-        initial={{ x: "100%" }}
-        animate={{ x: 0 }}
-        exit={{ x: "100%" }}
-        transition={{ type: "spring", damping: 25, stiffness: 180 }}
-        className="h-full md:h-[calc(100vh-2rem)] w-full max-w-3xl bg-slate-50/98 shadow-2xl overflow-y-auto custom-scroll flex flex-col md:rounded-2xl border-l border-slate-100"
+        initial={{ opacity: 0, scale: 0.97 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.97 }}
+        transition={{ type: "spring", damping: 25, stiffness: 200 }}
+        className="h-full w-full bg-slate-50/98 shadow-2xl overflow-y-auto custom-scroll flex flex-col rounded-2xl border border-slate-100"
       >
         {/* Sticky Hero Header */}
         <div className="sticky top-0 bg-white/95 backdrop-blur-md z-10 border-b border-slate-100 p-5 flex items-center justify-between shadow-2xs">

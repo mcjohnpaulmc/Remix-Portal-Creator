@@ -7,6 +7,7 @@ import React, { useState } from "react";
 import { X, ExternalLink, Copy, Check, Shield, User, Key, Info, Eye, EyeOff } from "lucide-react";
 import { Solution } from "../../../shared/types";
 import { motion, AnimatePresence } from "motion/react";
+import { SafeImage } from "./SafeImage";
 
 interface SolutionLaunchModalProps {
   solution: Solution | null;
@@ -55,11 +56,11 @@ export function SolutionLaunchModal({ solution, onClose }: SolutionLaunchModalPr
         <div className="space-y-5">
           {/* Solution Snapshot */}
           <div className="aspect-video w-full rounded-xl overflow-hidden relative border border-slate-100">
-            <img
+            <SafeImage
               src={solution.thumbnail}
               alt={solution.title}
+              title={solution.title}
               className="w-full h-full object-cover"
-              referrerPolicy="no-referrer"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-slate-950/40 via-transparent to-transparent pointer-events-none" />
           </div>

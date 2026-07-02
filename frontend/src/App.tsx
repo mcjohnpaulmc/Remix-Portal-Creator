@@ -43,6 +43,7 @@ import { Solution, Collateral, UserLog, AppState, CurrentProject, UpcomingProjec
 
 // Import custom parts
 import { AccessWall } from "./components/AccessWall";
+import { SafeImage } from "./components/SafeImage";
 import { SolutionLaunchModal } from "./components/SolutionLaunchModal";
 import { CollateralDetailModal } from "./components/CollateralDetailModal";
 import { AdminSolutions } from "./components/AdminSolutions";
@@ -273,6 +274,14 @@ export default function App() {
       window.removeEventListener("popstate", handleUrlChange);
     };
   }, []);
+
+  // Close auth overlay on Escape key
+  useEffect(() => {
+    if (!authNeededItem) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setAuthNeededItem(null); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [authNeededItem]);
 
   // Post dynamic analytic page-view logs directly to server
   const logUserAction = async (action: string, details: string) => {
@@ -655,18 +664,11 @@ export default function App() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="relative w-full max-w-md"
+              className="w-full max-w-3xl"
             >
-              <div className="absolute top-4 right-4 z-10">
-                <button
-                  onClick={() => setAuthNeededItem(null)}
-                  className="p-1 text-slate-400 hover:text-slate-950 bg-white rounded-md border border-slate-100"
-                >
-                  <X className="h-4.5 w-4.5" />
-                </button>
-              </div>
-              <AccessWall 
-                onSuccess={handleAuthSuccess} 
+              <AccessWall
+                onSuccess={handleAuthSuccess}
+                onClose={() => setAuthNeededItem(null)}
                 solutions={solutions}
                 targetSolutionId={authNeededItem && authNeededItem.type === "sol" ? authNeededItem.id : null}
               />
@@ -804,11 +806,11 @@ export default function App() {
                       >
                         {/* Visual Image */}
                         <div className="w-full h-32 bg-slate-50 rounded-lg mb-4 overflow-hidden border border-slate-150 relative shrink-0">
-                          <img
+                          <SafeImage
                             src={sol.thumbnail}
                             alt={sol.title}
+                            title={sol.title}
                             className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-500"
-                            referrerPolicy="no-referrer"
                           />
                           <div className="absolute top-2 right-2 bg-slate-900/60 backdrop-blur-sm px-2 py-0.5 rounded-sm text-[8px] text-white font-mono uppercase tracking-widest font-semibold select-none">
                             Active App
@@ -1021,11 +1023,11 @@ export default function App() {
                                       >
                                         {/* Thumbnail image */}
                                         <div className="w-full h-28 bg-slate-50 rounded-lg overflow-hidden border border-slate-150 relative shrink-0">
-                                          <img
+                                          <SafeImage
                                             src={col.thumbnail}
                                             alt={col.title}
+                                            title={col.title}
                                             className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-500"
-                                            referrerPolicy="no-referrer"
                                           />
                                           <div className="absolute top-2 right-2 bg-slate-900/65 backdrop-blur-xs px-2.5 py-0.5 rounded text-[8px] text-white font-mono uppercase tracking-widest font-bold select-none">
                                             {col.fileType || "doc"}

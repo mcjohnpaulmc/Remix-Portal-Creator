@@ -597,6 +597,106 @@ def test_admin_components_use_api_upload():
         fail(name, str(e))
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+# Fix 16 — UI: Pattern thumbnail fallback, horizontal auth modal, full-screen collateral
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_pattern_thumbnail_component_exists():
+    name = "Fix-16a (static): PatternThumbnail component exists for empty-thumbnail fallback"
+    try:
+        src = read_file("frontend/src/components/PatternThumbnail.tsx")
+        assert "PatternThumbnail" in src, "PatternThumbnail function not found"
+        assert "linearGradient" in src, "PatternThumbnail must use SVG linearGradient"
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_solution_card_uses_safe_image():
+    name = "Fix-16b (static): App.tsx solution card uses SafeImage with onError fallback to PatternThumbnail"
+    try:
+        app_src = read_file("frontend/src/App.tsx")
+        assert "SafeImage" in app_src, "App.tsx does not use SafeImage component"
+        safe_src = read_file("frontend/src/components/SafeImage.tsx")
+        assert "onError" in safe_src, "SafeImage does not have onError handler for broken images"
+        assert "PatternThumbnail" in safe_src, "SafeImage does not fall back to PatternThumbnail"
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_auth_modal_is_horizontal_two_column():
+    name = "Fix-16c (static): AccessWall uses two-column horizontal grid layout"
+    try:
+        src = read_file("frontend/src/components/AccessWall.tsx")
+        assert "grid-cols-2" in src or "md:grid-cols-2" in src, \
+            "AccessWall does not use two-column grid layout"
+        assert "onClose" in src, "AccessWall does not accept onClose prop"
+        assert 'key === "Escape"' not in src, \
+            "ESC key for auth modal should be in App.tsx, not AccessWall"
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_auth_modal_esc_key_in_app():
+    name = "Fix-16d (static): App.tsx closes auth overlay on Escape key"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        assert '"Escape"' in src, "App.tsx does not handle Escape key for auth modal"
+        assert "setAuthNeededItem(null)" in src, "App.tsx does not close authNeededItem on ESC"
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_collateral_modal_is_full_screen():
+    name = "Fix-16e (static): CollateralDetailModal is full-screen, not a side panel"
+    try:
+        src = read_file("frontend/src/components/CollateralDetailModal.tsx")
+        assert 'justify-end' not in src, \
+            "CollateralDetailModal still uses justify-end (side panel layout)"
+        assert 'x: "100%"' not in src and "x: '100%'" not in src, \
+            "CollateralDetailModal still uses slide-in-from-right animation"
+        assert 'justify-center' in src, \
+            "CollateralDetailModal should use justify-center for full-screen layout"
+        assert '"Escape"' in src, \
+            "CollateralDetailModal should close on Escape key"
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_solution_with_empty_thumbnail_accepted():
+    name = "Fix-16f: API accepts solution creation with empty thumbnail"
+    if not SERVER_UP:
+        skip(name, "server not running"); return
+    try:
+        r = admin_post("/api/admin/solutions", {
+            "action": "create",
+            "solution": {
+                "title": "Regression No-Thumbnail Test",
+                "thumbnail": "",
+                "url": "",
+                "credentialsDescription": "Test solution with no thumbnail",
+                "enabled": False
+            }
+        })
+        if r.status_code != 200:
+            fail(name, f"Expected 200, got {r.status_code}: {r.text}"); return
+        data = r.json()
+        if not data.get("success"):
+            fail(name, f"success not true: {data}"); return
+        # clean up
+        new_sol = next((s for s in data.get("database", {}).get("solutions", [])
+                        if s.get("title") == "Regression No-Thumbnail Test"), None)
+        if new_sol:
+            admin_post("/api/admin/solutions", {"action": "delete", "solution": {"id": new_sol["id"]}})
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 # ── run all tests ─────────────────────────────────────────────────────────────
 
 TESTS = [
@@ -634,6 +734,13 @@ TESTS = [
     test_app_tsx_deploy_uses_real_endpoint,
     # Fix 15 — Real file upload in admin components
     test_admin_components_use_api_upload,
+    # Fix 16 — Pattern thumbnail, horizontal auth modal, full-screen collateral
+    test_pattern_thumbnail_component_exists,
+    test_solution_card_uses_safe_image,
+    test_auth_modal_is_horizontal_two_column,
+    test_auth_modal_esc_key_in_app,
+    test_collateral_modal_is_full_screen,
+    test_solution_with_empty_thumbnail_accepted,
 ]
 
 if __name__ == "__main__":
