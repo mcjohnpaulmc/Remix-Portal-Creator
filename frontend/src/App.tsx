@@ -507,7 +507,7 @@ export default function App() {
         await fetchPortalData();
         // Poll the portal port until it responds (up to 20s)
         if (targetStatus === "live" && port) {
-          const url = `http://localhost:${port}/api/portal-info`;
+          const url = `http://${window.location.hostname}:${port}/api/portal-info`;
           const deadline = Date.now() + 20000;
           const poll = async () => {
             try {
@@ -1483,7 +1483,7 @@ export default function App() {
                                   </button>
                                 </div>
                                 <p className="text-[10px] text-slate-400">
-                                  Creates a portal without a subdomain on an auto-assigned port. Accessible at <code className="font-mono">localhost:PORT</code> and manageable from this hub.
+                                  Creates a portal without a subdomain on an auto-assigned port. Accessible at <code className="font-mono">{window.location.hostname}:PORT</code> and manageable from this hub.
                                 </p>
                               </div>
                             )}
@@ -1511,7 +1511,7 @@ export default function App() {
                                     </div>
                                     <span className="text-orange-400 font-mono text-[10px] block mt-0.5 truncate">
                                       {portal.isDummy
-                                        ? `localhost:${portal.port}`
+                                        ? `${window.location.hostname}:${portal.port}`
                                         : `${portal.name}.${portal.domain || "mobiusservices.io"}${portal.port ? ` · :${portal.port}` : ""}`}
                                     </span>
                                   </div>
@@ -1547,11 +1547,9 @@ export default function App() {
                                             type="button"
                                             disabled={!isLive || isStarting}
                                             onClick={() => {
-                                              const url = portal.isDummy
-                                                ? `http://localhost:${portal.port}`
-                                                : portal.port
-                                                  ? `http://${window.location.hostname}:${portal.port}`
-                                                  : `https://${portal.name}.${portal.domain || "mobiusservices.io"}`;
+                                              const url = portal.port
+                                                ? `http://${window.location.hostname}:${portal.port}`
+                                                : `https://${portal.name}.${portal.domain || "mobiusservices.io"}`;
                                               window.open(url, "_blank");
                                             }}
                                             className={`px-2.5 py-1 font-semibold text-[10px] rounded-lg transition-colors flex items-center gap-1 ${
@@ -1559,7 +1557,7 @@ export default function App() {
                                                 ? "bg-slate-700 hover:bg-slate-600 text-slate-100 cursor-pointer"
                                                 : "bg-slate-800 text-slate-600 cursor-not-allowed opacity-50"
                                             }`}
-                                            title={!isLive ? "Start portal first" : isStarting ? "Starting…" : portal.isDummy ? `Open http://localhost:${portal.port}` : "Open portal"}
+                                            title={!isLive ? "Start portal first" : isStarting ? "Starting…" : "Open portal"}
                                           >
                                             <Globe className="h-3 w-3" /> Access
                                           </button>
@@ -1977,20 +1975,16 @@ export default function App() {
                     <div className="flex-1 flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg overflow-hidden">
                       <Globe className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                       <span className="text-xs font-mono text-orange-600 truncate">
-                        {portalSettingsTarget.isDummy
-                          ? `http://localhost:${portalSettingsTarget.port}`
-                          : portalSettingsTarget.port
-                            ? `http://${window.location.hostname}:${portalSettingsTarget.port}`
-                            : `https://${portalSettingsTarget.name}.${portalSettingsTarget.domain || "mobiusservices.io"}`}
+                        {portalSettingsTarget.port
+                          ? `http://${window.location.hostname}:${portalSettingsTarget.port}`
+                          : `https://${portalSettingsTarget.name}.${portalSettingsTarget.domain || "mobiusservices.io"}`}
                       </span>
                     </div>
                     <button
                       onClick={() => {
-                        const url = portalSettingsTarget.isDummy
-                          ? `http://localhost:${portalSettingsTarget.port}`
-                          : portalSettingsTarget.port
-                            ? `http://${window.location.hostname}:${portalSettingsTarget.port}`
-                            : `https://${portalSettingsTarget.name}.${portalSettingsTarget.domain || "mobiusservices.io"}`;
+                        const url = portalSettingsTarget.port
+                          ? `http://${window.location.hostname}:${portalSettingsTarget.port}`
+                          : `https://${portalSettingsTarget.name}.${portalSettingsTarget.domain || "mobiusservices.io"}`;
                         navigator.clipboard.writeText(url).catch(() => {});
                       }}
                       className="p-2 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors"
@@ -2000,11 +1994,9 @@ export default function App() {
                     </button>
                     <button
                       onClick={() => {
-                        const url = portalSettingsTarget.isDummy
-                          ? `http://localhost:${portalSettingsTarget.port}`
-                          : portalSettingsTarget.port
-                            ? `http://${window.location.hostname}:${portalSettingsTarget.port}`
-                            : `https://${portalSettingsTarget.name}.${portalSettingsTarget.domain || "mobiusservices.io"}`;
+                        const url = portalSettingsTarget.port
+                          ? `http://${window.location.hostname}:${portalSettingsTarget.port}`
+                          : `https://${portalSettingsTarget.name}.${portalSettingsTarget.domain || "mobiusservices.io"}`;
                         window.open(url, "_blank");
                       }}
                       disabled={portalSettingsTarget.status !== "live"}
