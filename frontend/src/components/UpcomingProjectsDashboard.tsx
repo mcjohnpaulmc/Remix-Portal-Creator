@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @license
  * SPDX-License-Identifier: Apache-2.6
  */
@@ -82,7 +82,7 @@ export function UpcomingProjectsDashboard({ projects, userEmail }: UpcomingProje
                 <div
                   key={proj.id}
                   onClick={() => setSelectedProj(proj)}
-                  className="group relative flex flex-col justify-between bg-white border border-slate-100 hover:border-indigo-200 rounded-2xl shadow-3xs hover:shadow-2xs p-5 transition-all cursor-pointer text-left overflow-hidden"
+                  className="group relative flex flex-col justify-between bg-white border border-slate-100 hover:border-orange-200 rounded-2xl shadow-3xs hover:shadow-2xs p-5 transition-all cursor-pointer text-left overflow-hidden"
                 >
                   <div>
                     {/* Status Ribbon Tag */}
@@ -96,7 +96,7 @@ export function UpcomingProjectsDashboard({ projects, userEmail }: UpcomingProje
                       </span>
                     </div>
 
-                    <h4 className="font-display font-bold text-sm text-slate-900 mt-3 group-hover:text-indigo-750 transition-colors leading-snug">
+                    <h4 className="font-display font-bold text-sm text-slate-900 mt-3 group-hover:text-orange-750 transition-colors leading-snug">
                       {proj.name}
                     </h4>
                     <span className="text-[10px] text-slate-400 font-semibold block mt-0.5 uppercase tracking-wide">
@@ -110,7 +110,7 @@ export function UpcomingProjectsDashboard({ projects, userEmail }: UpcomingProje
 
                   <div className="mt-5 pt-3.5 border-t border-slate-50 flex items-center justify-between text-[11px] font-mono text-slate-400">
                     <span className="truncate max-w-40 font-mono">⏱️ {proj.timelines || "Timeline missing"}</span>
-                    <span className="shrink-0 text-slate-350 flex items-center group-hover:text-indigo-650 font-semibold font-sans text-[10px] gap-0.5">
+                    <span className="shrink-0 text-slate-350 flex items-center group-hover:text-orange-650 font-semibold font-sans text-[10px] gap-0.5">
                       View Proposal <ChevronRight className="h-3 w-3" />
                     </span>
                   </div>
@@ -162,7 +162,7 @@ export function UpcomingProjectsDashboard({ projects, userEmail }: UpcomingProje
                 <h3 className="font-display font-medium text-lg text-slate-950 mt-2.5 leading-snug">
                   {selectedProj.name}
                 </h3>
-                <span className="text-xs text-indigo-600 font-bold block">
+                <span className="text-xs text-orange-600 font-bold block">
                   🏢 Client Department: {selectedProj.department}
                 </span>
                 <p className="text-xs text-slate-550 max-w-2xl leading-relaxed pt-1">
@@ -198,7 +198,7 @@ export function UpcomingProjectsDashboard({ projects, userEmail }: UpcomingProje
                       key={stage}
                       className={`p-3 rounded-xl border flex items-center justify-between transition-all ${
                         isActive 
-                          ? "bg-indigo-50 border-indigo-250 ring-2 ring-indigo-50/50" 
+                          ? "bg-orange-50 border-orange-250 ring-2 ring-orange-50/50" 
                           : isCompleted 
                             ? "bg-slate-50 border-emerald-150" 
                             : "bg-slate-50/50 border-slate-150 opacity-60"
@@ -208,7 +208,7 @@ export function UpcomingProjectsDashboard({ projects, userEmail }: UpcomingProje
                         <span className="text-[9px] font-mono font-bold text-slate-400 tracking-widest uppercase block leading-none">
                           Stage 0{idx + 1}
                         </span>
-                        <span className={`text-xs font-bold leading-tight block mt-1 ${isActive ? "text-indigo-850" : isCompleted ? "text-slate-800 line-through decoration-slate-300" : "text-slate-550"}`}>
+                        <span className={`text-xs font-bold leading-tight block mt-1 ${isActive ? "text-orange-850" : isCompleted ? "text-slate-800 line-through decoration-slate-300" : "text-slate-550"}`}>
                           {stage}
                         </span>
                       </div>
@@ -216,7 +216,7 @@ export function UpcomingProjectsDashboard({ projects, userEmail }: UpcomingProje
                       {isCompleted ? (
                         <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
                       ) : isActive ? (
-                        <div className="h-2 w-2 rounded-full bg-indigo-600 animate-ping mr-1" />
+                        <div className="h-2 w-2 rounded-full bg-orange-600 animate-ping mr-1" />
                       ) : null}
                     </div>
                   );
@@ -263,7 +263,7 @@ export function UpcomingProjectsDashboard({ projects, userEmail }: UpcomingProje
                           {item.category}
                         </span>
                         <div className="flex gap-2 items-center min-w-0 pt-1">
-                          <FileText className="h-5 w-5 text-indigo-500 shrink-0" />
+                          <FileText className="h-5 w-5 text-orange-500 shrink-0" />
                           <span className="text-xs font-semibold text-slate-800 truncate leading-tight block" title={item.name}>
                             {item.name}
                           </span>

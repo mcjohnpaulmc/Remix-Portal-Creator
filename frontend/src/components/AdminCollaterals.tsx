@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -12,7 +12,7 @@ interface AdminCollateralsProps {
   onRefresh: (action: string, collateralData: any) => Promise<void>;
   subdomains?: { id: string; name: string; displayName: string }[];
   prefilledSubdomain?: string | null;
-  adminToken?: string;
+  adminUserEmail?: string;
 }
 
 const COLLATERAL_PRESETS = [
@@ -27,7 +27,7 @@ export function AdminCollaterals({
   onRefresh,
   subdomains = [],
   prefilledSubdomain,
-  adminToken = "",
+  adminUserEmail = "",
 }: AdminCollateralsProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -78,7 +78,7 @@ export function AdminCollaterals({
       try {
         const res = await fetch("/api/upload", {
           method: "POST",
-          headers: { "X-Admin-Token": adminToken },
+          headers: { "X-Admin-User": adminUserEmail },
           body: formData,
         });
         const data = await res.json();
@@ -264,7 +264,7 @@ export function AdminCollaterals({
       {isEditing && (
         <form onSubmit={handleCommitCollateral} className="p-6 bg-white border border-slate-100 rounded-2xl shadow-3xs space-y-6 max-w-3xl text-left">
           <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-            <h4 className="text-xs font-mono font-bold text-indigo-600 uppercase tracking-wider">
+            <h4 className="text-xs font-mono font-bold text-orange-600 uppercase tracking-wider">
               {editingId ? "📝 Edit Collateral Asset" : "✨ Register New Collateral Asset"}
             </h4>
             <button
@@ -341,7 +341,7 @@ export function AdminCollaterals({
                         <div className="max-h-24 overflow-y-auto space-y-1">
                           {uploadedFiles.map((f, fIdx) => (
                             <div key={fIdx} className="flex justify-between items-center bg-white p-1.5 rounded px-2.5 text-[10px] font-mono border border-slate-150">
-                              <span className="text-indigo-600 truncate max-w-[200px]">📎 {f.name}</span>
+                              <span className="text-orange-600 truncate max-w-[200px]">📎 {f.name}</span>
                               <span className="text-slate-400 shrink-0">{f.size}</span>
                             </div>
                           ))}
@@ -368,7 +368,7 @@ export function AdminCollaterals({
             {/* Thumbnail Upload Redesign */}
             <div className="md:col-span-2 space-y-3">
               <label className="block text-xs font-semibold text-slate-700 flex items-center gap-1.5 uppercase tracking-wider text-[11px] font-mono">
-                <Image className="h-4 w-4 text-indigo-500" /> Cover Photo Setup (Local Image Upload)
+                <Image className="h-4 w-4 text-orange-500" /> Cover Photo Setup (Local Image Upload)
               </label>
               
               <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
@@ -422,7 +422,7 @@ export function AdminCollaterals({
                           try {
                             const res = await fetch("/api/upload", {
                               method: "POST",
-                              headers: { "X-Admin-Token": adminToken },
+                              headers: { "X-Admin-User": adminUserEmail },
                               body: formData,
                             });
                             const data = await res.json();
@@ -468,7 +468,7 @@ export function AdminCollaterals({
             {/* Tag / Category Category */}
             <div className="md:col-span-2">
               <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
-                <Tag className="h-3.5 w-3.5 text-indigo-500" />
+                <Tag className="h-3.5 w-3.5 text-orange-500" />
                 Asset Category Tag
               </label>
               <select
@@ -519,7 +519,7 @@ export function AdminCollaterals({
                     type="checkbox"
                     checked={customerNames.includes("all")}
                     onChange={() => handleSubdomainCheckboxChange("all")}
-                    className="h-3.5 w-3.5 accent-indigo-600 rounded border-slate-350"
+                    className="h-3.5 w-3.5 accent-orange-600 rounded border-slate-350"
                   />
                   <span className="text-slate-900 font-mono font-bold">All (Global Asset)</span>
                 </label>
@@ -529,7 +529,7 @@ export function AdminCollaterals({
                       type="checkbox"
                       checked={customerNames.includes(sub.name)}
                       onChange={() => handleSubdomainCheckboxChange(sub.name)}
-                      className="h-3.5 w-3.5 accent-indigo-600 rounded border-slate-350"
+                      className="h-3.5 w-3.5 accent-orange-600 rounded border-slate-350"
                     />
                     <span className="text-slate-700 font-mono text-[11px]">{sub.displayName}</span>
                   </label>
@@ -600,7 +600,7 @@ export function AdminCollaterals({
                     </h4>
                     
                     <div className="flex flex-wrap gap-1 mt-1.5">
-                      <span className="text-[9px] bg-indigo-50 border border-indigo-150 text-indigo-700 px-2 py-0.5 rounded-sm font-semibold capitalize">
+                      <span className="text-[9px] bg-orange-50 border border-orange-150 text-orange-700 px-2 py-0.5 rounded-sm font-semibold capitalize">
                         📁 {mappedFileType}
                       </span>
                       <span className="text-[9px] bg-amber-50 border border-amber-150 text-amber-700 px-2 py-0.5 rounded-sm font-semibold capitalize">
@@ -618,10 +618,10 @@ export function AdminCollaterals({
                       <span className="font-semibold text-slate-400">Map:</span>
                       {coll.customerNames && coll.customerNames.length > 0 ? (
                         coll.customerNames.map((n) => (
-                          <span key={n} className="bg-indigo-50 border border-indigo-150 text-indigo-750 font-bold px-1 py-0.5 rounded text-[8px] uppercase">{n}</span>
+                          <span key={n} className="bg-orange-50 border border-orange-150 text-orange-750 font-bold px-1 py-0.5 rounded text-[8px] uppercase">{n}</span>
                         ))
                       ) : (
-                        <span className="bg-indigo-50 border border-indigo-150 text-indigo-755 font-bold px-1 py-0.5 rounded text-[8px] uppercase">{coll.customerName || "all"}</span>
+                        <span className="bg-orange-50 border border-orange-150 text-orange-755 font-bold px-1 py-0.5 rounded text-[8px] uppercase">{coll.customerName || "all"}</span>
                       )}
                     </div>
                     <div className="flex items-center gap-2">

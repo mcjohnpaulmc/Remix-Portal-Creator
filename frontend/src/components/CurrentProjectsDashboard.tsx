@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @license
  * SPDX-License-Identifier: Apache-2.5
  */
@@ -91,7 +91,7 @@ export function CurrentProjectsDashboard({ projects, userEmail }: CurrentProject
                   <div
                     key={proj.id}
                     onClick={() => setSelectedProj(proj)}
-                    className="group relative flex flex-col justify-between bg-white border border-slate-100 hover:border-indigo-200/80 rounded-2xl shadow-3xs hover:shadow-2xs p-5 transition-all text-left cursor-pointer"
+                    className="group relative flex flex-col justify-between bg-white border border-slate-100 hover:border-orange-200/80 rounded-2xl shadow-3xs hover:shadow-2xs p-5 transition-all text-left cursor-pointer"
                   >
                     <div>
                       {/* Subdomain Category Label */}
@@ -99,7 +99,7 @@ export function CurrentProjectsDashboard({ projects, userEmail }: CurrentProject
                         Tenant: {proj.customerName}.mobiusservices.co.in
                       </span>
 
-                      <h4 className="font-display font-bold text-sm text-slate-900 mt-3 group-hover:text-indigo-750 transition-colors leading-snug">
+                      <h4 className="font-display font-bold text-sm text-slate-900 mt-3 group-hover:text-orange-750 transition-colors leading-snug">
                         {proj.name}
                       </h4>
                       <p className="text-slate-400 text-[10px] uppercase tracking-widest font-mono font-semibold mt-1">
@@ -122,8 +122,8 @@ export function CurrentProjectsDashboard({ projects, userEmail }: CurrentProject
                       </div>
                     </div>
 
-                    <div className="absolute top-4 right-4 h-6 w-6 bg-slate-50 rounded-full flex items-center justify-center group-hover:bg-indigo-50 border border-slate-100 group-hover:border-indigo-150 transition-colors">
-                      <TrendingUp className="h-3 w-3 text-slate-350 group-hover:text-indigo-650" />
+                    <div className="absolute top-4 right-4 h-6 w-6 bg-slate-50 rounded-full flex items-center justify-center group-hover:bg-orange-50 border border-slate-100 group-hover:border-orange-150 transition-colors">
+                      <TrendingUp className="h-3 w-3 text-slate-350 group-hover:text-orange-650" />
                     </div>
                   </div>
                 );
@@ -189,7 +189,7 @@ export function CurrentProjectsDashboard({ projects, userEmail }: CurrentProject
                 </div>
                 <div className="text-left border-l border-slate-200 pl-4">
                   <span className="block text-[10px] uppercase text-slate-400 font-semibold font-sans font-sans">Target TAT SLA</span>
-                  <span className="text-indigo-650 font-bold font-mono text-base">{selectedProj.tatTarget || "24.0 hrs"}</span>
+                  <span className="text-orange-650 font-bold font-mono text-base">{selectedProj.tatTarget || "24.0 hrs"}</span>
                 </div>
               </div>
             </div>
@@ -201,7 +201,7 @@ export function CurrentProjectsDashboard({ projects, userEmail }: CurrentProject
                 <div className="lg:col-span-6 p-5 bg-white border border-slate-100 rounded-2xl shadow-3xs space-y-3 animate-fade-in">
                   <div className="flex items-center justify-between border-b border-slate-50 pb-2.5">
                     <h4 className="text-xs font-mono font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                      <TrendingUp className="h-4 w-4 text-indigo-500" /> Delivery Volumes & Trends
+                      <TrendingUp className="h-4 w-4 text-orange-500" /> Delivery Volumes & Trends
                     </h4>
                     <span className="text-[10px] font-sans text-slate-400">Month-over-Month volume trends</span>
                   </div>
@@ -335,15 +335,15 @@ export function CurrentProjectsDashboard({ projects, userEmail }: CurrentProject
                   <div className="space-y-3 max-h-72 overflow-y-auto custom-scroll">
                     {selectedProj.innovations?.map((item, idx) => (
                       <div key={idx} className="p-3.5 border border-slate-100 rounded-xl bg-slate-50/40 text-left relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-12 h-12 bg-indigo-50/20 rounded-bl-full border-b border-l border-indigo-100/10" />
-                        <span className="text-[10px] font-mono font-bold text-indigo-700 uppercase tracking-widest block mb-1">
+                        <div className="absolute top-0 right-0 w-12 h-12 bg-orange-50/20 rounded-bl-full border-b border-l border-orange-100/10" />
+                        <span className="text-[10px] font-mono font-bold text-orange-700 uppercase tracking-widest block mb-1">
                           Enhancement #{idx + 1}
                         </span>
                         <h5 className="text-xs font-bold text-slate-900 leading-tight">
                           {item.title}
                         </h5>
                         <p className="text-xs text-slate-650 mt-1.5 leading-relaxed bg-white border border-slate-100/50 p-2.5 rounded-lg text-left">
-                          <strong className="text-slate-900 font-semibold font-sans block text-[10px] uppercase tracking-wide mb-0.5 text-indigo-600">
+                          <strong className="text-slate-900 font-semibold font-sans block text-[10px] uppercase tracking-wide mb-0.5 text-orange-600">
                             Corporate Impact:
                           </strong>
                           {item.impact}

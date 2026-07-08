@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight, Compass, ArrowRight, ExternalLink } from "lucide-react";
 import { CarouselItem } from "../../../shared/types";
 
@@ -71,7 +71,7 @@ export function HeroCarousel({ items, onLink }: HeroCarouselProps) {
       {/* Content wrapper */}
       <div className="relative z-10 flex flex-col justify-between p-8 md:p-10 text-left max-w-2xl">
         <div className="space-y-3">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-500/30 border border-indigo-400/40 rounded-full text-[9px] font-bold text-indigo-200 uppercase tracking-widest font-mono">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-orange-500/30 border border-orange-400/40 rounded-full text-[9px] font-bold text-orange-200 uppercase tracking-widest font-mono">
             <Compass className="h-3 w-3 animate-spin duration-3000" />
             {getBadgeLabel(current.linkType)}
           </span>
@@ -88,7 +88,7 @@ export function HeroCarousel({ items, onLink }: HeroCarouselProps) {
           <button
             type="button"
             onClick={() => onLink(current.linkType, current.linkTarget)}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md transition-all self-start cursor-pointer hover:translate-x-1 duration-250"
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs rounded-xl shadow-md transition-all self-start cursor-pointer hover:translate-x-1 duration-250"
           >
             <span>Explore Spotlight</span>
             <ArrowRight className="h-4 w-4" />
@@ -120,7 +120,7 @@ export function HeroCarousel({ items, onLink }: HeroCarouselProps) {
             key={dotIdx}
             onClick={() => setActiveIdx(dotIdx)}
             className={`w-2 h-2 rounded-full transition-all cursor-pointer ${
-              activeIdx === dotIdx ? "bg-indigo-400 w-5" : "bg-white/40 hover:bg-white/70"
+              activeIdx === dotIdx ? "bg-orange-400 w-5" : "bg-white/40 hover:bg-white/70"
             }`}
             aria-label={`Go to slide ${dotIdx + 1}`}
           />

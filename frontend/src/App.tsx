@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -39,7 +39,7 @@ import {
   Key
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { Solution, Collateral, UserLog, AppState, CurrentProject, UpcomingProject, CarouselItem } from "../../shared/types";
+import { Solution, Collateral, UserLog, AppState, CurrentProject, UpcomingProject, CarouselItem, SubdomainPortal, PortalUser } from "../../shared/types";
 
 // Import custom parts
 import { AccessWall } from "./components/AccessWall";
@@ -53,6 +53,7 @@ import { AdminProjects } from "./components/AdminProjects";
 import { CurrentProjectsDashboard } from "./components/CurrentProjectsDashboard";
 import { UpcomingProjectsDashboard } from "./components/UpcomingProjectsDashboard";
 import { HeroCarousel } from "./components/HeroCarousel";
+import { AdminUsers } from "./components/AdminUsers";
 
 export default function App() {
   // Global API states
@@ -106,20 +107,30 @@ export default function App() {
   }, [carousel, selectedAdminSubdomain]);
 
   const [subdomain, setSubdomain] = useState("unilever");
-  const [subdomainsList, setSubdomainsList] = useState<{ id: string; name: string; displayName: string }[]>([]);
+  const [subdomainsList, setSubdomainsList] = useState<SubdomainPortal[]>([]);
+  const [portalUsers, setPortalUsers] = useState<PortalUser[]>([]);
   const [prefilledSubdomain, setPrefilledSubdomain] = useState<string | null>(null);
   const [newSubdomainSlug, setNewSubdomainSlug] = useState("");
   const [newSubdomainDisplayName, setNewSubdomainDisplayName] = useState("");
+  const [showDummyForm, setShowDummyForm] = useState(false);
+  const [dummyPortalName, setDummyPortalName] = useState("");
+  const [creatingDummy, setCreatingDummy] = useState(false);
+  const [startingPortals, setStartingPortals] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  // true = this is the Hub (has admin console); false = customer portal instance (read-only)
+  const [isHub, setIsHub] = useState(true);
 
   // Authentication/Identity states
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [authNeededItem, setAuthNeededItem] = useState<{ type: "sol" | "col"; id: string } | null>(null);
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   // Layout navigation states
   const [currentTab, setCurrentTab] = useState<"solutions" | "collaterals" | "currentProjects" | "upcomingProjects" >("solutions");
   const [viewMode, setViewMode] = useState<"user" | "admin">("user"); // user, admin
-  const [adminActiveTab, setAdminActiveTab] = useState<"solutions" | "collaterals" | "projects" | "hero" | "subdomain" | "branding" | "logs">("solutions");
+  const [adminActiveTab, setAdminActiveTab] = useState<"solutions" | "collaterals" | "projects" | "hero" | "subdomain" | "branding" | "users" | "logs">("solutions");
 
   // Selection modal items
   const [selectedSolution, setSelectedSolution] = useState<Solution | null>(null);
@@ -183,44 +194,29 @@ export default function App() {
   const [updatingSubdomain, setUpdatingSubdomain] = useState(false);
   const [simulatedLaunchStatus, setSimulatedLaunchStatus] = useState<"idle" | "launching" | "ready">("idle");
 
-  // Admin authentication
-  const [adminToken, setAdminToken] = useState<string>("");
-  const [adminTokenInput, setAdminTokenInput] = useState<string>("");
-  const [adminAuthError, setAdminAuthError] = useState<string>("");
-
-  // Fetch helper that attaches the admin token to every /api/admin/* call
+  // Fetch helper — attaches logged-in admin user's email for server-side role validation
   const adminFetch = (url: string, { headers, ...rest }: RequestInit = {}): Promise<Response> =>
     fetch(url, {
       ...rest,
       headers: {
         "Content-Type": "application/json",
         ...(headers as Record<string, string> | undefined),
-        "X-Admin-Token": adminToken,
+        ...(userEmail ? { "X-Admin-User": userEmail } : {}),
       },
     });
-
-  // Verify admin token against server and persist if valid
-  const handleAdminTokenSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAdminAuthError("");
-    try {
-      const res = await fetch("/api/admin/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Admin-Token": adminTokenInput },
-      });
-      if (res.ok) {
-        setAdminToken(adminTokenInput);
-      } else {
-        setAdminAuthError("Invalid admin token. Check ADMIN_TOKEN on the server.");
-      }
-    } catch {
-      setAdminAuthError("Server unreachable.");
-    }
-  };
 
   // Fetch initial portal configuration from the database endpoints
   const fetchPortalData = async () => {
     try {
+      // Detect hub vs customer portal
+      const infoRes = await fetch("/api/portal-info").then(r => r.json()).catch(() => ({ isHub: true }));
+      const hubMode = infoRes.isHub !== false;
+      setIsHub(hubMode);
+      if (!hubMode) {
+        // Lock to user mode on customer portal instances — admin console not available
+        setViewMode("user");
+      }
+
       const res = await fetch("/api/database");
       const data = await res.json();
       setSolutions(data.solutions || []);
@@ -234,6 +230,7 @@ export default function App() {
       setLogo(data.logo || "");
       setCarousel(data.carousel || []);
       setSubdomain(data.subdomain || "unilever");
+      setPortalUsers(data.users || []);
       setAdminHeroPrompt(data.heroPrompt || "");
       setAdminSubdomainInput(data.subdomain || "unilever");
     } catch (err) {
@@ -247,8 +244,8 @@ export default function App() {
     // Check path or hash dynamically for initial administrative routing & path triggers
     const handleUrlChange = () => {
       if (
-        window.location.pathname === "/admin" || 
-        window.location.hash === "#/admin" || 
+        window.location.pathname === "/admin" ||
+        window.location.hash === "#/admin" ||
         window.location.hash === "#admin"
       ) {
         setViewMode("admin");
@@ -261,10 +258,12 @@ export default function App() {
     window.addEventListener("popstate", handleUrlChange);
     handleUrlChange();
 
-    // Capture work email from previous persistent cache session if available
+    // Restore session from localStorage
     const cached = localStorage.getItem("mobius_work_email");
     if (cached) {
       setUserEmail(cached);
+      setUserName(localStorage.getItem("mobius_user_name") || null);
+      setUserRole(localStorage.getItem("mobius_user_role") || null);
     }
 
     fetchPortalData();
@@ -275,13 +274,18 @@ export default function App() {
     };
   }, []);
 
-  // Close auth overlay on Escape key
+  // Close auth overlays on Escape key
   useEffect(() => {
-    if (!authNeededItem) return;
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setAuthNeededItem(null); };
+    if (!authNeededItem && !showLoginModal) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setAuthNeededItem(null);
+        setShowLoginModal(false);
+      }
+    };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [authNeededItem]);
+  }, [authNeededItem, showLoginModal]);
 
   // Post dynamic analytic page-view logs directly to server
   const logUserAction = async (action: string, details: string) => {
@@ -301,9 +305,12 @@ export default function App() {
   };
 
   // Log on user identity authentication
-  const handleAuthSuccess = (email: string) => {
+  const handleAuthSuccess = (email: string, name?: string, role?: string) => {
     setUserEmail(email);
-    logUserAction("Corporate Domain Verified", `Authenticated with work email domain.`);
+    setUserName(name || null);
+    setUserRole(role || null);
+    setShowLoginModal(false);
+    logUserAction("User Login", `User "${name || email}" authenticated successfully.`);
     
     // Resume opening previously blocked resource
     if (authNeededItem) {
@@ -326,7 +333,11 @@ export default function App() {
   // Sign out
   const handleSignOut = () => {
     localStorage.removeItem("mobius_work_email");
+    localStorage.removeItem("mobius_user_name");
+    localStorage.removeItem("mobius_user_role");
     setUserEmail(null);
+    setUserName(null);
+    setUserRole(null);
     logUserAction("Portal Logout", "User logged out of core portal dashboard.");
   };
 
@@ -460,6 +471,64 @@ export default function App() {
     }
   };
 
+  const handleCreateDummy = async () => {
+    setCreatingDummy(true);
+    try {
+      const res = await adminFetch("/api/admin/subdomains", {
+        method: "POST",
+        body: JSON.stringify({ action: "create-dummy", displayName: dummyPortalName || "New Portal" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        await fetchPortalData();
+        setDummyPortalName("");
+        setShowDummyForm(false);
+      } else {
+        alert(data.error || "Failed to create dummy portal.");
+      }
+    } catch {
+      alert("Server error creating dummy portal.");
+    } finally {
+      setCreatingDummy(false);
+    }
+  };
+
+  const handleTogglePortal = async (portalId: string, targetStatus: "live" | "sleep", port?: number) => {
+    if (targetStatus === "live" && port) {
+      setStartingPortals(prev => new Set(prev).add(portalId));
+    }
+    try {
+      const res = await adminFetch("/api/admin/subdomains", {
+        method: "POST",
+        body: JSON.stringify({ action: "toggle", id: portalId, targetStatus }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        await fetchPortalData();
+        // Poll the portal port until it responds (up to 20s)
+        if (targetStatus === "live" && port) {
+          const url = `http://localhost:${port}/api/portal-info`;
+          const deadline = Date.now() + 20000;
+          const poll = async () => {
+            try {
+              const r = await fetch(url);
+              if (r.ok) { setStartingPortals(prev => { const s = new Set(prev); s.delete(portalId); return s; }); return; }
+            } catch {}
+            if (Date.now() < deadline) setTimeout(poll, 1500);
+            else setStartingPortals(prev => { const s = new Set(prev); s.delete(portalId); return s; });
+          };
+          setTimeout(poll, 1500);
+        }
+      } else {
+        setStartingPortals(prev => { const s = new Set(prev); s.delete(portalId); return s; });
+        alert(data.error || "Failed to toggle portal status.");
+      }
+    } catch {
+      setStartingPortals(prev => { const s = new Set(prev); s.delete(portalId); return s; });
+      alert("Server error toggling portal status.");
+    }
+  };
+
   // Update subdomain
   const handleUpdateSubdomain = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -484,28 +553,69 @@ export default function App() {
     }
   };
 
-  // Deploy portal — writes config snapshot to data/portals/<slug>/portal.json
-  const handleSimulatedDeploymentLaunch = async () => {
-    setSimulatedLaunchStatus("launching");
-    logUserAction("Portal Deploy Requested", `Deploying portal: ${subdomain}`);
+  // Deploy portal — writes config snapshot to data/portals/<slug>/portal.json and pings reload
+  const [deployingPortals, setDeployingPortals] = useState<Set<string>>(new Set());
+  const [heroPublishDone, setHeroPublishDone] = useState(false);
+
+  // Portal Settings modal
+  const [portalSettingsTarget, setPortalSettingsTarget] = useState<SubdomainPortal | null>(null);
+  const [settingsDisplayName, setSettingsDisplayName] = useState("");
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsSaved, setSettingsSaved] = useState(false);
+
+  const handleSavePortalSettings = async () => {
+    if (!portalSettingsTarget) return;
+    setSettingsSaving(true);
+    setSettingsSaved(false);
     try {
-      const res = await adminFetch("/api/admin/deploy", {
+      const res = await adminFetch("/api/admin/subdomains", {
         method: "POST",
-        body: JSON.stringify({ portalSlug: subdomain }),
+        body: JSON.stringify({
+          action: "update",
+          id: portalSettingsTarget.id,
+          displayName: settingsDisplayName,
+        }),
       });
       const data = await res.json();
       if (data.success) {
-        setSimulatedLaunchStatus("ready");
-        logUserAction("Portal Deployed", `Config snapshot written to ${data.portalDir}`);
+        await fetchPortalData();
+        setSettingsSaved(true);
+        setTimeout(() => setSettingsSaved(false), 3000);
       } else {
-        setSimulatedLaunchStatus("idle");
+        alert(data.error || "Failed to save portal settings.");
+      }
+    } catch {
+      alert("Server error saving portal settings.");
+    } finally {
+      setSettingsSaving(false);
+    }
+  };
+
+  const handleDeployPortal = async (portalSlug: string) => {
+    if (!portalSlug || portalSlug === "all") return;
+    setDeployingPortals(prev => new Set(prev).add(portalSlug));
+    logUserAction("Portal Deploy Requested", `Deploying portal: ${portalSlug}`);
+    try {
+      const res = await adminFetch("/api/admin/deploy", {
+        method: "POST",
+        body: JSON.stringify({ portalSlug }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        logUserAction("Portal Deployed", `Config snapshot written for ${portalSlug}`);
+      } else {
         alert(data.error || "Deploy failed.");
       }
     } catch (err) {
-      setSimulatedLaunchStatus("idle");
       console.error("Deploy error:", err);
+      alert("Server error during deploy.");
+    } finally {
+      setDeployingPortals(prev => { const s = new Set(prev); s.delete(portalSlug); return s; });
     }
   };
+
+  // Legacy: deploy using global subdomain state (kept for backward compat with any remaining callers)
+  const handleSimulatedDeploymentLaunch = () => handleDeployPortal(subdomain);
 
   // Helper parser to render hero description cleanly (converts markdown headers/paragraphs to elegant elements)
   const renderHeroText = (text: string) => {
@@ -522,7 +632,7 @@ export default function App() {
         <h2 className="text-2xl md:text-3xl font-bold text-white mb-2 leading-tight">
           {titleStr}
         </h2>
-        <p className="text-indigo-100 opacity-90 leading-relaxed text-xs md:text-sm max-w-2xl">
+        <p className="text-orange-100 opacity-90 leading-relaxed text-xs md:text-sm max-w-2xl">
           {bodyStr}
         </p>
       </div>
@@ -545,7 +655,7 @@ export default function App() {
     <div className="min-h-screen flex flex-col bg-slate-50/70 text-slate-900 relative">
       {/* Visual background gradient accents */}
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-slate-100 rounded-full blur-3xl pointer-events-none opacity-50 z-0" />
-      <div className="absolute bottom-10 left-10 w-[400px] h-[400px] bg-sky-50 rounded-full blur-3xl pointer-events-none opacity-40 z-0" />
+      <div className="absolute bottom-10 left-10 w-[400px] h-[400px] bg-orange-50 rounded-full blur-3xl pointer-events-none opacity-40 z-0" />
 
       {/* Corporate Header */}
       <header className="sticky top-0 h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0 shadow-sm z-40 backdrop-blur-md">
@@ -558,54 +668,16 @@ export default function App() {
               referrerPolicy="no-referrer"
             />
           ) : (
-            <div className="w-10 h-10 bg-indigo-700 rounded-lg flex items-center justify-center shadow-xs shrink-0">
-              <div className="w-4 h-4 border-2 border-white transform rotate-45"></div>
-            </div>
+            <img src="/Logo.png" alt="Mobius Logo" className="w-10 h-10 rounded-lg object-contain shrink-0" />
           )}
           <div>
             <h1 className="font-bold text-base md:text-lg tracking-tight text-slate-855">
-              Mobius <span className="text-indigo-600 font-bold">Knowledge Services</span>
+              Mobius <span className="text-orange-600 font-bold">Knowledge Services</span>
             </h1>
             <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 mt-0.5 select-none text-left">
               <span className="text-[10px] font-mono text-slate-400 leading-none">
-                Portal: <strong className="text-indigo-600 font-mono">{subdomain}</strong>.mobiusservices.co.in
+                Portal: <strong className="text-orange-600 font-mono">{subdomain}</strong>.mobiusservices.co.in
               </span>
-              {viewMode === "admin" && (
-                <div className="flex flex-wrap items-center gap-1 sm:border-l sm:border-slate-205 sm:pl-1.5 mt-1 sm:mt-0 max-w-lg">
-                  {subdomainsList.map((subObj) => (
-                    <button
-                      key={subObj.name}
-                      type="button"
-                      onClick={() => {
-                        setSubdomain(subObj.name);
-                      }}
-                      className={`text-[11px] font-mono font-bold px-3 py-1 rounded-md border transition-all cursor-pointer ${
-                        subdomain === subObj.name
-                          ? "bg-indigo-600 border-indigo-600 text-white shadow-sm"
-                          : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
-                      }`}
-                      title={`Simulate ${subObj.name}.mobiusservices.co.in (${subObj.displayName})`}
-                    >
-                      {subObj.name}
-                    </button>
-                  ))}
-                  <button
-                    key="all"
-                    type="button"
-                    onClick={() => {
-                      setSubdomain("all");
-                    }}
-                    className={`text-[11px] font-mono font-bold px-3 py-1 rounded-md border transition-all cursor-pointer ${
-                      subdomain === "all"
-                        ? "bg-indigo-600 border-indigo-600 text-white shadow-sm"
-                        : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
-                    }`}
-                    title="Simulate all subdomains active simultaneously"
-                  >
-                    all
-                  </button>
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -614,31 +686,35 @@ export default function App() {
         <div className="flex items-center gap-4">
           {/* Identity details */}
           {userEmail ? (
-            <div className="hidden sm:flex items-center gap-3">
-              <div className="flex flex-col items-end">
-                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none">Corporate Access</span>
-                <span className="text-xs font-medium text-slate-600 mt-1">{userEmail}</span>
+            <div className="flex items-center gap-2.5">
+              <div className="hidden sm:flex flex-col items-end leading-tight">
+                <span className="text-xs font-semibold text-slate-800">{userName || userEmail.split("@")[0]}</span>
+                <span className="text-[10px] text-slate-400 font-mono">{userEmail}</span>
               </div>
-              <div className="w-10 h-10 rounded-full bg-slate-100 border-2 border-white shadow-xs flex items-center justify-center text-xs font-semibold text-slate-600 uppercase select-none relative group">
-                {userEmail.substring(0, 2).toUpperCase()}
-                <button
-                  onClick={handleSignOut}
-                  className="absolute -bottom-1 -right-1 bg-slate-900 border border-slate-250 text-white hover:bg-slate-800 p-0.5 rounded-full shadow-xs"
-                  title="Disconnect Workspace"
-                >
-                  <LogOut className="h-2.5 w-2.5" />
-                </button>
+              <div className="h-8 w-8 rounded-full bg-orange-100 border border-orange-200 flex items-center justify-center text-xs font-bold text-orange-700 uppercase shrink-0 select-none">
+                {(userName || userEmail).charAt(0).toUpperCase()}
               </div>
+              <button
+                onClick={handleSignOut}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-slate-500 hover:text-red-600 hover:bg-red-50 border border-slate-200 hover:border-red-200 rounded-lg transition-all cursor-pointer"
+                title="Log off"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Log off</span>
+              </button>
             </div>
           ) : (
-            <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400 font-medium bg-slate-100 px-3.5 py-1.5 rounded-lg border border-slate-200/40">
-              <Lock className="h-3.5 w-3.5 text-slate-350" />
-              <span>Gated Hub</span>
-            </div>
+            <button
+              onClick={() => setShowLoginModal(true)}
+              className="flex items-center gap-1.5 px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white text-[11px] font-bold rounded-lg transition-all shadow-xs cursor-pointer"
+            >
+              <Lock className="h-3.5 w-3.5" />
+              Login
+            </button>
           )}
 
-          {/* Discreet Admin Toggle is now purely URL/Hash triggered - Hidden on public user screen */}
-          {viewMode === "admin" && (
+          {/* Discreet Admin Toggle — only shown on the Hub, never on customer portals */}
+          {isHub && viewMode === "admin" && (
             <button
               onClick={() => {
                 setViewMode("user");
@@ -656,7 +732,27 @@ export default function App() {
         </div>
       </header>
 
-      {/* Authentication Block overlay */}
+      {/* Header Login modal */}
+      <AnimatePresence>
+        {showLoginModal && !userEmail && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-3xl"
+            >
+              <AccessWall
+                onSuccess={handleAuthSuccess}
+                onClose={() => setShowLoginModal(false)}
+                solutions={solutions}
+              />
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Authentication Block overlay — opened when user tries to access a gated resource */}
       <AnimatePresence>
         {authNeededItem && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
@@ -678,11 +774,11 @@ export default function App() {
       </AnimatePresence>
 
       {/* Main Core Layout */}
-      <main className="flex-1 w-full max-w-7xl mx-auto px-6 py-10 relative z-10 flex flex-col">
-        
+      <main className="flex-1 w-full relative z-10 flex flex-col">
+
         {viewMode === "user" ? (
           // ============================== PUBLIC VISITOR VIEW ==============================
-          <div className="space-y-6 flex-1 flex flex-col justify-between">
+          <div className="max-w-7xl mx-auto w-full px-6 py-10 space-y-6 flex-1 flex flex-col justify-between">
             {/* Spotlight Carousel */}
             <div className="w-full shrink-0">
               <HeroCarousel
@@ -741,7 +837,7 @@ export default function App() {
                   onClick={() => setCurrentTab("solutions")}
                   className={`px-4 py-1.5 rounded-lg md:rounded-full text-xs font-semibold tracking-tight transition-all duration-200 ${
                     currentTab === "solutions"
-                      ? "bg-white text-indigo-700 shadow-xs font-semibold"
+                      ? "bg-white text-orange-700 shadow-xs font-semibold"
                       : "text-slate-500 hover:text-slate-800"
                   }`}
                 >
@@ -752,7 +848,7 @@ export default function App() {
                   onClick={() => setCurrentTab("collaterals")}
                   className={`px-4 py-1.5 rounded-lg md:rounded-full text-xs font-semibold tracking-tight transition-all duration-200 ${
                     currentTab === "collaterals"
-                      ? "bg-white text-indigo-700 shadow-xs font-semibold"
+                      ? "bg-white text-orange-700 shadow-xs font-semibold"
                       : "text-slate-500 hover:text-slate-800"
                   }`}
                 >
@@ -763,7 +859,7 @@ export default function App() {
                   onClick={() => setCurrentTab("currentProjects")}
                   className={`px-4 py-1.5 rounded-lg md:rounded-full text-xs font-semibold tracking-tight transition-all duration-200 ${
                     currentTab === "currentProjects"
-                      ? "bg-white text-indigo-700 shadow-xs font-semibold"
+                      ? "bg-white text-orange-700 shadow-xs font-semibold"
                       : "text-slate-500 hover:text-slate-800"
                   }`}
                 >
@@ -774,7 +870,7 @@ export default function App() {
                   onClick={() => setCurrentTab("upcomingProjects")}
                   className={`px-4 py-1.5 rounded-lg md:rounded-full text-xs font-semibold tracking-tight transition-all duration-200 ${
                     currentTab === "upcomingProjects"
-                      ? "bg-white text-indigo-700 shadow-xs font-semibold"
+                      ? "bg-white text-orange-700 shadow-xs font-semibold"
                       : "text-slate-500 hover:text-slate-800"
                   }`}
                 >
@@ -802,7 +898,7 @@ export default function App() {
                         key={sol.id}
                         id={`sol-card-${sol.id}`}
                         onClick={() => handleSolutionClick(sol)}
-                        className="group bg-white rounded-xl border border-slate-200 p-5 flex flex-col hover:border-indigo-400 transition-all cursor-pointer shadow-xs hover:shadow-md hover:-translate-y-0.5 duration-205 justify-between"
+                        className="group bg-white rounded-xl border border-slate-200 p-5 flex flex-col hover:border-orange-400 transition-all cursor-pointer shadow-xs hover:shadow-md hover:-translate-y-0.5 duration-205 justify-between"
                       >
                         {/* Visual Image */}
                         <div className="w-full h-32 bg-slate-50 rounded-lg mb-4 overflow-hidden border border-slate-150 relative shrink-0">
@@ -820,7 +916,7 @@ export default function App() {
                         {/* Text and meta values */}
                         <div className="flex-1 flex flex-col justify-between">
                           <div className="space-y-2">
-                            <h3 className="font-bold text-slate-800 text-sm tracking-tight leading-snug group-hover:text-indigo-600 transition-colors">
+                            <h3 className="font-bold text-slate-800 text-sm tracking-tight leading-snug group-hover:text-orange-600 transition-colors">
                               {sol.title}
                             </h3>
                             <p className="text-[10px] text-slate-450 font-mono truncate leading-none">
@@ -838,14 +934,14 @@ export default function App() {
                                   onClick={() => {
                                     setCardExpandedCreds(prev => ({ ...prev, [sol.id]: !prev[sol.id] }));
                                   }}
-                                  className="w-full flex items-center justify-between px-2.5 py-1.5 bg-slate-50 hover:bg-indigo-50/50 rounded-lg text-[10.5px] font-bold text-indigo-700 transition-colors border border-slate-200 cursor-pointer select-none"
+                                  className="w-full flex items-center justify-between px-2.5 py-1.5 bg-slate-50 hover:bg-orange-50/50 rounded-lg text-[10.5px] font-bold text-orange-700 transition-colors border border-slate-200 cursor-pointer select-none"
                                 >
                                   <span className="flex items-center gap-1.5">
-                                    <Key className="h-3 w-3 text-indigo-505" />
+                                    <Key className="h-3 w-3 text-orange-505" />
                                     {cardExpandedCreds[sol.id] ? "Hide Credentials" : "Show Credentials"}
                                   </span>
                                   {cardExpandedCreds[sol.id] ? (
-                                    <ChevronUp className="h-3.5 w-3.5 text-indigo-500" />
+                                    <ChevronUp className="h-3.5 w-3.5 text-orange-500" />
                                   ) : (
                                     <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
                                   )}
@@ -855,7 +951,7 @@ export default function App() {
                                   <motion.div
                                     initial={{ opacity: 0, y: -4 }}
                                     animate={{ opacity: 1, y: 0 }}
-                                    className="mt-2 bg-indigo-50/40 p-2.5 rounded-lg border border-indigo-100/50 text-left space-y-2 select-text"
+                                    className="mt-2 bg-orange-50/40 p-2.5 rounded-lg border border-orange-100/50 text-left space-y-2 select-text"
                                   >
                                     <div className="grid grid-cols-2 gap-2 text-[10px]">
                                       {/* Username */}
@@ -905,10 +1001,10 @@ export default function App() {
                           </div>
 
                           <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between">
-                            <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-sm uppercase tracking-wide">
+                            <span className="text-[9px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-sm uppercase tracking-wide">
                               Solution
                             </span>
-                            <button className="text-xs font-bold text-slate-650 flex items-center gap-1 group-hover:text-indigo-600 transition-colors">
+                            <button className="text-xs font-bold text-slate-650 flex items-center gap-1 group-hover:text-orange-600 transition-colors">
                               Open App 
                               <ChevronRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
                             </button>
@@ -965,9 +1061,9 @@ export default function App() {
                             const catLabel = cat.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 
                             // Determine dynamic section icons based on the document category/flag
-                            let catIcon = <BookOpen className="h-5 w-5 text-indigo-500" />;
+                            let catIcon = <BookOpen className="h-5 w-5 text-orange-500" />;
                             if (cat.includes("study")) {
-                              catIcon = <BookOpen className="h-5 w-5 text-indigo-500" />;
+                              catIcon = <BookOpen className="h-5 w-5 text-orange-500" />;
                             } else if (cat.includes("doc") || cat.includes("brief") || cat.includes("report") || cat.includes("paper")) {
                               catIcon = <FileText className="h-5 w-5 text-emerald-500" />;
                             } else if (cat.includes("video") || cat.includes("demo") || cat.includes("walkthrough") || cat.includes("play")) {
@@ -1007,7 +1103,7 @@ export default function App() {
                                       </p>
                                     </div>
                                   </div>
-                                  <span className="text-[10px] font-mono font-bold bg-white border border-slate-205 text-indigo-700 px-2 py-0.5 rounded-md select-none shrink-0 shadow-3xs">
+                                  <span className="text-[10px] font-mono font-bold bg-white border border-slate-205 text-orange-700 px-2 py-0.5 rounded-md select-none shrink-0 shadow-3xs">
                                     {items.length}
                                   </span>
                                 </div>
@@ -1019,7 +1115,7 @@ export default function App() {
                                       <div
                                         key={col.id}
                                         onClick={() => handleCollateralClick(col)}
-                                        className="group bg-white rounded-xl border border-slate-200 p-4 flex flex-col hover:border-indigo-400 transition-all cursor-pointer shadow-3xs hover:shadow-md hover:-translate-y-0.5 duration-205 justify-between gap-3"
+                                        className="group bg-white rounded-xl border border-slate-200 p-4 flex flex-col hover:border-orange-400 transition-all cursor-pointer shadow-3xs hover:shadow-md hover:-translate-y-0.5 duration-205 justify-between gap-3"
                                       >
                                         {/* Thumbnail image */}
                                         <div className="w-full h-28 bg-slate-50 rounded-lg overflow-hidden border border-slate-150 relative shrink-0">
@@ -1040,7 +1136,7 @@ export default function App() {
                                             <span className="text-[8px] font-mono font-bold uppercase text-slate-400 tracking-wider block">
                                               📁 {col.googleDriveUrl ? "Active Cloud Reference" : "Integrated Report Summary"}
                                             </span>
-                                            <h4 className="font-bold text-slate-800 text-xs tracking-tight leading-snug group-hover:text-indigo-600 transition-colors line-clamp-2">
+                                            <h4 className="font-bold text-slate-800 text-xs tracking-tight leading-snug group-hover:text-orange-600 transition-colors line-clamp-2">
                                               {col.title}
                                             </h4>
                                             <p className="text-[11px] text-slate-500 leading-normal line-clamp-2 mt-0.5">
@@ -1052,7 +1148,7 @@ export default function App() {
                                             <span className="text-[8px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-sm uppercase tracking-wide">
                                               {col.googleDriveUrl ? "Drive Link" : "Dossier"}
                                             </span>
-                                            <button className="text-[11px] font-bold text-slate-650 flex items-center gap-0.5 group-hover:text-indigo-600 transition-colors">
+                                            <button className="text-[11px] font-bold text-slate-650 flex items-center gap-0.5 group-hover:text-orange-600 transition-colors">
                                               {col.googleDriveUrl ? "Launch" : "Read Brief"}
                                               <ChevronRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
                                             </button>
@@ -1085,37 +1181,43 @@ export default function App() {
               </AnimatePresence>
             </div>
           </div>
-        ) : !adminToken ? (
-          // ============================== ADMIN TOKEN GATE ==============================
+        ) : !userEmail ? (
+          // ============================== ADMIN LOGIN GATE ==============================
           <div className="flex-1 flex items-center justify-center p-8">
-            <div className="bg-white rounded-2xl shadow-md border border-slate-200 p-8 max-w-sm w-full text-center space-y-5">
-              <ShieldCheck className="h-10 w-10 text-indigo-600 mx-auto" />
-              <div>
-                <h2 className="text-lg font-bold text-slate-900">Admin Authentication</h2>
-                <p className="text-xs text-slate-500 mt-1">Enter the server admin token to access the control console.</p>
+            <div className="max-w-lg w-full space-y-4">
+              <div className="text-center space-y-1">
+                <ShieldCheck className="h-10 w-10 text-orange-600 mx-auto" />
+                <h2 className="text-lg font-bold text-slate-900">Admin Access Required</h2>
+                <p className="text-xs text-slate-500">Sign in with an admin account to access the control console.</p>
               </div>
-              <form onSubmit={handleAdminTokenSubmit} className="space-y-3 text-left">
-                <input
-                  type="password"
-                  value={adminTokenInput}
-                  onChange={(e) => setAdminTokenInput(e.target.value)}
-                  placeholder="Admin token"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  autoFocus
-                />
-                {adminAuthError && <p className="text-xs text-red-500">{adminAuthError}</p>}
-                <button
-                  type="submit"
-                  className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm rounded-lg transition-all"
-                >
-                  Enter Admin Console
-                </button>
-              </form>
+              <AccessWall
+                onSuccess={handleAuthSuccess}
+                solutions={solutions}
+              />
+            </div>
+          </div>
+        ) : userRole !== "admin" ? (
+          // ============================== NOT AN ADMIN ==============================
+          <div className="flex-1 flex items-center justify-center p-8">
+            <div className="bg-white rounded-2xl shadow-md border border-slate-200 p-8 max-w-sm w-full text-center space-y-4">
+              <ShieldCheck className="h-10 w-10 text-slate-300 mx-auto" />
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Access Denied</h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Your account (<span className="font-mono text-slate-700">{userEmail}</span>) does not have admin privileges. Contact your administrator to request access.
+                </p>
+              </div>
+              <button
+                onClick={handleSignOut}
+                className="px-4 py-2 text-sm font-semibold text-slate-600 hover:text-red-600 border border-slate-200 hover:border-red-200 rounded-lg transition-all"
+              >
+                Sign out
+              </button>
             </div>
           </div>
         ) : (
           // ============================== ADMINISTRATIVE CONTROL CONSOLE ==============================
-          <div className="bg-white border border-slate-100 shadow-lg rounded-3xl overflow-hidden flex-1 flex flex-col md:flex-row text-left">
+          <div className="mx-4 my-6 bg-white border border-slate-100 shadow-lg rounded-3xl overflow-hidden flex-1 flex flex-col md:flex-row text-left">
             {/* Sidebar navigation */}
             <div className="w-full md:w-64 bg-slate-950 text-slate-200 border-r border-slate-900 p-6 flex flex-col justify-between shrink-0">
               <div className="space-y-6">
@@ -1131,11 +1233,12 @@ export default function App() {
                 {/* Tab selectors */}
                 <nav className="space-y-1.5 flex flex-col">
                   {[
+                    { id: "subdomain", label: "Portal Domains" },
                     { id: "solutions", label: "Solutions Onboard" },
                     { id: "collaterals", label: "Collateral Catalogue" },
                     { id: "projects", label: "Projects & Portals" },
-                    { id: "subdomain", label: "Portal Domains" },
                     { id: "branding", label: "Hero section" },
+                    { id: "users", label: "User Management" },
                     { id: "logs", label: "Visitor Telemetry" }
                   ].map((tab) => (
                     <button
@@ -1143,7 +1246,7 @@ export default function App() {
                       onClick={() => setAdminActiveTab(tab.id as any)}
                       className={`w-full py-2 px-3 rounded-lg text-xs font-semibold text-left transition-all ${
                         adminActiveTab === tab.id
-                          ? "bg-slate-900 text-white shadow-xs border-l-2 border-indigo-500"
+                          ? "bg-slate-900 text-white shadow-xs border-l-2 border-orange-500"
                           : "text-slate-400 hover:text-slate-100 hover:bg-slate-900/40"
                       }`}
                     >
@@ -1170,7 +1273,7 @@ export default function App() {
               
               {/* Horizontal Subdomain Switcher tabs bar (Interactive Top Bar) */}
               <div className="mb-6 bg-white p-4 rounded-2xl border border-slate-200 shadow-3xs text-left animate-fade-in relative overflow-hidden">
-                <div className="absolute top-0 right-0 h-12 w-12 bg-indigo-50/50 rounded-full blur-xl pointer-events-none" />
+                <div className="absolute top-0 right-0 h-12 w-12 bg-orange-50/50 rounded-full blur-xl pointer-events-none" />
                 <span className="text-[10px] font-mono font-bold tracking-wider text-slate-400 uppercase block mb-2.5">
                   🌍 ACTIVE TENANT PORTAL CONTEXT FILTER (CLICK SUBDOMAIN CARD TO FILTER ASSETS)
                 </span>
@@ -1183,7 +1286,7 @@ export default function App() {
                     }}
                     className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                       selectedAdminSubdomain === "all"
-                        ? "bg-indigo-600 text-white shadow-xs border-b border-indigo-700 font-sans"
+                        ? "bg-orange-600 text-white shadow-xs border-b border-orange-700 font-sans"
                         : "bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-205 font-sans"
                     }`}
                   >
@@ -1203,7 +1306,7 @@ export default function App() {
                           : "bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-205"
                       }`}
                     >
-                      <span className="h-1.5 w-1.5 rounded-full bg-indigo-550" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-orange-550" />
                       {sub.displayName} ({sub.name})
                     </button>
                   ))}
@@ -1228,7 +1331,7 @@ export default function App() {
                       subdomains={subdomainsList}
                       prefilledSubdomain={selectedAdminSubdomain === "all" ? null : selectedAdminSubdomain}
                       onRefresh={async (action, data) => handleAdminDatabaseUpdate("solutions", action, data)}
-                      adminToken={adminToken}
+                      adminUserEmail={userEmail || ""}
                     />
                   )}
 
@@ -1242,7 +1345,7 @@ export default function App() {
                       subdomains={subdomainsList}
                       prefilledSubdomain={selectedAdminSubdomain === "all" ? null : selectedAdminSubdomain}
                       onRefresh={async (action, data) => handleAdminDatabaseUpdate("collaterals", action, data)}
-                      adminToken={adminToken}
+                      adminUserEmail={userEmail || ""}
                     />
                   )}
 
@@ -1261,7 +1364,7 @@ export default function App() {
                       prefilledSubdomain={selectedAdminSubdomain === "all" ? null : selectedAdminSubdomain}
                       onRefreshCurrent={handleAdminCurrentProjectUpdate}
                       onRefreshUpcoming={handleAdminUpcomingProjectUpdate}
-                      adminToken={adminToken}
+                      adminUserEmail={userEmail || ""}
                     />
                   )}
 
@@ -1281,7 +1384,7 @@ export default function App() {
                         {/* Provisioning Form */}
                         <div className="lg:col-span-5 p-5 bg-white border border-slate-100 rounded-2xl shadow-3xs space-y-4 h-fit text-left">
                           <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-sm font-mono tracking-widest uppercase inline-block">
-                            Step 1: Create New Subdomain Portal
+                            Step 1: Create New Portal
                           </span>
 
                           <form
@@ -1334,17 +1437,63 @@ export default function App() {
 
                             <button
                               type="submit"
-                              className="w-full py-2 bg-gradient-to-r from-indigo-600 to-indigo-800 hover:from-indigo-700 hover:to-indigo-900 text-white font-semibold text-xs rounded-lg transition-all"
+                              className="w-full py-2 bg-gradient-to-r from-orange-600 to-orange-800 hover:from-orange-700 hover:to-orange-900 text-white font-semibold text-xs rounded-lg transition-all"
                             >
-                              🌟 Create Customer Subdomain
+                              🌟 Create Portal with Subdomain
                             </button>
                           </form>
+
+                          {/* Dummy portal */}
+                          <div className="pt-3 border-t border-slate-100">
+                            {!showDummyForm ? (
+                              <button
+                                type="button"
+                                onClick={() => setShowDummyForm(true)}
+                                className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold text-xs rounded-lg transition-all flex items-center justify-center gap-1.5"
+                              >
+                                Create Portal without Subdomain
+                              </button>
+                            ) : (
+                              <div className="space-y-2">
+                                <label className="block text-xs font-semibold text-slate-500">
+                                  Portal Name <span className="text-slate-400 font-normal">(optional)</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  value={dummyPortalName}
+                                  onChange={(e) => setDummyPortalName(e.target.value)}
+                                  placeholder="Portal Name"
+                                  className="w-full px-3 py-2 border border-slate-205 rounded-lg text-xs text-slate-905 focus:outline-hidden"
+                                />
+                                <div className="flex gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={handleCreateDummy}
+                                    disabled={creatingDummy}
+                                    className="flex-1 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold text-xs rounded-lg transition-all disabled:opacity-50"
+                                  >
+                                    {creatingDummy ? "Creating..." : "Create Portal"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => { setShowDummyForm(false); setDummyPortalName(""); }}
+                                    className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-500 text-xs rounded-lg transition-all"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                                <p className="text-[10px] text-slate-400">
+                                  Creates a portal without a subdomain on an auto-assigned port. Accessible at <code className="font-mono">localhost:PORT</code> and manageable from this hub.
+                                </p>
+                              </div>
+                            )}
+                          </div>
                         </div>
 
                         {/* List of active customer portals */}
                         <div className="lg:col-span-7 p-6 bg-slate-900 text-slate-105 border border-slate-800 rounded-2xl shadow-md text-left space-y-4 flex flex-col justify-between">
                           <div>
-                            <span className="text-[10px] bg-slate-800 text-slate-350 px-2.5 py-0.5 rounded-sm font-mono tracking-widest uppercase inline-block">
+                            <span className="text-[10px] bg-slate-800 text-white px-2.5 py-0.5 rounded-sm font-mono tracking-widest uppercase inline-block">
                               Step 2: Onboard Assets & Configure
                             </span>
 
@@ -1354,43 +1503,92 @@ export default function App() {
                                   key={portal.id}
                                   className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between gap-3 text-xs"
                                 >
-                                  <div>
-                                    <h4 className="font-display font-bold text-white text-xs">
-                                      {portal.displayName}
-                                    </h4>
-                                    <a
-                                      href={`https://${portal.name}.mobiusservices.co.in`}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="text-indigo-400 hover:underline font-mono text-[10px] block mt-0.5"
-                                    >
-                                      {portal.name}.mobiusservices.co.in
-                                    </a>
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-1.5">
+                                      <h4 className="font-display font-bold text-white text-xs">
+                                        {portal.displayName}
+                                      </h4>
+                                    </div>
+                                    <span className="text-orange-400 font-mono text-[10px] block mt-0.5 truncate">
+                                      {portal.isDummy
+                                        ? `localhost:${portal.port}`
+                                        : `${portal.name}.${portal.domain || "mobiusservices.io"}${portal.port ? ` · :${portal.port}` : ""}`}
+                                    </span>
                                   </div>
 
-                                  <div className="flex items-center gap-2 shrink-0 font-sans">
+                                  <div className="flex items-center gap-1.5 shrink-0 font-sans">
+                                    {/* Live / Sleep toggle */}
+                                    {(() => {
+                                      const isStarting = startingPortals.has(portal.id);
+                                      const isLive = portal.status === "live";
+                                      return (
+                                        <>
+                                          <button
+                                            type="button"
+                                            disabled={isStarting}
+                                            onClick={() => handleTogglePortal(portal.id, isLive ? "sleep" : "live", portal.port)}
+                                            title={isStarting ? "Starting…" : isLive ? "Click to stop portal" : "Click to start portal"}
+                                            className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold border transition-all ${
+                                              isStarting
+                                                ? "bg-amber-900/50 border-amber-700 text-amber-300 cursor-wait"
+                                                : isLive
+                                                  ? "bg-emerald-900/60 border-emerald-700 text-emerald-300 hover:bg-emerald-900 cursor-pointer"
+                                                  : "bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 cursor-pointer"
+                                            }`}
+                                          >
+                                            <span className={`h-2 w-2 rounded-full shrink-0 ${
+                                              isStarting ? "bg-amber-400 animate-ping" : isLive ? "bg-emerald-400 animate-pulse" : "bg-slate-500"
+                                            }`} />
+                                            {isStarting ? "Starting…" : isLive ? "Live" : "Sleep"}
+                                          </button>
+
+                                          {/* Access — only when live and not starting */}
+                                          <button
+                                            type="button"
+                                            disabled={!isLive || isStarting}
+                                            onClick={() => {
+                                              const url = portal.isDummy
+                                                ? `http://localhost:${portal.port}`
+                                                : portal.port
+                                                  ? `http://${window.location.hostname}:${portal.port}`
+                                                  : `https://${portal.name}.${portal.domain || "mobiusservices.io"}`;
+                                              window.open(url, "_blank");
+                                            }}
+                                            className={`px-2.5 py-1 font-semibold text-[10px] rounded-lg transition-colors flex items-center gap-1 ${
+                                              isLive && !isStarting
+                                                ? "bg-slate-700 hover:bg-slate-600 text-slate-100 cursor-pointer"
+                                                : "bg-slate-800 text-slate-600 cursor-not-allowed opacity-50"
+                                            }`}
+                                            title={!isLive ? "Start portal first" : isStarting ? "Starting…" : portal.isDummy ? `Open http://localhost:${portal.port}` : "Open portal"}
+                                          >
+                                            <Globe className="h-3 w-3" /> Access
+                                          </button>
+                                        </>
+                                      );
+                                    })()}
+
                                     <button
                                       type="button"
                                       onClick={() => {
-                                        setSelectedAdminSubdomain(portal.name);
-                                        setPrefilledSubdomain(portal.name);
-                                        setAdminActiveTab("solutions");
-                                        alert(`Active onboarding context changed to: ${portal.displayName}. You can now add Solutions, Case Studies, and Projects directly pre-assigned to this portal!`);
+                                        setPortalSettingsTarget(portal);
+                                        setSettingsDisplayName(portal.displayName);
+                                        setSettingsSaved(false);
                                       }}
-                                      className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-[10px] rounded-lg transition-colors cursor-pointer"
+                                      className="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold text-[10px] rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                                      title="Portal settings"
                                     >
-                                      Onboard Assets ⚡
+                                      <Settings className="h-3 w-3" /> Settings
                                     </button>
 
                                     <button
                                       type="button"
                                       onClick={() => {
-                                        if (confirm(`Are you absolutely sure you want to delete customer portal "${portal.displayName}"?`)) {
+                                        if (confirm(`Delete portal "${portal.displayName}"?\n\nThis will stop the process and permanently delete all local files for this portal. This cannot be undone.`)) {
                                           handleManageSubdomains("delete", portal.name);
                                         }
                                       }}
                                       className="p-1 text-slate-400 hover:text-red-450 transition-colors cursor-pointer"
-                                      title="Remove Client Subdomain"
+                                      title="Delete portal and all its files"
                                     >
                                       <Trash2 className="h-3.5 w-3.5" />
                                     </button>
@@ -1401,7 +1599,7 @@ export default function App() {
                           </div>
 
                           <div className="pt-3 border-t border-slate-800/80 text-[10px] text-slate-400 leading-normal font-sans">
-                            💡 <strong>Start with Subdomain Planning</strong>: Simply instantiate a subdomain above. Then, clicking <strong>"Onboard Assets ⚡"</strong> will lock your view context to that client portal. Any projects, metrics charts, and collateral case-studies created on other tabs will automatically publish strictly inside their portal!
+                            💡 <strong>Getting started</strong>: Create a portal above — with or without a subdomain. Then use the context filter bar on other tabs to scope solutions, collaterals, and projects to a specific portal. Changes deploy automatically to live portals.
                           </div>
                         </div>
                       </div>
@@ -1428,7 +1626,7 @@ export default function App() {
                             <h4 className="text-xs font-mono font-bold text-slate-400 uppercase tracking-widest">
                               🎠 Dynamic Hero Spotlight Slides (3 Slots)
                             </h4>
-                            <span className="text-[9px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-mono font-bold">
+                            <span className="text-[9px] bg-orange-50 text-orange-700 px-2 py-0.5 rounded font-mono font-bold">
                               {carousel.length} Slide Definitions Active
                             </span>
                           </div>
@@ -1441,7 +1639,7 @@ export default function App() {
                             <select
                               value={selectedAdminSubdomain}
                               onChange={(e) => setSelectedAdminSubdomain(e.target.value)}
-                              className="w-full max-w-md px-3 py-2 border border-slate-200 bg-white rounded-lg text-xs text-slate-800 font-sans focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                              className="w-full max-w-md px-3 py-2 border border-slate-200 bg-white rounded-lg text-xs text-slate-800 font-sans focus:outline-hidden focus:ring-1 focus:ring-orange-500"
                             >
                               <option value="all">All Portals (Global)</option>
                               {subdomainsList.map((sub) => (
@@ -1483,7 +1681,7 @@ export default function App() {
                               return (
                                 <div key={idx} className="p-4 bg-slate-50/80 border border-slate-200/60 rounded-xl space-y-3">
                                   <div className="flex items-center gap-2">
-                                    <span className="h-5 w-5 rounded bg-indigo-600 text-white text-[10px] font-mono font-bold flex items-center justify-center">
+                                    <span className="h-5 w-5 rounded bg-orange-600 text-white text-[10px] font-mono font-bold flex items-center justify-center">
                                       {idx + 1}
                                     </span>
                                     <span className="text-xs font-bold text-slate-800">
@@ -1624,20 +1822,22 @@ export default function App() {
                             })}
                           </div>
 
-                          <div className="pt-2 flex justify-end">
+                          <div className="pt-2 flex items-center justify-end gap-3">
+                            {heroPublishDone && (
+                              <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1 animate-fade-in">
+                                <Check className="h-3.5 w-3.5" /> Published & deployed!
+                              </span>
+                            )}
                             <button
                               type="button"
                               onClick={async () => {
+                                setHeroPublishDone(false);
                                 try {
                                   const updatedCarousel = [
                                     ...carousel.filter((item) => item.customerName !== selectedAdminSubdomain),
                                     ...editCarousel.map((slide) => {
                                       const key = slide.id || `car-${selectedAdminSubdomain}-${Math.random().toString(36).substr(2, 9)}`;
-                                      return {
-                                        ...slide,
-                                        id: key,
-                                        customerName: selectedAdminSubdomain
-                                      };
+                                      return { ...slide, id: key, customerName: selectedAdminSubdomain };
                                     })
                                   ];
                                   const res = await adminFetch("/api/admin/update-carousel", {
@@ -1645,25 +1845,48 @@ export default function App() {
                                     body: JSON.stringify({ carousel: updatedCarousel })
                                   });
                                   if (res.ok) {
+                                    // Update hub carousel state immediately so the preview refreshes
                                     setCarousel(updatedCarousel);
-                                    logUserAction("Carousel Update", `Republished three custom carousel spotlight cards for subdomain portal: ${selectedAdminSubdomain}.`);
-                                    alert(`Featured carousel spotlight slides saved and published successfully for ${selectedAdminSubdomain}!`);
+                                    logUserAction("Carousel Update", `Updated carousel for portal: ${selectedAdminSubdomain}.`);
+                                    if (selectedAdminSubdomain && selectedAdminSubdomain !== "all") {
+                                      await handleDeployPortal(selectedAdminSubdomain);
+                                    }
+                                    // Refresh full hub data so hero text + all content reflects latest DB state
+                                    await fetchPortalData();
+                                    setHeroPublishDone(true);
+                                    setTimeout(() => setHeroPublishDone(false), 4000);
                                   } else {
-                                    alert("Failed to save carousel parameters to server database.");
+                                    alert("Failed to save carousel to server database.");
                                   }
                                 } catch (err) {
-                                  alert("Network block saving custom spotlight carousel sliders.");
+                                  alert("Network error saving carousel.");
                                 }
                               }}
-                              className="px-5 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-colors shadow-xs hover:scale-[1.01] transition-transform cursor-pointer"
+                              disabled={deployingPortals.has(selectedAdminSubdomain)}
+                              className="px-5 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-colors shadow-xs cursor-pointer disabled:opacity-50 flex items-center gap-2"
                             >
-                              Publish Spotlight Slides (3 Carousel Items)
+                              {deployingPortals.has(selectedAdminSubdomain) ? (
+                                <>
+                                  <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                  </svg>
+                                  Publishing & Deploying…
+                                </>
+                              ) : "Publish & Deploy to Portal"}
                             </button>
                           </div>
                         </div>
 
                       </div>
                     </div>
+                  )}
+                  {adminActiveTab === "users" && (
+                    <AdminUsers
+                      users={portalUsers}
+                      adminFetch={adminFetch}
+                      onRefresh={fetchPortalData}
+                    />
                   )}
                   {adminActiveTab === "logs" && (
                     <AdminLogs logs={logs} />
@@ -1695,8 +1918,152 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Visual Footer */}
-      <footer className="w-full h-12 bg-slate-900 flex items-center justify-between px-8 text-slate-400 shrink-0 font-mono text-[10px] border-t border-slate-850 relative z-30 mt-auto select-none">
+      {/* Portal Settings Modal */}
+      <AnimatePresence>
+        {portalSettingsTarget && (
+          <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
+            >
+              {/* Modal header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50">
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">Portal Settings</h3>
+                  <p className="text-[10px] text-slate-400 font-mono mt-0.5">{portalSettingsTarget.id}</p>
+                </div>
+                <button
+                  onClick={() => setPortalSettingsTarget(null)}
+                  className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-700 transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="px-6 py-5 space-y-5">
+                {/* Rename */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-slate-700">Portal Display Name</label>
+                  <input
+                    type="text"
+                    value={settingsDisplayName}
+                    onChange={(e) => setSettingsDisplayName(e.target.value)}
+                    placeholder="e.g. Unilever India"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500/40 focus:border-orange-400"
+                  />
+                  <p className="text-[10px] text-slate-400">This name appears on portal cards and in the admin console.</p>
+                </div>
+
+                {/* Subdomain / Slug */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    {portalSettingsTarget.isDummy ? "Portal Slug" : "Subdomain Slug"}
+                  </label>
+                  <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg">
+                    <span className="text-xs font-mono text-slate-500 select-none">
+                      {portalSettingsTarget.isDummy ? "local-portal/" : `${portalSettingsTarget.domain || "mobiusservices.io"}/`}
+                    </span>
+                    <span className="text-xs font-mono font-bold text-slate-800">{portalSettingsTarget.id}</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400">Slug is immutable after creation. Contact admin to migrate.</p>
+                </div>
+
+                {/* Access URL */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-slate-700">Access URL</label>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg overflow-hidden">
+                      <Globe className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                      <span className="text-xs font-mono text-orange-600 truncate">
+                        {portalSettingsTarget.isDummy
+                          ? `http://localhost:${portalSettingsTarget.port}`
+                          : portalSettingsTarget.port
+                            ? `http://${window.location.hostname}:${portalSettingsTarget.port}`
+                            : `https://${portalSettingsTarget.name}.${portalSettingsTarget.domain || "mobiusservices.io"}`}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const url = portalSettingsTarget.isDummy
+                          ? `http://localhost:${portalSettingsTarget.port}`
+                          : portalSettingsTarget.port
+                            ? `http://${window.location.hostname}:${portalSettingsTarget.port}`
+                            : `https://${portalSettingsTarget.name}.${portalSettingsTarget.domain || "mobiusservices.io"}`;
+                        navigator.clipboard.writeText(url).catch(() => {});
+                      }}
+                      className="p-2 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors"
+                      title="Copy URL"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        const url = portalSettingsTarget.isDummy
+                          ? `http://localhost:${portalSettingsTarget.port}`
+                          : portalSettingsTarget.port
+                            ? `http://${window.location.hostname}:${portalSettingsTarget.port}`
+                            : `https://${portalSettingsTarget.name}.${portalSettingsTarget.domain || "mobiusservices.io"}`;
+                        window.open(url, "_blank");
+                      }}
+                      disabled={portalSettingsTarget.status !== "live"}
+                      className="px-3 py-2 rounded-lg border border-slate-200 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      title={portalSettingsTarget.status !== "live" ? "Start portal first" : "Open portal"}
+                    >
+                      Open
+                    </button>
+                  </div>
+                  {portalSettingsTarget.status !== "live" && (
+                    <p className="text-[10px] text-amber-600">Portal is currently sleeping — start it from the portal card to access the URL.</p>
+                  )}
+                </div>
+
+                {/* Onboard Assets shortcut */}
+                <div className="pt-1 border-t border-slate-100">
+                  <button
+                    onClick={() => {
+                      setSelectedAdminSubdomain(portalSettingsTarget.name);
+                      setPrefilledSubdomain(portalSettingsTarget.name);
+                      setAdminActiveTab("solutions");
+                      setPortalSettingsTarget(null);
+                    }}
+                    className="w-full py-2 px-4 bg-orange-600 hover:bg-orange-500 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" /> Onboard Assets for this Portal
+                  </button>
+                </div>
+              </div>
+
+              {/* Modal footer */}
+              <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3">
+                <button
+                  onClick={() => setPortalSettingsTarget(null)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-800 border border-slate-200 hover:bg-slate-100 rounded-lg transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSavePortalSettings}
+                  disabled={settingsSaving || !settingsDisplayName.trim()}
+                  className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg transition-all disabled:opacity-50 flex items-center gap-2"
+                >
+                  {settingsSaving ? (
+                    <><svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg> Saving…</>
+                  ) : settingsSaved ? (
+                    <><Check className="h-3.5 w-3.5 text-emerald-400" /> Saved!</>
+                  ) : (
+                    "Save Settings"
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Visual Footer — only shown to logged-in admin users */}
+      {userEmail && userRole === "admin" && isHub && <footer className="w-full h-12 bg-slate-900 flex items-center justify-between px-8 text-slate-400 shrink-0 font-mono text-[10px] border-t border-slate-850 relative z-30 mt-auto select-none">
         <div className="flex items-center space-x-6">
           <span className="text-[10px] font-medium tracking-widest uppercase text-slate-450 leading-none">
             Host instance: {subdomain}.mobiusservices.co.in
@@ -1706,7 +2073,7 @@ export default function App() {
               <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full mr-2"></span> System Active
             </span>
             <span className="text-[10px] flex items-center text-slate-400">
-              <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full mr-2 animate-pulse"></span> Gemini AI Engine Connected
+              <span className="w-1.5 h-1.5 bg-orange-500 rounded-full mr-2 animate-pulse"></span> Gemini AI Engine Connected
             </span>
           </div>
         </div>
@@ -1726,22 +2093,24 @@ export default function App() {
           >
             User Activity Logs
           </button>
-          <button
-            onClick={() => {
-              if (viewMode === "user") {
-                setViewMode("admin");
-                window.location.hash = "/admin";
-              } else {
-                setViewMode("user");
-                window.location.hash = "";
-              }
-            }}
-            className="text-[10px] font-bold uppercase tracking-widest px-3 py-1 bg-slate-800 rounded border border-slate-750 hover:bg-slate-700 hover:text-white transition-all cursor-pointer"
-          >
-            {viewMode === "user" ? "Admin Console" : "Public Hub Portal"}
-          </button>
+          {isHub && (
+            <button
+              onClick={() => {
+                if (viewMode === "user") {
+                  setViewMode("admin");
+                  window.location.hash = "/admin";
+                } else {
+                  setViewMode("user");
+                  window.location.hash = "";
+                }
+              }}
+              className="text-[10px] font-bold uppercase tracking-widest px-3 py-1 bg-slate-800 rounded border border-slate-750 hover:bg-slate-700 hover:text-white transition-all cursor-pointer"
+            >
+              {viewMode === "user" ? "Admin Console" : "Public Hub Portal"}
+            </button>
+          )}
         </div>
-      </footer>
+      </footer>}
     </div>
   );
 }

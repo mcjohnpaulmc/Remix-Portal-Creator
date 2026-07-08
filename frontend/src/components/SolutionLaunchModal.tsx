@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -81,7 +81,7 @@ export function SolutionLaunchModal({ solution, onClose }: SolutionLaunchModalPr
               <button
                 type="button"
                 onClick={() => setRevealCredentials(!revealCredentials)}
-                className="flex items-center gap-1 text-[9px] font-bold text-indigo-400 hover:text-indigo-300 font-sans tracking-normal uppercase bg-slate-900 px-2 py-0.5 rounded-sm border border-slate-800"
+                className="flex items-center gap-1 text-[9px] font-bold text-orange-400 hover:text-orange-300 font-sans tracking-normal uppercase bg-slate-900 px-2 py-0.5 rounded-sm border border-slate-800"
               >
                 {revealCredentials ? (
                   <>

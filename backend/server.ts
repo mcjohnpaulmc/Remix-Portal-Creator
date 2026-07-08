@@ -7,10 +7,24 @@ import 'dotenv/config';
 import express from "express";
 import path from "path";
 import fs from "fs";
+import http from "http";
+import { exec, spawn, ChildProcess } from "child_process";
+import { createHash } from "crypto";
 import { createServer as createViteServer } from "vite";
 import OpenAI from "openai";
 import multer from "multer";
-import { Solution, Collateral, UserLog, CurrentProject, UpcomingProject, SubdomainPortal } from "../shared/types";
+import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { Solution, Collateral, UserLog, CurrentProject, UpcomingProject, SubdomainPortal, PortalUser } from "../shared/types";
+
+// Password hashing (SHA-256 — sufficient for internal portal auth)
+function hashPassword(plain: string): string {
+  return createHash("sha256").update(plain).digest("hex");
+}
+
+// Internal user record — includes passwordHash, never sent to frontend
+interface InternalUser extends PortalUser {
+  passwordHash: string;
+}
 
 // Setup storage
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -43,6 +57,235 @@ async function aiChat(systemPrompt: string, userPrompt: string): Promise<string>
   return resp.choices[0].message.content || "";
 }
 
+// S3 configuration
+const S3_BUCKET = "asg-bot-cache";
+const S3_PREFIX = "Mobius_Portal_Creator_Hub";
+const PORTAL_PORT_BASE = 4000;
+const s3 = new S3Client({ region: process.env.AWS_REGION || "ap-south-1" });
+
+// In-memory users cache — loaded from S3 on startup, kept in sync on every CRUD.
+// Login and admin-auth use this so S3 is the authoritative credential store.
+let usersCache: InternalUser[] | null = null;
+
+async function loadUsersFromS3(): Promise<InternalUser[] | null> {
+  const key = `${S3_PREFIX}/users.json`;
+  try {
+    const resp = await s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: key }));
+    const body = await (resp.Body as any).transformToString();
+    const { users } = JSON.parse(body);
+    if (Array.isArray(users)) {
+      console.log(`[S3] Loaded ${users.length} users from users.json`);
+      return users as InternalUser[];
+    }
+  } catch (err: any) {
+    console.warn(`[S3] Could not load users.json (will use local DB):`, err?.message || err);
+  }
+  return null;
+}
+
+async function s3PutPortalFile(slug: string, filename: string, content: object): Promise<void> {
+  const key = `${S3_PREFIX}/${slug}/${filename}`;
+  await s3.send(new PutObjectCommand({
+    Bucket: S3_BUCKET,
+    Key: key,
+    Body: JSON.stringify(content, null, 2),
+    ContentType: "application/json",
+  }));
+  console.log(`[S3] Uploaded s3://${S3_BUCKET}/${key}`);
+}
+
+async function s3GetPortalFile(slug: string, filename: string): Promise<any> {
+  const key = `${S3_PREFIX}/${slug}/${filename}`;
+  try {
+    const resp = await s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: key }));
+    const body = await (resp.Body as any).transformToString();
+    return JSON.parse(body);
+  } catch {
+    return null;
+  }
+}
+
+// Sync global users list to S3 — stored at Mobius_Portal_Creator_Hub/users.json
+async function s3SyncUsers(users: InternalUser[]): Promise<void> {
+  const key = `${S3_PREFIX}/users.json`;
+  const payload = {
+    updatedAt: new Date().toISOString(),
+    users: users.map(u => ({
+      id: u.id,
+      email: u.email,
+      name: u.name,
+      role: u.role,
+      enabled: u.enabled !== false,
+      createdAt: u.createdAt,
+      passwordHash: u.passwordHash,
+    })),
+  };
+  try {
+    await s3.send(new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: key,
+      Body: JSON.stringify(payload, null, 2),
+      ContentType: "application/json",
+    }));
+    console.log(`[S3] Synced ${users.length} users → s3://${S3_BUCKET}/${key}`);
+  } catch (err: any) {
+    console.error(`[S3] Failed to sync users.json:`, err?.message);
+  }
+}
+
+function assignNextPort(portAssignments: { [slug: string]: number }): number {
+  const used = new Set(Object.values(portAssignments));
+  let port = PORTAL_PORT_BASE;
+  while (used.has(port)) port++;
+  return port;
+}
+
+// Track child processes in dev mode (keyed by slug)
+const portalProcesses = new Map<string, ChildProcess>();
+
+function pm2SpawnPortal(slug: string, port: number): void {
+  const cwd = process.cwd();
+  const isDev = process.env.NODE_ENV !== "production";
+
+  if (isDev) {
+    // Kill existing process for this slug if any
+    if (portalProcesses.has(slug)) {
+      try { portalProcesses.get(slug)!.kill(); } catch {}
+      portalProcesses.delete(slug);
+    }
+    // Use spawn with shell:true so Windows can resolve npx/tsx from PATH
+    const child = spawn(
+      "npx", ["tsx", "backend/portal-server.ts", "--slug", slug, "--port", String(port)],
+      { cwd, env: process.env, stdio: "pipe", shell: true }
+    );
+    child.stdout?.on("data", d => process.stdout.write(`[portal-${slug}] ${d}`));
+    child.stderr?.on("data", d => process.stderr.write(`[portal-${slug}] ${d}`));
+    child.on("exit", code => {
+      console.log(`[portal-${slug}] Exited (code ${code})`);
+      portalProcesses.delete(slug);
+    });
+    portalProcesses.set(slug, child);
+    console.log(`[portal-${slug}] Spawned on port ${port} (pid ${child.pid})`);
+  } else {
+    const cmd = `pm2 start node --name "portal-${slug}" --cwd "${cwd}" -- dist/portal-server.cjs --slug ${slug} --port ${port}`;
+    exec(cmd, (err, _stdout, stderr) => {
+      if (err) console.error(`[PM2] Failed to start portal-${slug}:`, stderr);
+      else console.log(`[PM2] Started portal-${slug} on port ${port}`);
+    });
+  }
+}
+
+function pm2StopPortal(slug: string): void {
+  const isDev = process.env.NODE_ENV !== "production";
+
+  if (isDev) {
+    if (portalProcesses.has(slug)) {
+      try { portalProcesses.get(slug)!.kill(); } catch {}
+      portalProcesses.delete(slug);
+      console.log(`[portal-${slug}] Stopped`);
+    }
+  } else {
+    exec(`pm2 delete portal-${slug}`, (err) => {
+      if (err) console.warn(`[PM2] Could not delete portal-${slug}:`, err?.message);
+      else console.log(`[PM2] Stopped portal-${slug}`);
+    });
+  }
+}
+
+// Build an empty portal scaffold — used only at creation/first-start.
+// Content is intentionally blank; the admin must explicitly deploy to populate it.
+function buildDefaultPortalJson(slug: string, subdomainInfo: SubdomainPortal | null, db: any) {
+  return {
+    slug,
+    subdomain: slug,
+    deployedAt: new Date().toISOString(),
+    heroText: "",
+    logo: db.logo || "",   // keep the brand logo
+    carousel: [],
+    solutions: [],
+    collaterals: [],
+    currentProjects: [],
+    upcomingProjects: [],
+    subdomainInfo,
+    subdomains: [],
+    userLogs: [],
+    heroPrompt: "",
+    users: (db.users || []).filter((u: any) => u.enabled !== false).map((u: any) => ({
+      id: u.id, email: u.email, name: u.name, role: u.role,
+      passwordHash: u.passwordHash, createdAt: u.createdAt,
+    })),
+  };
+}
+
+// Build and write portal.json for a slug, signal reload — used by deploy endpoint + auto-deploy
+async function deployPortalInProcess(cleanSlug: string, db: DatabaseSchema): Promise<void> {
+  const matchesSlug = (names: string[]) => names.includes(cleanSlug) || names.includes("all");
+  const subdomainInfo = (db.subdomains || []).find(s => s.name === cleanSlug) || null;
+  const portalDir = path.join(PORTALS_DIR, cleanSlug);
+  fs.mkdirSync(path.join(portalDir, "assets"), { recursive: true });
+
+  const portalJson = {
+    slug: cleanSlug,
+    subdomain: cleanSlug,
+    deployedAt: new Date().toISOString(),
+    heroText: db.heroText,
+    logo: db.logo || "",
+    carousel: (db.carousel || []).filter((c: any) =>
+      !c.customerName || c.customerName === cleanSlug || c.customerName === "all"
+    ),
+    solutions: (db.solutions || []).filter((s: any) =>
+      matchesSlug(s.customerNames || (s.customerName ? [s.customerName] : ["all"]))
+    ),
+    collaterals: (db.collaterals || []).filter((c: any) =>
+      matchesSlug(c.customerNames || (c.customerName ? [c.customerName] : ["all"]))
+    ),
+    currentProjects: (db.currentProjects || []).filter((p: any) =>
+      matchesSlug(p.customerNames || [p.customerName])
+    ),
+    upcomingProjects: (db.upcomingProjects || []).filter((p: any) =>
+      matchesSlug(p.customerNames || [p.customerName])
+    ),
+    subdomainInfo,
+    subdomains: [],
+    userLogs: [],
+    heroPrompt: "",
+    users: (db.users || []).filter(u => u.enabled !== false).map(u => ({
+      id: u.id, email: u.email, name: u.name, role: u.role,
+      passwordHash: (u as any).passwordHash, createdAt: u.createdAt,
+    })),
+  };
+
+  fs.writeFileSync(path.join(portalDir, "portal.json"), JSON.stringify(portalJson, null, 2), "utf-8");
+
+  // Upload to S3 before signaling reload so S3 is consistent when the portal reads it
+  try {
+    await s3PutPortalFile(cleanSlug, "portal.json", portalJson);
+  } catch {
+    // S3 upload failed; portal will still reload correctly from local file
+  }
+
+  // Signal the live portal process to hot-reload its data
+  const portalPort = subdomainInfo?.port || (db.portAssignments || {})[cleanSlug];
+  if (portalPort) {
+    const reloadReq = http.request(
+      { hostname: "127.0.0.1", port: portalPort, path: "/api/reload", method: "POST" },
+      () => {}
+    );
+    reloadReq.on("error", () => {});
+    reloadReq.end();
+  }
+}
+
+// After any content CRUD, push fresh portal.json to every live portal (fire-and-forget)
+function autoDeployLivePortals(db: DatabaseSchema): void {
+  const livePortals = (db.subdomains || []).filter(s => s.status === "live");
+  for (const portal of livePortals) {
+    deployPortalInProcess(portal.name, db).catch(err =>
+      console.warn(`[auto-deploy] ${portal.name}:`, err?.message)
+    );
+  }
+}
+
 // Dynamic state helpers
 interface DatabaseSchema {
   solutions: Solution[];
@@ -56,6 +299,8 @@ interface DatabaseSchema {
   upcomingProjects?: UpcomingProject[];
   logo?: string;
   carousel?: CarouselItem[];
+  portAssignments?: { [slug: string]: number };
+  users?: InternalUser[];
 }
 
 interface CarouselItem {
@@ -326,11 +571,18 @@ const ADMIN_TOKEN = process.env.ADMIN_TOKEN || (() => {
 })();
 
 function requireAdminAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const provided = req.headers["x-admin-token"];
-  if (!provided || provided !== ADMIN_TOKEN) {
-    return res.status(401).json({ error: "Unauthorized." });
+  const token = req.headers["x-admin-token"];
+  if (token && token === ADMIN_TOKEN) return next();
+
+  // Accept logged-in admin users via X-Admin-User header — validate against S3-sourced cache
+  const adminUserEmail = req.headers["x-admin-user"] as string | undefined;
+  if (adminUserEmail) {
+    const users: InternalUser[] = usersCache ?? (readDatabase().users || []);
+    const user = users.find(u => u.email === adminUserEmail.trim().toLowerCase() && u.role === "admin" && u.enabled !== false);
+    if (user) return next();
   }
-  next();
+
+  return res.status(401).json({ error: "Unauthorized." });
 }
 
 // Body parser
@@ -393,58 +645,109 @@ app.get("/api/download/:filename", (req, res) => {
   res.download(filePath);
 });
 
-// GET database
-app.get("/api/database", (req, res) => {
+// GET database — strips passwordHash from users before sending to frontend
+app.get("/api/database", (_req, res) => {
   const db = readDatabase();
-  res.json(db);
+  const safeUsers: PortalUser[] = (db.users || []).map(({ passwordHash: _ph, ...safe }) => safe);
+  res.json({ ...db, users: safeUsers });
 });
 
-// POST corporate email login with exact work domain checks
-app.post("/api/email-login", (req, res) => {
-  const { email } = req.body;
-  if (!email || typeof email !== "string" || !email.includes("@")) {
-    return res.status(400).json({ error: "Please enter a valid email address." });
+// POST login — validates email + password against S3-sourced users cache (falls back to local DB)
+app.post("/api/login", (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: "Email and password are required." });
   }
 
   const normalized = email.trim().toLowerCase();
-  
-  // Forbidden consumer domains
-  const forbiddenDomains = [
-    "gmail.com",
-    "yahoo.com",
-    "outlook.com",
-    "hotmail.com",
-    "icloud.com",
-    "aol.com",
-    "live.com",
-    "zoho.com",
-    "mail.com",
-    "protonmail.com",
-    "yandex.com",
-    "gmx.com"
-  ];
+  const hash = hashPassword(password);
 
-  const domain = normalized.split("@")[1];
-  
-  if (forbiddenDomains.includes(domain)) {
-    return res.status(403).json({
-      error: `Access denied. Personal email domains (${domain}) are not permitted. Please use your corporate or enterprise domain to authenticate.`
-    });
+  // Prefer in-memory S3 cache; fall back to local DB if cache not yet loaded
+  const users: InternalUser[] = usersCache ?? (readDatabase().users || []);
+  const user = users.find(u => u.email === normalized && u.passwordHash === hash && u.enabled !== false);
+
+  if (!user) {
+    return res.status(401).json({ error: "Invalid email or password." });
   }
 
-  // Success - track in logs
+  // Log to local DB (non-blocking)
   const db = readDatabase();
-  const newLog: UserLog = {
-    id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+  db.userLogs.unshift({
+    id: `log-${Date.now()}`,
     email: normalized,
-    action: "Work Email Access Granted",
-    details: `User entered domain: @${domain} and verified email status.`,
+    action: "User Login",
+    details: `User "${user.name}" (${user.role}) authenticated successfully.`,
     date: new Date().toISOString()
-  };
-  db.userLogs.unshift(newLog);
+  });
   writeDatabase(db);
 
-  res.json({ success: true, email: normalized });
+  res.json({ success: true, email: normalized, name: user.name, role: user.role });
+});
+
+// Legacy email-login kept for backward compatibility — redirects to /api/login
+app.post("/api/email-login", (req, res) => {
+  res.status(410).json({ error: "Please use email and password to login." });
+});
+
+// USER management (admin only)
+app.post("/api/admin/users", (req, res) => {
+  const { action, user } = req.body;
+  const db = readDatabase();
+  if (!db.users) db.users = [];
+
+  if (action === "create") {
+    if (!user.email || !user.name || !user.password) {
+      return res.status(400).json({ error: "Email, name, and password are required." });
+    }
+    if (db.users.some(u => u.email === user.email.trim().toLowerCase())) {
+      return res.status(400).json({ error: "A user with this email already exists." });
+    }
+    const newUser: InternalUser = {
+      id: `user-${Date.now()}`,
+      email: user.email.trim().toLowerCase(),
+      name: user.name.trim(),
+      passwordHash: hashPassword(user.password),
+      role: user.role || "viewer",
+      enabled: true,
+      createdAt: new Date().toISOString(),
+    };
+    db.users.unshift(newUser);
+    db.userLogs.unshift({ id: `log-${Date.now()}`, email: "admin@mobiusservices.co.in", action: "User Created", details: `User "${newUser.name}" (${newUser.email}) onboarded with role: ${newUser.role}.`, date: new Date().toISOString() });
+  } else if (action === "update") {
+    const target = db.users.find(u => u.id === user.id);
+    if (target?.isSystem) {
+      return res.status(403).json({ error: "System accounts cannot be modified." });
+    }
+    db.users = db.users.map(u => {
+      if (u.id !== user.id) return u;
+      return {
+        ...u,
+        name: user.name ?? u.name,
+        role: user.role ?? u.role,
+        enabled: user.enabled ?? u.enabled,
+        ...(user.password ? { passwordHash: hashPassword(user.password) } : {}),
+      };
+    });
+    db.userLogs.unshift({ id: `log-${Date.now()}`, email: "admin@mobiusservices.co.in", action: "User Updated", details: `User ID "${user.id}" updated.`, date: new Date().toISOString() });
+  } else if (action === "delete") {
+    const delTarget = db.users.find(u => u.id === user.id);
+    if (delTarget?.isSystem) {
+      return res.status(403).json({ error: "System accounts cannot be deleted." });
+    }
+    db.users = db.users.filter(u => u.id !== user.id);
+    db.userLogs.unshift({ id: `log-${Date.now()}`, email: "admin@mobiusservices.co.in", action: "User Deleted", details: `User ID "${user.id}" removed.`, date: new Date().toISOString() });
+  }
+
+  writeDatabase(db);
+
+  // Update in-memory cache so future logins immediately see the change
+  usersCache = db.users || [];
+
+  // Sync to S3 (fire-and-forget — don't block the HTTP response)
+  s3SyncUsers(db.users || []).catch(() => {});
+
+  const safeUsers: PortalUser[] = (db.users || []).map(({ passwordHash: _ph, ...safe }) => safe);
+  res.json({ success: true, users: safeUsers });
 });
 
 // POST logging action
@@ -505,6 +808,7 @@ app.post("/api/admin/solutions", (req, res) => {
   }
 
   writeDatabase(db);
+  autoDeployLivePortals(db);
   res.json({ success: true, database: db });
 });
 
@@ -548,6 +852,7 @@ app.post("/api/admin/collaterals", (req, res) => {
   }
 
   writeDatabase(db);
+  autoDeployLivePortals(db);
   res.json({ success: true, database: db });
 });
 
@@ -593,6 +898,7 @@ app.post("/api/admin/projects/current", (req, res) => {
   }
 
   writeDatabase(db);
+  autoDeployLivePortals(db);
   res.json({ success: true, database: db });
 });
 
@@ -638,6 +944,7 @@ app.post("/api/admin/projects/upcoming", (req, res) => {
   }
 
   writeDatabase(db);
+  autoDeployLivePortals(db);
   res.json({ success: true, database: db });
 });
 
@@ -756,6 +1063,7 @@ Format exactly:
       date: new Date().toISOString()
     });
     writeDatabase(db);
+    autoDeployLivePortals(db);
     res.json({ success: true, heroText: heroOutput, database: db });
   } catch (error: any) {
     console.error("Hero Generation Error:", error);
@@ -793,7 +1101,22 @@ app.post("/api/admin/subdomains", (req, res) => {
   const db = readDatabase();
   if (!db.subdomains) db.subdomains = [...DEFAULT_SUBDOMAINS];
 
-  if (action === "create") {
+  if (action === "update") {
+    const targetId = id || resolvedName;
+    const portal = (db.subdomains || []).find(s => s.id === targetId);
+    if (!portal) return res.status(404).json({ error: "Portal not found." });
+    if (req.body.displayName !== undefined) portal.displayName = req.body.displayName.trim();
+    db.userLogs.unshift({
+      id: `log-${Date.now()}`,
+      email: "admin@mobiusservices.co.in",
+      action: "Portal Updated",
+      details: `Portal "${targetId}" settings saved.`,
+      date: new Date().toISOString(),
+    });
+    writeDatabase(db);
+    return res.json({ success: true, subdomains: db.subdomains, database: db });
+
+  } else if (action === "create") {
     if (!resolvedName || !displayName) {
       return res.status(400).json({ error: "Subdomain name and Portal Display Name are required." });
     }
@@ -801,46 +1124,179 @@ app.post("/api/admin/subdomains", (req, res) => {
     if (!cleanSub) {
       return res.status(400).json({ error: "Subdomain name has invalid characters." });
     }
-    // Check duplication
     const exists = db.subdomains.some(s => s.name === cleanSub);
     if (exists) {
       return res.status(400).json({ error: `Subdomain portal ${cleanSub}.mobiusservices.co.in already exists.` });
     }
 
+    if (!db.portAssignments) db.portAssignments = {};
+    const port = assignNextPort(db.portAssignments);
+    db.portAssignments[cleanSub] = port;
+
+    const selectedDomain = req.body.domain || "mobiusservices.io";
+    const s3Key = `${S3_PREFIX}/${cleanSub}/`;
+
     const newSub: SubdomainPortal = {
       id: cleanSub,
       name: cleanSub,
       displayName: displayName.trim(),
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      port,
+      domain: selectedDomain,
+      s3Key,
+      status: "sleep",
     };
     db.subdomains.unshift(newSub);
-    // Auto point active subdomain to the newly created one to act as a launchpad!
     db.subdomain = cleanSub;
 
-    // Create portal folder on disk
+    // Local portal folder
     fs.mkdirSync(path.join(PORTALS_DIR, cleanSub, "assets"), { recursive: true });
+
+    writeDatabase(db);
+
+    // Write default portal.json pre-populated with hub content + config
+    const defaultPortalJson = buildDefaultPortalJson(cleanSub, newSub, db);
+    const portalDir = path.join(PORTALS_DIR, cleanSub);
+    fs.writeFileSync(path.join(portalDir, "portal.json"), JSON.stringify(defaultPortalJson, null, 2), "utf-8");
+    s3PutPortalFile(cleanSub, "portal.json", defaultPortalJson)
+      .catch(err => console.error(`[S3] Failed to init portal.json for ${cleanSub}:`, err?.message));
+    s3PutPortalFile(cleanSub, "config.json", {
+      slug: cleanSub, displayName: displayName.trim(),
+      domain: selectedDomain, port, s3Key, createdAt: newSub.createdAt,
+    }).catch(err => console.error(`[S3] Failed to init config for ${cleanSub}:`, err?.message));
 
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
       email: "admin@mobiusservices.co.in",
       action: "Customer Subdomain Portal Created",
-      details: `Created subdomain: ${cleanSub}.mobiusservices.co.in for "${displayName.trim()}"`,
+      details: `Created portal: ${cleanSub}.${selectedDomain} on port ${port}. Toggle to Live when ready.`,
       date: new Date().toISOString()
     });
+
+  } else if (action === "create-dummy") {
+    if (!db.portAssignments) db.portAssignments = {};
+    const port = assignNextPort(db.portAssignments);
+    const slug = `local-${Date.now()}`;
+    db.portAssignments[slug] = port;
+
+    const dummyDisplayName = (req.body.displayName || "Local Dev Portal").trim();
+    const s3Key = `${S3_PREFIX}/${slug}/`;
+
+    const newDummy: SubdomainPortal = {
+      id: slug,
+      name: slug,
+      displayName: dummyDisplayName,
+      createdAt: new Date().toISOString(),
+      port,
+      s3Key,
+      isDummy: true,
+      status: "sleep",
+    };
+    db.subdomains.unshift(newDummy);
+
+    const dummyDir = path.join(PORTALS_DIR, slug);
+    fs.mkdirSync(path.join(dummyDir, "assets"), { recursive: true });
+    writeDatabase(db);
+
+    // Write default portal.json pre-populated with hub content
+    const defaultDummyJson = buildDefaultPortalJson(slug, newDummy, db);
+    fs.writeFileSync(path.join(dummyDir, "portal.json"), JSON.stringify(defaultDummyJson, null, 2), "utf-8");
+    s3PutPortalFile(slug, "portal.json", defaultDummyJson)
+      .catch(err => console.error(`[S3] Failed to init portal.json for ${slug}:`, err?.message));
+    s3PutPortalFile(slug, "config.json", {
+      slug, displayName: dummyDisplayName, port, s3Key, isDummy: true, createdAt: newDummy.createdAt,
+    }).catch(err => console.error(`[S3] Failed to init config for ${slug}:`, err?.message));
+
+    db.userLogs.unshift({
+      id: `log-${Date.now()}`,
+      email: "admin@mobiusservices.co.in",
+      action: "Dummy Portal Created",
+      details: `Created local dev portal "${dummyDisplayName}" on port ${port} (localhost:${port}). Toggle to Live when ready.`,
+      date: new Date().toISOString()
+    });
+
+  } else if (action === "toggle") {
+    const targetId = id || resolvedName;
+    const targetStatus: "live" | "sleep" = req.body.targetStatus;
+    if (!targetId || !targetStatus) {
+      return res.status(400).json({ error: "id and targetStatus ('live'|'sleep') are required." });
+    }
+
+    const portal = (db.subdomains || []).find(s => s.id === targetId);
+    if (!portal) {
+      return res.status(404).json({ error: `Portal "${targetId}" not found.` });
+    }
+
+    if (targetStatus === "live") {
+      // Ensure portal has a port (assign one if missing for legacy portals)
+      if (!portal.port) {
+        if (!db.portAssignments) db.portAssignments = {};
+        portal.port = assignNextPort(db.portAssignments);
+        db.portAssignments[targetId] = portal.port;
+      }
+      // Always write a fresh portal.json with current content before spawning,
+      // so the portal starts with up-to-date solutions/collaterals from day one
+      fs.mkdirSync(path.join(PORTALS_DIR, targetId, "assets"), { recursive: true });
+      deployPortalInProcess(targetId, db).catch(err =>
+        console.warn(`[toggle-deploy] ${targetId}:`, err?.message)
+      );
+      pm2SpawnPortal(targetId, portal.port);
+    } else {
+      pm2StopPortal(targetId);
+    }
+
+    portal.status = targetStatus;
+    db.userLogs.unshift({
+      id: `log-${Date.now()}`,
+      email: "admin@mobiusservices.co.in",
+      action: targetStatus === "live" ? "Portal Started" : "Portal Stopped",
+      details: `Portal "${portal.displayName}" toggled to ${targetStatus} on port ${portal.port}.`,
+      date: new Date().toISOString()
+    });
+
   } else if (action === "delete") {
     const targetId = id || resolvedName;
     db.subdomains = db.subdomains.filter(s => s.id !== targetId);
-    
-    // If the active subdomain was deleted, default to the first available one (or "unilever")
+
     if (db.subdomain === targetId) {
       db.subdomain = db.subdomains[0]?.name || "unilever";
+    }
+
+    // Remove the deleted portal's slug from all content mappings so nothing carries over
+    const stripSlug = (items: any[]) => items.map(item => ({
+      ...item,
+      customerNames: (item.customerNames || []).filter((n: string) => n !== targetId),
+      customerName: item.customerName === targetId ? "" : item.customerName,
+    }));
+    db.solutions = stripSlug(db.solutions || []);
+    db.collaterals = stripSlug(db.collaterals || []);
+    db.currentProjects = stripSlug(db.currentProjects || []);
+    db.upcomingProjects = stripSlug(db.upcomingProjects || []);
+
+    // Stop PM2 portal process
+    pm2StopPortal(targetId);
+
+    // Free the port assignment
+    if (db.portAssignments) {
+      delete db.portAssignments[targetId];
+    }
+
+    // Delete local portal folder
+    const portalDir = path.join(PORTALS_DIR, targetId);
+    if (fs.existsSync(portalDir)) {
+      try {
+        fs.rmSync(portalDir, { recursive: true, force: true });
+        console.log(`[portal-${targetId}] Deleted local folder`);
+      } catch (err: any) {
+        console.warn(`[portal-${targetId}] Could not delete local folder:`, err?.message);
+      }
     }
 
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
       email: "admin@mobiusservices.co.in",
       action: "Customer Subdomain Portal Deleted",
-      details: `Deleted subdomain portal with reference ID: ${targetId}`,
+      details: `Deleted portal "${targetId}", removed its slug from all content mappings.`,
       date: new Date().toISOString()
     });
   }
@@ -868,10 +1324,11 @@ app.post("/api/admin/update-carousel", (req, res) => {
   });
 
   writeDatabase(db);
+  autoDeployLivePortals(db);
   res.json({ success: true, carousel: db.carousel, database: db });
 });
 
-// Portal deploy — writes filtered config snapshot to data/portals/<slug>/portal.json
+// Portal deploy — writes filtered config snapshot locally + uploads to S3 + signals portal to reload
 app.post("/api/admin/deploy", async (req, res) => {
   const { portalSlug } = req.body;
   if (!portalSlug) return res.status(400).json({ error: "portalSlug required." });
@@ -882,9 +1339,11 @@ app.post("/api/admin/deploy", async (req, res) => {
 
   const db = readDatabase();
   const matchesSlug = (names: string[]) => names.includes(cleanSlug) || names.includes("all");
+  const subdomainInfo = (db.subdomains || []).find((s: any) => s.name === cleanSlug) || null;
 
-  const config = {
+  const portalJson = {
     slug: cleanSlug,
+    subdomain: cleanSlug,
     deployedAt: new Date().toISOString(),
     heroText: db.heroText,
     logo: db.logo || "",
@@ -903,24 +1362,113 @@ app.post("/api/admin/deploy", async (req, res) => {
     upcomingProjects: (db.upcomingProjects || []).filter((p: any) =>
       matchesSlug(p.customerNames || [p.customerName])
     ),
-    subdomainInfo: (db.subdomains || []).find((s: any) => s.name === cleanSlug) || null,
+    subdomainInfo,
+    subdomains: [],
+    userLogs: [],
+    heroPrompt: "",
+    users: (db.users || []).filter(u => u.enabled !== false).map(u => ({
+      id: u.id, email: u.email, name: u.name, role: u.role,
+      passwordHash: u.passwordHash, createdAt: u.createdAt,
+    })),
   };
 
-  fs.writeFileSync(path.join(portalDir, "portal.json"), JSON.stringify(config, null, 2), "utf-8");
+  // Write local snapshot
+  fs.writeFileSync(path.join(portalDir, "portal.json"), JSON.stringify(portalJson, null, 2), "utf-8");
+
+  // Upload to S3
+  let s3Status = "ok";
+  try {
+    await s3PutPortalFile(cleanSlug, "portal.json", portalJson);
+  } catch (err: any) {
+    s3Status = err?.message || "S3 upload failed";
+    console.error(`[S3] Deploy upload failed for ${cleanSlug}:`, s3Status);
+  }
+
+  // Signal portal process to reload its data (fire-and-forget)
+  const portalPort = subdomainInfo?.port || (db.portAssignments || {})[cleanSlug];
+  if (portalPort) {
+    const reloadReq = http.request({ hostname: "127.0.0.1", port: portalPort, path: "/api/reload", method: "POST" }, () => {});
+    reloadReq.on("error", () => {});
+    reloadReq.end();
+  }
 
   db.userLogs.unshift({
     id: `log-${Date.now()}`,
     email: "admin@mobiusservices.co.in",
     action: "Portal Deployed",
-    details: `Config snapshot written to data/portals/${cleanSlug}/portal.json`,
+    details: `Deployed ${cleanSlug} to S3 (s3://${S3_BUCKET}/${S3_PREFIX}/${cleanSlug}/portal.json). S3: ${s3Status}`,
     date: new Date().toISOString(),
   });
   writeDatabase(db);
 
-  res.json({ success: true, portalDir: `data/portals/${cleanSlug}`, deployedAt: config.deployedAt });
+  res.json({
+    success: true,
+    portalDir: `data/portals/${cleanSlug}`,
+    s3Path: `s3://${S3_BUCKET}/${S3_PREFIX}/${cleanSlug}/portal.json`,
+    s3Status,
+    deployedAt: portalJson.deployedAt,
+  });
 });
 
+// Hub identity endpoint — tells the frontend it is the Hub (not a customer portal)
+app.get("/api/portal-info", (_req, res) => {
+  res.json({ isHub: true });
+});
+
+async function seedDefaultAdmin(): Promise<void> {
+  const SYSTEM_EMAIL = "eswar@xtract.io";
+  const SYSTEM_HASH = hashPassword("xts123");
+
+  const db = readDatabase();
+  if (!db.users) db.users = [];
+
+  // Pull users from S3 as the authoritative source; merge into local DB
+  const s3Users = await loadUsersFromS3();
+  if (s3Users && s3Users.length > 0) {
+    // S3 wins: replace local users list (preserving any local-only entries not yet in S3)
+    const s3Emails = new Set(s3Users.map(u => u.email));
+    const localOnly = db.users.filter(u => !s3Emails.has(u.email));
+    db.users = [...s3Users, ...localOnly];
+    console.log(`[Auth] Merged ${s3Users.length} S3 users into local DB`);
+  }
+
+  // Ensure system admin exists and is always correct regardless of prior UI actions
+  const idx = db.users.findIndex(u => u.email === SYSTEM_EMAIL);
+  if (idx === -1) {
+    db.users.unshift({
+      id: "system-admin-eswar",
+      email: SYSTEM_EMAIL,
+      name: "Eswar (Admin)",
+      role: "admin",
+      passwordHash: SYSTEM_HASH,
+      createdAt: new Date().toISOString(),
+      enabled: true,
+      isSystem: true,
+    });
+    console.log(`[Auth] Created system admin: ${SYSTEM_EMAIL}`);
+  } else {
+    db.users[idx] = {
+      ...db.users[idx],
+      passwordHash: SYSTEM_HASH,
+      role: "admin",
+      enabled: true,
+      isSystem: true,
+    };
+    console.log(`[Auth] System admin enforced: ${SYSTEM_EMAIL}`);
+  }
+
+  writeDatabase(db);
+
+  // Populate the in-memory cache so login works immediately from S3 data
+  usersCache = db.users;
+
+  // Push the authoritative merged list back to S3 (best-effort)
+  s3SyncUsers(db.users).catch(() => {});
+}
+
 async function startServer() {
+  await seedDefaultAdmin();
+
   if (process.env.NODE_ENV !== "production") {
     const frontendRoot = path.join(process.cwd(), "frontend");
     const vite = await createViteServer({

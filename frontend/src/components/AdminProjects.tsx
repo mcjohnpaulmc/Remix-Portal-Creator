@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -20,7 +20,7 @@ interface AdminProjectsProps {
   onRefreshUpcoming: (action: string, project: any) => Promise<void>;
   subdomains?: { id: string; name: string; displayName: string }[];
   prefilledSubdomain?: string | null;
-  adminToken?: string;
+  adminUserEmail?: string;
 }
 
 export function AdminProjects({
@@ -30,7 +30,7 @@ export function AdminProjects({
   onRefreshUpcoming,
   subdomains = [],
   prefilledSubdomain,
-  adminToken = ""
+  adminUserEmail = ""
 }: AdminProjectsProps) {
   const [activeSubTab, setActiveSubTab] = useState<"current" | "upcoming">("current");
   const [isEditing, setIsEditing] = useState(false);
@@ -169,7 +169,7 @@ export function AdminProjects({
     try {
       const res = await fetch("/api/admin/generate-project", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Admin-Token": adminToken },
+        headers: { "Content-Type": "application/json", "X-Admin-User": adminUserEmail },
         body: JSON.stringify({
           name: aiNameInput,
           customerName,
@@ -249,7 +249,7 @@ export function AdminProjects({
       const formData = new FormData();
       formData.append("file", file);
       try {
-        const res = await fetch("/api/upload", { method: "POST", headers: { "X-Admin-Token": adminToken }, body: formData });
+        const res = await fetch("/api/upload", { method: "POST", headers: { "X-Admin-User": adminUserEmail }, body: formData });
         const data = await res.json();
         setUploadedFiles((prev) => [...prev, { name, size: sizeStr, type: detectedType, url: data.url }]);
       } catch {
@@ -279,7 +279,7 @@ export function AdminProjects({
       const formData = new FormData();
       formData.append("file", file);
       try {
-        const res = await fetch("/api/upload", { method: "POST", headers: { "X-Admin-Token": adminToken }, body: formData });
+        const res = await fetch("/api/upload", { method: "POST", headers: { "X-Admin-User": adminUserEmail }, body: formData });
         const data = await res.json();
         setUpcomingDocs((prev) => [...prev, { name, size: sizeStr, type: detectedType, category: newUpDocCat, url: data.url }]);
       } catch {
@@ -543,7 +543,7 @@ export function AdminProjects({
         {/* Metadata Controls on Left Column */}
         <div className="lg:col-span-4 space-y-4">
           <div className="p-5 bg-white border border-slate-100 rounded-2xl shadow-3xs space-y-4">
-             <span className="text-[10px] font-mono font-bold text-indigo-650 bg-indigo-50 px-2 py-0.5 rounded uppercase tracking-wider inline-block">
+             <span className="text-[10px] font-mono font-bold text-orange-650 bg-orange-50 px-2 py-0.5 rounded uppercase tracking-wider inline-block">
               📍 STEP 1: Select Target Subdomains (Multi-Select)
             </span>
 
@@ -558,7 +558,7 @@ export function AdminProjects({
                       type="checkbox"
                       checked={customerNames.includes("all")}
                       onChange={() => handleSubdomainCheckboxChange("all")}
-                      className="h-3.5 w-3.5 accent-indigo-600 rounded border-slate-350"
+                      className="h-3.5 w-3.5 accent-orange-600 rounded border-slate-350"
                     />
                     <span className="text-slate-900 font-mono font-bold">All (Global)</span>
                   </label>
@@ -568,7 +568,7 @@ export function AdminProjects({
                         type="checkbox"
                         checked={customerNames.includes(sub.name)}
                         onChange={() => handleSubdomainCheckboxChange(sub.name)}
-                        className="h-3.5 w-3.5 accent-indigo-600 rounded border-slate-350"
+                        className="h-3.5 w-3.5 accent-orange-600 rounded border-slate-350"
                       />
                       <span className="text-slate-700 font-mono text-[10px]">{sub.displayName}</span>
                     </label>
@@ -662,11 +662,11 @@ export function AdminProjects({
 
             {/* Sections to Hide Checkbox configurator */}
             {activeSubTab === "current" && (
-              <div className="p-5 bg-indigo-50/40 border border-indigo-100 rounded-2xl shadow-3xs space-y-3 text-left">
-                <span className="block text-xs font-bold text-indigo-950 uppercase tracking-wide">
+              <div className="p-5 bg-orange-50/40 border border-orange-100 rounded-2xl shadow-3xs space-y-3 text-left">
+                <span className="block text-xs font-bold text-orange-950 uppercase tracking-wide">
                   📊 Toggle Section Visibility
                 </span>
-                <span className="text-[10px] text-indigo-700/80 block leading-normal">
+                <span className="text-[10px] text-orange-700/80 block leading-normal">
                   Toggle visibility for individual charts or modules on the project details scorecard below:
                 </span>
 
@@ -695,7 +695,7 @@ export function AdminProjects({
                               setHiddenSections([...hiddenSections, item.id]);
                             }
                           }}
-                          className="rounded text-indigo-600 border-slate-300 focus:ring-indigo-500 h-3.5 w-3.5 mt-0.5 shrink-0"
+                          className="rounded text-orange-600 border-slate-300 focus:ring-orange-500 h-3.5 w-3.5 mt-0.5 shrink-0"
                         />
                         <span>{item.label}</span>
                       </label>
@@ -1245,7 +1245,7 @@ export function AdminProjects({
                        <select
                          value={newUpDocCat}
                          onChange={(e) => setNewUpDocCat(e.target.value as any)}
-                         className="px-2 py-0.5 border border-slate-205 rounded text-[10px] bg-indigo-50/50 text-indigo-850 font-semibold"
+                         className="px-2 py-0.5 border border-slate-205 rounded text-[10px] bg-orange-50/50 text-orange-850 font-semibold"
                        >
                          <option value="Sample Data">Sample Data</option>
                          <option value="Pricing">Pricing</option>
@@ -1274,15 +1274,15 @@ export function AdminProjects({
                      id="upcoming-proj-drop-zone"
                      onDragOver={(e) => {
                        e.preventDefault();
-                       e.currentTarget.classList.add("border-indigo-550", "bg-indigo-50/20");
+                       e.currentTarget.classList.add("border-orange-550", "bg-orange-50/20");
                      }}
                      onDragLeave={(e) => {
                        e.preventDefault();
-                       e.currentTarget.classList.remove("border-indigo-550", "bg-indigo-50/20");
+                       e.currentTarget.classList.remove("border-orange-550", "bg-orange-50/20");
                      }}
                      onDrop={(e) => {
                        e.preventDefault();
-                       e.currentTarget.classList.remove("border-indigo-550", "bg-indigo-50/20");
+                       e.currentTarget.classList.remove("border-orange-550", "bg-orange-50/20");
                        if (e.dataTransfer.files) {
                          handleUpcomingProjRealFilesUpload(e.dataTransfer.files);
                        }
@@ -1290,9 +1290,9 @@ export function AdminProjects({
                      onClick={() => {
                        document.getElementById("upcoming-proj-real-file-input")?.click();
                      }}
-                     className="border-2 border-dashed border-slate-200 hover:border-indigo-550 hover:bg-slate-50/50 rounded-xl p-5 text-center cursor-pointer transition-all space-y-2 select-none"
+                     className="border-2 border-dashed border-slate-200 hover:border-orange-550 hover:bg-slate-50/50 rounded-xl p-5 text-center cursor-pointer transition-all space-y-2 select-none"
                    >
-                     <div className="mx-auto w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-650">
+                     <div className="mx-auto w-10 h-10 rounded-full bg-orange-50 flex items-center justify-center text-orange-650">
                        <FileUp className="h-5 w-5" />
                      </div>
                      <div>
@@ -1379,10 +1379,10 @@ export function AdminProjects({
                      {upcomingDocs.map((doc, idx) => (
                        <div key={idx} className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-150 rounded-xl text-xs">
                          <div className="flex items-center gap-2 min-w-0">
-                           <FileText className="h-4.5 w-4.5 text-indigo-500 shrink-0" />
+                           <FileText className="h-4.5 w-4.5 text-orange-500 shrink-0" />
                            <div className="truncate text-left">
                              <span className="font-semibold text-slate-850 truncate block">{doc.name}</span>
-                             <span className="text-[9px] px-1.5 py-0.2 bg-indigo-50/80 rounded text-indigo-650 uppercase tracking-widest font-bold text-[8px] mt-0.5 inline-block">
+                             <span className="text-[9px] px-1.5 py-0.2 bg-orange-50/80 rounded text-orange-650 uppercase tracking-widest font-bold text-[8px] mt-0.5 inline-block">
                                Category: {doc.category}
                              </span>
                            </div>
@@ -1465,7 +1465,7 @@ export function AdminProjects({
                       Client ID Context: {proj.customerName}
                     </span>
                     {proj.customerNames && proj.customerNames.map((n) => (
-                      <span key={n} className="bg-indigo-50 text-indigo-600 font-semibold px-1 py-0.5 rounded text-[8px] uppercase">{n}</span>
+                      <span key={n} className="bg-orange-50 text-orange-600 font-semibold px-1 py-0.5 rounded text-[8px] uppercase">{n}</span>
                     ))}
                   </div>
                   
@@ -1486,7 +1486,7 @@ export function AdminProjects({
                   <h4 className="font-display font-bold text-sm text-slate-900 leading-snug">
                     {proj.name}
                   </h4>
-                  <span className="text-[10px] font-semibold text-indigo-600 block mt-0.5">
+                  <span className="text-[10px] font-semibold text-orange-600 block mt-0.5">
                     🏢 Dept: {proj.department}
                   </span>
                   <p className="text-xs text-slate-500 mt-2 line-clamp-3 leading-relaxed">
@@ -1512,7 +1512,7 @@ export function AdminProjects({
                     <button
                       type="button"
                       onClick={() => handleEditCurrentClick(proj)}
-                      className="p-1 hover:text-indigo-600 border border-slate-200 rounded hover:bg-slate-50 text-slate-500"
+                      className="p-1 hover:text-orange-600 border border-slate-200 rounded hover:bg-slate-50 text-slate-500"
                       title="Edit project details"
                     >
                       <Edit2 className="h-3 w-3" />
@@ -1556,11 +1556,11 @@ export function AdminProjects({
               >
                 <div className="flex items-center justify-between">
                   <div className="flex flex-wrap gap-1 items-center">
-                    <span className="text-[8px] font-mono font-bold uppercase tracking-wider bg-indigo-50 px-2 py-0.5 rounded text-indigo-700">
+                    <span className="text-[8px] font-mono font-bold uppercase tracking-wider bg-orange-50 px-2 py-0.5 rounded text-orange-700">
                       Tenant Target: {proj.customerName}
                     </span>
                     {proj.customerNames && proj.customerNames.map((n) => (
-                      <span key={n} className="bg-indigo-50 text-indigo-600 font-semibold px-1 py-0.5 rounded text-[8px] uppercase">{n}</span>
+                      <span key={n} className="bg-orange-50 text-orange-600 font-semibold px-1 py-0.5 rounded text-[8px] uppercase">{n}</span>
                     ))}
                   </div>
                   
@@ -1598,7 +1598,7 @@ export function AdminProjects({
                     <button
                       type="button"
                       onClick={() => handleEditUpcomingClick(proj)}
-                      className="p-1 hover:text-indigo-600 border border-slate-200 rounded hover:bg-slate-50 text-slate-500"
+                      className="p-1 hover:text-orange-600 border border-slate-200 rounded hover:bg-slate-50 text-slate-500"
                     >
                       <Edit2 className="h-3 w-3" />
                     </button>

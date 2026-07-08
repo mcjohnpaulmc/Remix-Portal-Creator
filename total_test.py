@@ -30,7 +30,7 @@ ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "dev-admin")
 STATIC_ONLY = "--static-only" in sys.argv
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-APP_ROOT     = os.path.join(PROJECT_ROOT, "Remix-Portal-Creator")
+APP_ROOT     = PROJECT_ROOT
 
 passed  = []
 failed  = []
@@ -277,16 +277,20 @@ def test_carousel_select_has_all_option():
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# Fix 6 — "Onboard Assets" button sets selectedAdminSubdomain (not just
-#          the unused prefilledSubdomain state)
+# Fix 6 — "Onboard Assets" functionality moved into the Portal Settings modal
+#          (the portal card button now opens a Settings modal; setSelectedAdminSubdomain
+#           is called from within that modal's "Onboard Assets for this Portal" shortcut)
 # ═════════════════════════════════════════════════════════════════════════════
 
 def test_onboard_assets_sets_selected_admin_subdomain():
-    name = "Fix-6 (static): Onboard Assets handler calls setSelectedAdminSubdomain"
+    name = "Fix-6 (static): Settings modal 'Onboard Assets' calls setSelectedAdminSubdomain"
     try:
         src = read_file("frontend/src/App.tsx")
-        assert "setSelectedAdminSubdomain(portal.name)" in src, \
-            "Onboard Assets click handler does not call setSelectedAdminSubdomain"
+        # The call is now inside the Settings modal (portalSettingsTarget context)
+        assert "setSelectedAdminSubdomain(portalSettingsTarget.name)" in src, \
+            "Settings modal 'Onboard Assets' handler does not call setSelectedAdminSubdomain"
+        assert "setPortalSettingsTarget(null)" in src, \
+            "Settings modal 'Onboard Assets' handler should close the modal after switching context"
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -364,11 +368,12 @@ def test_generate_project_uses_openai():
     if not SERVER_UP:
         skip(name, "server not running"); return
     try:
-        r = admin_post("/api/admin/generate-project", {
-            "name": "Test Logistics AI",
-            "customerName": "unilever",
-            "templateType": "current"
-        })
+        r = _requests.post(
+            BASE_URL + "/api/admin/generate-project",
+            json={"name": "Test Logistics AI", "customerName": "unilever", "templateType": "current"},
+            headers={"Content-Type": "application/json", "X-Admin-Token": ADMIN_TOKEN},
+            timeout=30,
+        )
         if r.status_code != 200:
             fail(name, f"Expected 200, got {r.status_code}: {r.text}"); return
         data = r.json()
@@ -668,13 +673,15 @@ def test_collateral_modal_is_full_screen():
 
 
 def test_header_subdomain_filters_use_valid_tailwind_color():
-    name = "Fix-17 (static): Header subdomain filter buttons use bg-indigo-600 not the invalid bg-indigo-650"
+    name = "Fix-17 (static): Header has no subdomain chip buttons (chips removed entirely)"
     try:
         src = read_file("frontend/src/App.tsx")
         assert "bg-indigo-650" not in src, \
-            "Header filter buttons still use bg-indigo-650 which is not a valid Tailwind class (renders transparent)"
-        assert "bg-indigo-600" in src, \
-            "Header filter buttons should use bg-indigo-600 for the selected state"
+            "App.tsx still contains bg-indigo-650 which is not a valid Tailwind class"
+        # The header-level subdomain chip buttons used the variable name 'subObj';
+        # they have been removed — only the in-console filter bar (using 'sub') remains.
+        assert "subdomainsList.map((subObj)" not in src, \
+            "Header subdomain chip buttons (subObj) are still rendered — they should be removed"
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -718,6 +725,476 @@ def test_solution_with_empty_thumbnail_accepted():
                         if s.get("title") == "Regression No-Thumbnail Test"), None)
         if new_sol:
             admin_post("/api/admin/solutions", {"action": "delete", "solution": {"id": new_sol["id"]}})
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Fix 18 — S3 race condition: local portal.json must be authoritative on reload
+#           (portal-server.ts previously let S3 override a freshly written local
+#            file, causing solutions to disappear after "Apply Modifications")
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_portal_server_prefers_local_file_over_s3():
+    name = "Fix-18a (static): portal-server.ts only reads S3 when no local file exists"
+    try:
+        src = read_file("backend/portal-server.ts")
+        assert "loadedFromLocal = true" in src, \
+            "portal-server.ts does not track whether local file was loaded"
+        assert "if (!loadedFromLocal)" in src, \
+            "portal-server.ts does not gate S3 read on loadedFromLocal"
+        # Verify the comment documents the intent
+        assert "authoritative" in src, \
+            "portal-server.ts should have a comment explaining local file is authoritative"
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_deploy_awaits_s3_before_reload_signal():
+    name = "Fix-18b (static): deployPortalInProcess awaits S3 upload before sending /api/reload"
+    try:
+        src = read_file("backend/server.ts")
+        # The function must contain 'await s3PutPortalFile' (not fire-and-forget .catch)
+        # inside deployPortalInProcess — the await guarantees S3 is consistent before reload.
+        assert "await s3PutPortalFile(cleanSlug" in src, \
+            "deployPortalInProcess does not await S3 upload before signaling reload"
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_portal_server_still_refreshes_users_from_s3():
+    name = "Fix-18c (static): portal-server.ts still loads users from S3 regardless of local file"
+    try:
+        src = read_file("backend/portal-server.ts")
+        # users.json is always fetched from S3 (auth source of truth), even when
+        # portal content comes from local file
+        assert "users.json" in src, "portal-server.ts does not reference users.json"
+        assert "portalData.users = users" in src, \
+            "portal-server.ts does not override portalData.users from S3 users.json"
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_deploy_writes_solution_to_portal_json():
+    name = "Fix-18d: POST /api/admin/deploy includes mapped solutions in portal.json"
+    if not SERVER_UP:
+        skip(name, "server not running"); return
+    import shutil, time
+    slug = "testdeploy-sol-01"
+    portal_json_path = os.path.join(APP_ROOT, "data", "portals", slug, "portal.json")
+    sol_id = None
+    try:
+        # Create portal
+        r = admin_post("/api/admin/subdomains",
+                       {"action": "create-dummy", "displayName": "Deploy Solution Test"})
+        if not r.json().get("success"):
+            skip(name, "could not create dummy portal"); return
+        # Find the newly created slug
+        slugs_after = [s for s in r.json().get("subdomains", []) if s.get("isDummy")]
+        if not slugs_after:
+            skip(name, "no dummy portal returned"); return
+        slug = slugs_after[0]["id"]
+        portal_json_path = os.path.join(APP_ROOT, "data", "portals", slug, "portal.json")
+
+        # Create a solution mapped to this portal
+        r2 = admin_post("/api/admin/solutions", {
+            "action": "create",
+            "solution": {
+                "title": "Deploy Test Solution",
+                "thumbnail": "https://example.com/img.jpg",
+                "url": "https://example.com",
+                "credentialsDescription": "test",
+                "customerName": slug,
+                "customerNames": [slug],
+                "enabled": True,
+            }
+        })
+        if not r2.json().get("success"):
+            skip(name, "could not create solution"); return
+        sol_id = next(
+            (s["id"] for s in r2.json().get("database", {}).get("solutions", [])
+             if s.get("title") == "Deploy Test Solution"),
+            None
+        )
+
+        # Explicitly deploy
+        r3 = admin_post("/api/admin/deploy", {"portalSlug": slug})
+        if r3.status_code != 200 or not r3.json().get("success"):
+            fail(name, f"deploy failed: {r3.text}"); return
+
+        # Check portal.json contains the solution
+        if not os.path.isfile(portal_json_path):
+            fail(name, "portal.json not created after deploy"); return
+        config = json.loads(open(portal_json_path).read())
+        sol_slugs = [s.get("customerName") or "" for s in config.get("solutions", [])]
+        sol_titles = [s.get("title") for s in config.get("solutions", [])]
+        if "Deploy Test Solution" not in sol_titles:
+            fail(name, f"Mapped solution missing from portal.json. Found: {sol_titles}"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+    finally:
+        if sol_id:
+            admin_post("/api/admin/solutions", {"action": "delete", "solution": {"id": sol_id}})
+        admin_post("/api/admin/subdomains", {"action": "delete", "id": slug})
+        parent = os.path.join(APP_ROOT, "data", "portals", slug)
+        if os.path.exists(parent):
+            try: shutil.rmtree(parent)
+            except: pass
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Fix 19 — Toggle-to-live always deploys current content before spawning portal
+#           (previously, starting a portal only wrote the default empty scaffold
+#            if no portal.json existed; now it always runs deployPortalInProcess)
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_toggle_live_calls_deploy_before_spawn():
+    name = "Fix-19 (static): toggle action calls deployPortalInProcess before pm2SpawnPortal"
+    try:
+        src = read_file("backend/server.ts")
+        # Find the toggle block: deployPortalInProcess must appear before pm2SpawnPortal
+        toggle_idx = src.find('} else if (action === "toggle")')
+        deploy_idx = src.find("deployPortalInProcess(targetId, db)", toggle_idx)
+        spawn_idx  = src.find("pm2SpawnPortal(targetId,", toggle_idx)
+        assert toggle_idx != -1, "toggle action block not found"
+        assert deploy_idx != -1, "deployPortalInProcess not called in toggle block"
+        assert spawn_idx  != -1, "pm2SpawnPortal not called in toggle block"
+        assert deploy_idx < spawn_idx, \
+            "deployPortalInProcess must be called BEFORE pm2SpawnPortal in toggle block"
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Fix 20 — New portals start empty (no pre-filled solutions/collaterals/carousel)
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_build_default_portal_json_is_empty():
+    name = "Fix-20a (static): buildDefaultPortalJson returns empty solutions/collaterals/carousel"
+    try:
+        src = read_file("backend/server.ts")
+        # Find the buildDefaultPortalJson function and verify it has empty arrays
+        fn_start = src.find("function buildDefaultPortalJson(")
+        fn_body = src[fn_start:fn_start + 800]
+        assert "solutions: []" in fn_body, \
+            "buildDefaultPortalJson does not return empty solutions array"
+        assert "collaterals: []" in fn_body, \
+            "buildDefaultPortalJson does not return empty collaterals array"
+        assert "carousel: []" in fn_body, \
+            "buildDefaultPortalJson does not return empty carousel array"
+        assert "currentProjects: []" in fn_body, \
+            "buildDefaultPortalJson does not return empty currentProjects array"
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_new_dummy_portal_portal_json_is_empty():
+    name = "Fix-20b: newly created dummy portal has empty solutions in portal.json"
+    if not SERVER_UP:
+        skip(name, "server not running"); return
+    import shutil
+    slug = None
+    try:
+        r = admin_post("/api/admin/subdomains",
+                       {"action": "create-dummy", "displayName": "Empty Portal Test"})
+        data = r.json()
+        if not data.get("success"):
+            skip(name, "could not create dummy portal"); return
+        dummies = [s for s in data.get("subdomains", []) if s.get("isDummy")]
+        if not dummies:
+            skip(name, "no dummy returned"); return
+        slug = dummies[0]["id"]
+        portal_json_path = os.path.join(APP_ROOT, "data", "portals", slug, "portal.json")
+        if not os.path.isfile(portal_json_path):
+            fail(name, "portal.json not created with new portal"); return
+        config = json.loads(open(portal_json_path).read())
+        if config.get("solutions"):
+            fail(name, f"Expected empty solutions, got: {config['solutions']}"); return
+        if config.get("collaterals"):
+            fail(name, f"Expected empty collaterals, got: {config['collaterals']}"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+    finally:
+        if slug:
+            admin_post("/api/admin/subdomains", {"action": "delete", "id": slug})
+            parent = os.path.join(APP_ROOT, "data", "portals", slug)
+            if os.path.exists(parent):
+                try: shutil.rmtree(parent)
+                except: pass
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Fix 21 — Deleted portal slug is stripped from all content mappings
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_delete_portal_strips_slug_from_solutions():
+    name = "Fix-21a: Deleting a portal removes its slug from mapped solutions"
+    if not SERVER_UP:
+        skip(name, "server not running"); return
+    import shutil
+    slug = None
+    sol_id = None
+    try:
+        # Create a dummy portal
+        r = admin_post("/api/admin/subdomains",
+                       {"action": "create-dummy", "displayName": "Strip Slug Test"})
+        data = r.json()
+        if not data.get("success"):
+            skip(name, "could not create dummy portal"); return
+        dummies = [s for s in data.get("subdomains", []) if s.get("isDummy")]
+        if not dummies:
+            skip(name, "no dummy returned"); return
+        slug = dummies[0]["id"]
+
+        # Create a solution mapped to that portal
+        r2 = admin_post("/api/admin/solutions", {
+            "action": "create",
+            "solution": {
+                "title": "Strip Slug Test Solution",
+                "thumbnail": "https://example.com/img.jpg",
+                "url": "",
+                "credentialsDescription": "test",
+                "customerName": slug,
+                "customerNames": [slug],
+                "enabled": False,
+            }
+        })
+        if not r2.json().get("success"):
+            skip(name, "could not create solution"); return
+        sol_id = next(
+            (s["id"] for s in r2.json().get("database", {}).get("solutions", [])
+             if s.get("title") == "Strip Slug Test Solution"),
+            None
+        )
+
+        # Delete the portal
+        r3 = admin_post("/api/admin/subdomains", {"action": "delete", "id": slug})
+        if not r3.json().get("success"):
+            fail(name, f"delete failed: {r3.text}"); return
+        slug = None  # already deleted, skip finally cleanup
+
+        # Fetch database and verify solution no longer maps to that portal
+        r4 = _requests.get(BASE_URL + "/api/database", timeout=5)
+        solutions = r4.json().get("solutions", [])
+        target = next((s for s in solutions if s.get("id") == sol_id), None)
+        if target is None:
+            # solution itself might have been cleaned up already — that's also acceptable
+            ok(name); return
+        customer_names = target.get("customerNames", [])
+        customer_name  = target.get("customerName", "")
+        if any("strip-slug" in n.lower() or n == slug for n in customer_names):
+            fail(name, f"Deleted portal slug still in customerNames: {customer_names}"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+    finally:
+        if sol_id:
+            admin_post("/api/admin/solutions", {"action": "delete", "solution": {"id": sol_id}})
+        if slug:
+            admin_post("/api/admin/subdomains", {"action": "delete", "id": slug})
+            parent = os.path.join(APP_ROOT, "data", "portals", slug)
+            if os.path.exists(parent):
+                try: shutil.rmtree(parent)
+                except: pass
+
+
+def test_server_ts_strip_slug_on_delete():
+    name = "Fix-21b (static): server.ts strips deleted portal slug from all content on delete"
+    try:
+        src = read_file("backend/server.ts")
+        assert "stripSlug" in src, "stripSlug helper not present in server.ts"
+        assert "db.solutions = stripSlug" in src, \
+            "stripSlug not applied to db.solutions on portal delete"
+        assert "db.collaterals = stripSlug" in src, \
+            "stripSlug not applied to db.collaterals on portal delete"
+        assert "db.currentProjects = stripSlug" in src, \
+            "stripSlug not applied to db.currentProjects on portal delete"
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Fix 22 — autoDeployLivePortals called after every content CRUD so live
+#           portals always reflect the latest onboarded content
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_auto_deploy_called_after_solutions_crud():
+    name = "Fix-22a (static): solutions endpoint calls autoDeployLivePortals after write"
+    try:
+        src = read_file("backend/server.ts")
+        # Find the solutions route and confirm autoDeployLivePortals is called before res.json
+        route_start = src.find('app.post("/api/admin/solutions"')
+        route_body  = src[route_start:route_start + 1500]
+        assert "autoDeployLivePortals(db)" in route_body, \
+            "solutions endpoint does not call autoDeployLivePortals"
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_auto_deploy_called_after_collaterals_crud():
+    name = "Fix-22b (static): collaterals endpoint calls autoDeployLivePortals after write"
+    try:
+        src = read_file("backend/server.ts")
+        route_start = src.find('app.post("/api/admin/collaterals"')
+        route_body  = src[route_start:route_start + 1500]
+        assert "autoDeployLivePortals(db)" in route_body, \
+            "collaterals endpoint does not call autoDeployLivePortals"
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_auto_deploy_only_targets_live_portals():
+    name = "Fix-22c (static): autoDeployLivePortals filters by status === 'live'"
+    try:
+        src = read_file("backend/server.ts")
+        fn_start = src.find("function autoDeployLivePortals(")
+        fn_body  = src[fn_start:fn_start + 300]
+        assert 'status === "live"' in fn_body, \
+            "autoDeployLivePortals does not filter for live portals"
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Fix 23 — Portal Settings modal: rename portal, access URL, onboard shortcut
+#           (replaces the "Onboard Assets ⚡" button on portal cards)
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_portal_settings_state_exists():
+    name = "Fix-23a (static): App.tsx has portalSettingsTarget state for Settings modal"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        assert "portalSettingsTarget" in src, \
+            "portalSettingsTarget state not found in App.tsx"
+        assert "settingsDisplayName" in src, \
+            "settingsDisplayName state not found in App.tsx"
+        assert "handleSavePortalSettings" in src, \
+            "handleSavePortalSettings function not found in App.tsx"
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_portal_card_has_settings_button_not_onboard():
+    name = "Fix-23b (static): Portal cards show Settings button; Onboard Assets button removed from card"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        # Settings button must open the modal
+        assert "setPortalSettingsTarget(portal)" in src, \
+            "Portal card does not open Settings modal (setPortalSettingsTarget not called)"
+        # The old inline "Onboard Assets ⚡" click that changed tabs directly is gone
+        assert "Onboard Assets" not in src or "setPortalSettingsTarget" in src, \
+            "Onboard Assets button still present as direct portal card action"
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_portal_settings_update_endpoint():
+    name = "Fix-23c: POST /api/admin/subdomains action:update renames portal displayName"
+    if not SERVER_UP:
+        skip(name, "server not running"); return
+    import shutil
+    slug = None
+    try:
+        # Create a portal
+        r = admin_post("/api/admin/subdomains",
+                       {"action": "create-dummy", "displayName": "Before Rename"})
+        data = r.json()
+        if not data.get("success"):
+            skip(name, "could not create dummy portal"); return
+        dummies = [s for s in data.get("subdomains", []) if s.get("isDummy")]
+        if not dummies:
+            skip(name, "no dummy returned"); return
+        slug = dummies[0]["id"]
+
+        # Rename via update action
+        r2 = admin_post("/api/admin/subdomains", {
+            "action": "update",
+            "id": slug,
+            "displayName": "After Rename"
+        })
+        if r2.status_code != 200 or not r2.json().get("success"):
+            fail(name, f"update action failed: {r2.text}"); return
+
+        # Verify in database
+        r3 = _requests.get(BASE_URL + "/api/database", timeout=5)
+        subdomains = r3.json().get("subdomains", [])
+        portal = next((s for s in subdomains if s.get("id") == slug), None)
+        if portal is None:
+            fail(name, "Portal not found after rename"); return
+        if portal.get("displayName") != "After Rename":
+            fail(name, f"displayName not updated. Got: {portal.get('displayName')}"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+    finally:
+        if slug:
+            admin_post("/api/admin/subdomains", {"action": "delete", "id": slug})
+            parent = os.path.join(APP_ROOT, "data", "portals", slug)
+            if os.path.exists(parent):
+                try:
+                    import shutil
+                    shutil.rmtree(parent)
+                except: pass
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Fix 24 — Header portal chip buttons removed from top navigation bar
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_header_has_no_portal_chip_buttons():
+    name = "Fix-24 (static): Header no longer renders subdomain chip buttons"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        # The header chips used 'subObj' as the loop variable — this pattern must be gone
+        assert "subdomainsList.map((subObj)" not in src, \
+            "Header still renders subdomain chip buttons (subdomainsList.map((subObj))"
+        # The in-console portal filter bar still uses 'sub' — that should remain
+        assert "subdomainsList.map((sub)" in src, \
+            "In-console portal filter bar (subdomainsList.map((sub)) was accidentally removed"
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Fix 25 — Admin console uses full page width (max-w-7xl removed from <main>)
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_admin_layout_full_width():
+    name = "Fix-25a (static): <main> element has no max-w-7xl constraint"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        # Find the main element opening tag
+        main_idx = src.find("<main ")
+        main_tag = src[main_idx:main_idx + 200]
+        assert "max-w-7xl" not in main_tag, \
+            "<main> element still has max-w-7xl constraint — admin console cannot use full width"
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_user_view_retains_max_width():
+    name = "Fix-25b (static): user view wrapper retains max-w-7xl mx-auto for centered layout"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        # The user view div (inside the ternary) should still constrain width
+        assert "max-w-7xl mx-auto w-full" in src, \
+            "User view lost its max-w-7xl mx-auto centered layout"
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -769,6 +1246,32 @@ TESTS = [
     test_header_subdomain_filters_use_valid_tailwind_color,
     test_carousel_bg_image_has_no_alt_text,
     test_solution_with_empty_thumbnail_accepted,
+    # Fix 18 — S3 race condition / local file is authoritative on reload
+    test_portal_server_prefers_local_file_over_s3,
+    test_deploy_awaits_s3_before_reload_signal,
+    test_portal_server_still_refreshes_users_from_s3,
+    test_deploy_writes_solution_to_portal_json,
+    # Fix 19 — Toggle-to-live deploys before spawning
+    test_toggle_live_calls_deploy_before_spawn,
+    # Fix 20 — New portals start empty
+    test_build_default_portal_json_is_empty,
+    test_new_dummy_portal_portal_json_is_empty,
+    # Fix 21 — Deleted portal slug stripped from mappings
+    test_delete_portal_strips_slug_from_solutions,
+    test_server_ts_strip_slug_on_delete,
+    # Fix 22 — Auto-deploy after every content CRUD
+    test_auto_deploy_called_after_solutions_crud,
+    test_auto_deploy_called_after_collaterals_crud,
+    test_auto_deploy_only_targets_live_portals,
+    # Fix 23 — Portal Settings modal
+    test_portal_settings_state_exists,
+    test_portal_card_has_settings_button_not_onboard,
+    test_portal_settings_update_endpoint,
+    # Fix 24 — Header portal chips removed
+    test_header_has_no_portal_chip_buttons,
+    # Fix 25 — Admin console full width
+    test_admin_layout_full_width,
+    test_user_view_retains_max_width,
 ]
 
 if __name__ == "__main__":

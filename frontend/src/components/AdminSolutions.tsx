@@ -1,10 +1,10 @@
-/**
+﻿/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import React, { useState } from "react";
-import { Plus, Edit2, Check, X, Shield, Globe, Image, Tag, Key, Eye, EyeOff, FolderOpen, Link2, Download, AlertCircle, Upload } from "lucide-react";
+import { Plus, Edit2, Check, X, Shield, Globe, Image, Tag, Key, Eye, EyeOff, FolderOpen, Link2, Download, AlertCircle, Upload, Trash2 } from "lucide-react";
 import { Solution } from "../../../shared/types";
 
 interface AdminSolutionsProps {
@@ -12,7 +12,7 @@ interface AdminSolutionsProps {
   onRefresh: (action: string, solutionData: any) => Promise<void>;
   subdomains?: { id: string; name: string; displayName: string }[];
   prefilledSubdomain?: string | null;
-  adminToken?: string;
+  adminUserEmail?: string;
 }
 
 // Crisp thumbnail recommendations
@@ -28,7 +28,7 @@ export function AdminSolutions({
   onRefresh,
   subdomains = [],
   prefilledSubdomain,
-  adminToken = "",
+  adminUserEmail = "",
 }: AdminSolutionsProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -116,7 +116,7 @@ export function AdminSolutions({
       try {
         const res = await fetch("/api/upload", {
           method: "POST",
-          headers: { "X-Admin-Token": adminToken },
+          headers: { "X-Admin-User": adminUserEmail },
           body: formData,
         });
         const data = await res.json();
@@ -172,6 +172,11 @@ export function AdminSolutions({
     await onRefresh("update", { ...sol, enabled: nextState });
   };
 
+  const handleDelete = async (sol: Solution) => {
+    if (!confirm(`Delete solution "${sol.title}"? This cannot be undone.`)) return;
+    await onRefresh("delete", { id: sol.id });
+  };
+
   return (
     <div id="admin-solutions-view" className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -216,7 +221,7 @@ export function AdminSolutions({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Target Subdomain Checkboxes */}
             <div className="md:col-span-2 space-y-2">
-              <span className="text-[10px] font-mono font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded uppercase tracking-wider inline-block">
+              <span className="text-[10px] font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded uppercase tracking-wider inline-block">
                 📍 STEP 1: Select Target Subdomains (Multi-Select Enabled)
               </span>
               <label className="block text-xs font-semibold text-slate-500">
@@ -229,7 +234,7 @@ export function AdminSolutions({
                     type="checkbox"
                     checked={customerNames.includes("all")}
                     onChange={() => handleSubdomainCheckboxChange("all")}
-                    className="h-3.5 w-3.5 accent-indigo-600 rounded border-slate-350"
+                    className="h-3.5 w-3.5 accent-orange-600 rounded border-slate-350"
                   />
                   <span className="text-slate-900 font-mono font-bold">All (Global Asset)</span>
                 </label>
@@ -239,7 +244,7 @@ export function AdminSolutions({
                       type="checkbox"
                       checked={customerNames.includes(sub.name)}
                       onChange={() => handleSubdomainCheckboxChange(sub.name)}
-                      className="h-3.5 w-3.5 accent-indigo-600 rounded border-slate-350"
+                      className="h-3.5 w-3.5 accent-orange-600 rounded border-slate-350"
                     />
                     <span className="text-slate-700 font-mono text-[11px]">{sub.displayName} ({sub.name})</span>
                   </label>
@@ -279,7 +284,7 @@ export function AdminSolutions({
             {/* Thumbnail Upload Redesign */}
             <div className="md:col-span-2 space-y-3">
               <label className="block text-xs font-semibold text-slate-700 flex items-center gap-1.5 uppercase tracking-wider text-[11px] font-mono">
-                <Image className="h-4 w-4 text-indigo-500" /> Visual Card Thumbnail Setup
+                <Image className="h-4 w-4 text-orange-500" /> Visual Card Thumbnail Setup
               </label>
               
               <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
@@ -333,7 +338,7 @@ export function AdminSolutions({
                           try {
                             const res = await fetch("/api/upload", {
                               method: "POST",
-                              headers: { "X-Admin-Token": adminToken },
+                              headers: { "X-Admin-User": adminUserEmail },
                               body: formData,
                             });
                             const data = await res.json();
@@ -544,7 +549,7 @@ export function AdminSolutions({
             }`}
           >
             {/* Visual preview */}
-            <div className="h-20 w-32 rounded-xl overflow-hidden bg-slate-50 border border-slate-100 shrink-0">
+            <div className="h-20 w-28 rounded-xl overflow-hidden bg-slate-50 border border-slate-100 shrink-0">
               <img
                 src={sol.thumbnail}
                 alt={sol.title}
@@ -575,10 +580,10 @@ export function AdminSolutions({
                   <span className="font-bold text-slate-400">Map:</span>
                   {sol.customerNames && sol.customerNames.length > 0 ? (
                     sol.customerNames.map((n) => (
-                      <span key={n} className="bg-indigo-50 text-indigo-600 font-semibold px-1 py-0.5 rounded text-[8px] uppercase">{n}</span>
+                      <span key={n} className="bg-orange-50 text-orange-600 font-semibold px-1 py-0.5 rounded text-[8px] uppercase">{n}</span>
                     ))
                   ) : (
-                    <span className="bg-indigo-50 text-indigo-600 font-semibold px-1 py-0.5 rounded text-[8px] uppercase">{sol.customerName || "all"}</span>
+                    <span className="bg-orange-50 text-orange-600 font-semibold px-1 py-0.5 rounded text-[8px] uppercase">{sol.customerName || "all"}</span>
                   )}
                 </div>
                 <div className="flex flex-wrap gap-1 mt-1.5">
@@ -590,42 +595,46 @@ export function AdminSolutions({
                 </div>
               </div>
 
-              {/* Prefill stats preview */}
-              <div className="pt-2 flex items-center justify-between text-[10px] text-slate-400 font-mono">
-                <span>Guest: {sol.usernamePrefill ? "Encrypted" : "None"}</span>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleToggleEnable(sol)}
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded border text-[10px] font-semibold transition-all ${
-                      sol.enabled === false
-                        ? "bg-emerald-50 border-emerald-200 hover:bg-emerald-100 text-emerald-700 font-sans"
-                        : "bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700 font-sans"
-                    }`}
-                    title={sol.enabled === false ? "Show on User View" : "Hide from User View"}
-                  >
-                    {sol.enabled === false ? (
-                      <>
-                        <Eye className="h-3 w-3" />
-                        <span>Show</span>
-                      </>
-                    ) : (
-                      <>
-                        <EyeOff className="h-3 w-3" />
-                        <span>Hide</span>
-                      </>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleEditClick(sol)}
-                    className="p-1 border border-slate-200 rounded hover:bg-slate-50 text-slate-450 hover:text-slate-850 transition-colors"
-                    title="Edit System Parameters"
-                  >
-                    <Edit2 className="h-3 w-3" />
-                  </button>
-                </div>
+              {/* Bottom-left: credential hint */}
+              <div className="pt-2 text-[10px] text-slate-400 font-mono">
+                Guest: {sol.usernamePrefill ? "Encrypted" : "None"}
               </div>
+            </div>
+
+            {/* Right action column: Hide + Edit top, Delete bottom */}
+            <div className="flex flex-col justify-between items-end shrink-0 self-stretch">
+              <div className="flex flex-col gap-1.5 items-end">
+                <button
+                  type="button"
+                  onClick={() => handleToggleEnable(sol)}
+                  className={`flex items-center gap-1 px-2 py-1 rounded border text-[10px] font-semibold transition-all whitespace-nowrap ${
+                    sol.enabled === false
+                      ? "bg-emerald-50 border-emerald-200 hover:bg-emerald-100 text-emerald-700 font-sans"
+                      : "bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700 font-sans"
+                  }`}
+                  title={sol.enabled === false ? "Show on User View" : "Hide from User View"}
+                >
+                  {sol.enabled === false ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+                  <span>{sol.enabled === false ? "Show" : "Hide"}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleEditClick(sol)}
+                  className="flex items-center gap-1 px-2 py-1 border border-slate-200 rounded bg-slate-50 hover:bg-slate-100 text-slate-600 text-[10px] font-semibold transition-colors font-sans"
+                  title="Edit Solution"
+                >
+                  <Edit2 className="h-3 w-3" />
+                  <span>Edit</span>
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleDelete(sol)}
+                className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 border border-transparent hover:border-red-200 rounded transition-colors"
+                title="Delete solution"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
             </div>
           </div>
         ))}

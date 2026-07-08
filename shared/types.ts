@@ -13,6 +13,11 @@ export interface SubdomainPortal {
   name: string; // e.g., 'unilever'
   displayName: string; // e.g., 'Unilever APAC'
   createdAt: string;
+  port?: number;      // assigned port this portal runs on (e.g. 4001)
+  domain?: string;    // selected domain (e.g. 'mobiusservices.io')
+  s3Key?: string;     // S3 prefix: 'Mobius_Portal_Creator_Hub/<slug>/'
+  isDummy?: boolean;  // true = localhost-only dev portal, no subdomain/domain
+  status?: "live" | "sleep"; // "live" = PM2 process running, "sleep" = stopped (port still reserved)
 }
 
 export interface Solution {
@@ -103,6 +108,16 @@ export interface CarouselItem {
   linkTarget: string; // Target ID or name
   customerName?: string;
   customerNames?: string[];
+}
+
+export interface PortalUser {
+  id: string;
+  email: string;
+  name: string;
+  role: "admin" | "viewer";
+  createdAt: string;
+  enabled?: boolean;
+  isSystem?: boolean; // true = cannot be deleted, edited, or disabled
 }
 
 export interface AppState {

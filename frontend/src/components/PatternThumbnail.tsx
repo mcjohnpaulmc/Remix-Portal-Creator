@@ -10,10 +10,10 @@ interface PatternThumbnailProps {
 }
 
 const GRADIENTS: [string, string][] = [
-  ["#4c1d95", "#6d28d9"],
-  ["#3730a3", "#5b21b6"],
-  ["#581c87", "#7c3aed"],
-  ["#312e81", "#4338ca"],
+  ["#7c2d12", "#ea580c"],
+  ["#9a3412", "#c2410c"],
+  ["#7c2d12", "#f97316"],
+  ["#431407", "#ea580c"],
 ];
 
 function hashStr(s: string): number {

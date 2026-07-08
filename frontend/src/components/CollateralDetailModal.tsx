@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -26,7 +26,7 @@ export function CollateralDetailModal({ collateral, onClose }: CollateralDetailM
   const getFileIcon = (name: string) => {
     const lower = name.toLowerCase();
     if (lower.endsWith(".mp4") || lower.endsWith(".mov") || lower.endsWith(".avi")) {
-      return <Film className="h-5 w-5 text-indigo-500" />;
+      return <Film className="h-5 w-5 text-orange-500" />;
     }
     if (lower.endsWith(".ppt") || lower.endsWith(".pptx") || lower.endsWith(".key")) {
       return <LayoutTemplate className="h-5 w-5 text-amber-500" />;
@@ -276,7 +276,7 @@ export function CollateralDetailModal({ collateral, onClose }: CollateralDetailM
                   href={collateral.googleDriveUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-400 hover:text-indigo-300 font-sans tracking-tight"
+                  className="flex items-center gap-1.5 text-[10px] font-bold text-orange-400 hover:text-orange-300 font-sans tracking-tight"
                 >
                   <ExternalLink className="h-3 w-3" /> Open in Workspace
                 </a>
@@ -322,7 +322,7 @@ export function CollateralDetailModal({ collateral, onClose }: CollateralDetailM
                 <div className="absolute inset-0 p-6 flex flex-col justify-between text-left select-none text-slate-300 bg-linear-to-b from-slate-900 to-slate-950 border border-slate-800">
                   <div className="flex justify-between items-start">
                     <div className="space-y-1.5">
-                      <span className="text-[10px] font-mono bg-indigo-500/10 text-indigo-400 border border-indigo-500/25 px-2.5 py-0.5 rounded-sm uppercase tracking-wider font-semibold">
+                      <span className="text-[10px] font-mono bg-orange-500/10 text-orange-400 border border-orange-500/25 px-2.5 py-0.5 rounded-sm uppercase tracking-wider font-semibold">
                         {collateral.fileType || "doc"} preview
                       </span>
                       <h4 className="text-sm font-bold text-white tracking-tight font-display mt-2">
@@ -333,7 +333,7 @@ export function CollateralDetailModal({ collateral, onClose }: CollateralDetailM
                       </p>
                     </div>
                     {collateral.fileType === "google video" || collateral.fileType?.includes("video") ? (
-                      <Film className="h-10 w-10 text-indigo-500" />
+                      <Film className="h-10 w-10 text-orange-500" />
                     ) : collateral.fileType === "google slide" || collateral.fileType?.includes("slide") || collateral.fileType?.includes("deck") ? (
                       <LayoutTemplate className="h-10 w-10 text-amber-500" />
                     ) : collateral.fileType === "google sheet" || collateral.fileType?.includes("sheet") ? (
@@ -345,7 +345,7 @@ export function CollateralDetailModal({ collateral, onClose }: CollateralDetailM
 
                   {/* Aesthetic mock visualizer graphs or structures */}
                   <div className="w-full py-4 px-4 bg-slate-950/60 border border-slate-850 rounded-xl flex flex-col gap-2.5">
-                    <div className="flex items-center justify-between text-[10px] font-mono text-indigo-400 font-bold border-b border-slate-850 pb-1.5">
+                    <div className="flex items-center justify-between text-[10px] font-mono text-orange-400 font-bold border-b border-slate-850 pb-1.5">
                       <span>📄 TEMPLATE SUMMARY PATH</span>
                       <span>100% SECURE PREVIEW</span>
                     </div>
