@@ -1,8 +1,0 @@
-{
-  "name": "Remix: Solutions and Collaterals Portal",
-  "description": "An interactive digital portal for company solutions and collateral case studies, complete with corporate email authentication, server-logged analytics, and an AI-powered administration console.",
-  "requestFramePermissions": [],
-  "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
-}
