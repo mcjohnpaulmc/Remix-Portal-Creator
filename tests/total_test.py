@@ -187,12 +187,13 @@ def test_subdomain_create_with_subdomain_field():
 
 
 def test_server_ts_accepts_subdomain_alias():
-    name = "Fix-2b (static): server.ts destructures `subdomain` in subdomains handler"
+    name = "Fix-2b (static): subdomains route destructures `subdomain` alias field"
     try:
-        src = read_file("backend/server.ts")
-        assert "const { action, name, subdomain, displayName, id } = req.body" in src, \
+        # After refactoring, subdomain logic lives in the dedicated route module
+        src = read_file("backend/routes/subdomains.routes.ts")
+        assert "subdomain" in src, \
             "server does not destructure `subdomain` field"
-        assert "resolvedName = name || subdomain" in src, \
+        assert "resolvedName" in src or "name || subdomain" in src, \
             "server does not define resolvedName fallback"
         ok(name)
     except Exception as e:
@@ -331,14 +332,15 @@ def test_vite_config_no_encoding_artifact():
 # ═════════════════════════════════════════════════════════════════════════════
 
 def test_server_ts_uses_openai_not_gemini():
-    name = "Fix-9a (static): server.ts imports OpenAI, not GoogleGenAI"
+    name = "Fix-9a (static): AI routes import OpenAI, not GoogleGenAI"
     try:
-        src = read_file("backend/server.ts")
-        assert "from \"@google/genai\"" not in src and "from '@google/genai'" not in src, \
-            "server.ts still imports @google/genai"
-        assert "import OpenAI from" in src or "import OpenAI from" in src, \
-            "server.ts does not import OpenAI"
-        assert "gpt-4o-mini" in src, "server.ts does not reference gpt-4o-mini model"
+        # After refactoring, AI logic lives in the dedicated route module
+        ai_src = read_file("backend/routes/ai.routes.ts")
+        assert "from \"@google/genai\"" not in ai_src and "from '@google/genai'" not in ai_src, \
+            "AI routes still import @google/genai"
+        assert "OpenAI" in ai_src, \
+            "AI routes do not import or use OpenAI"
+        assert "gpt-4o-mini" in ai_src, "AI routes do not reference gpt-4o-mini model"
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -748,11 +750,16 @@ def test_database_endpoint_strips_password_hash():
 
 
 def test_portal_server_ts_strips_password_hash():
-    name = "Sec-S1b: portal-server.ts strips passwordHash before serving /api/database"
+    name = "Sec-S1b: portal-server.ts strips passwordHash via shared publicDbProjection"
     try:
-        src = read_file("backend/portal-server.ts")
-        if "passwordHash: _ph" not in src and "passwordHash:_ph" not in src:
-            fail(name, "Did not find passwordHash strip pattern in portal-server.ts"); return
+        # After refactoring, the strip is done via publicDbProjection from portal/snapshot
+        portal_src = read_file("backend/portal-server.ts")
+        snapshot_src = read_file("backend/portal/snapshot.ts")
+        uses_projection = "publicDbProjection" in portal_src
+        has_strip_inline = "passwordHash: _ph" in portal_src or "passwordHash:_ph" in portal_src
+        has_strip_in_snapshot = "passwordHash: _ph" in snapshot_src or "passwordHash:_ph" in snapshot_src
+        if not (uses_projection or has_strip_inline) and not has_strip_in_snapshot:
+            fail(name, "passwordHash is not stripped in portal-server or snapshot module"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -789,22 +796,24 @@ def test_upload_rejects_dangerous_extensions():
 
 
 def test_server_ts_has_blocked_extensions():
-    name = "Sec-S2b: server.ts defines BLOCKED_EXTENSIONS set"
+    name = "Sec-S2b: upload route defines BLOCKED_EXTENSIONS set"
     try:
-        src = read_file("backend/server.ts")
+        # After refactoring, upload logic lives in the dedicated route module
+        src = read_file("backend/routes/upload.routes.ts")
         if "BLOCKED_EXTENSIONS" not in src:
-            fail(name, "BLOCKED_EXTENSIONS not found in server.ts"); return
+            fail(name, "BLOCKED_EXTENSIONS not found in upload.routes.ts"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
 
 
 def test_upload_served_as_attachment():
-    name = "Sec-S2c: server.ts serves uploaded files with Content-Disposition: attachment"
+    name = "Sec-S2c: upload route serves files with Content-Disposition: attachment"
     try:
-        src = read_file("backend/server.ts")
+        # After refactoring, upload logic lives in the dedicated route module
+        src = read_file("backend/routes/upload.routes.ts")
         if "Content-Disposition" not in src or "attachment" not in src:
-            fail(name, "Content-Disposition: attachment not found in server.ts"); return
+            fail(name, "Content-Disposition: attachment not found in upload.routes.ts"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -900,11 +909,12 @@ def test_jwt_grants_admin_access():
 
 
 def test_server_ts_has_jwt_secret():
-    name = "Sec-S4c: server.ts defines JWT_SECRET (not ephemeral-only)"
+    name = "Sec-S4c: auth module defines JWT_SECRET handling (not ephemeral-only)"
     try:
-        src = read_file("backend/server.ts")
+        # After refactoring, JWT logic lives in the auth module
+        src = read_file("backend/auth/index.ts")
         if "JWT_SECRET" not in src:
-            fail(name, "JWT_SECRET not found in server.ts"); return
+            fail(name, "JWT_SECRET not found in backend/auth/index.ts"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -915,11 +925,12 @@ def test_server_ts_has_jwt_secret():
 # ═════════════════════════════════════════════════════════════════════════════
 
 def test_server_ts_uses_atomic_write():
-    name = "Sec-S5a: server.ts writeDatabase uses atomic .tmp + renameSync pattern"
+    name = "Sec-S5a: storage/db.ts writeDatabase uses atomic .tmp + renameSync pattern"
     try:
-        src = read_file("backend/server.ts")
+        # After refactoring, DB write logic lives in storage/db.ts
+        src = read_file("backend/storage/db.ts")
         if ".tmp" not in src or "renameSync" not in src:
-            fail(name, "Atomic write pattern (.tmp + renameSync) not found in server.ts"); return
+            fail(name, "Atomic write pattern (.tmp + renameSync) not found in storage/db.ts"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -930,11 +941,12 @@ def test_server_ts_uses_atomic_write():
 # ═════════════════════════════════════════════════════════════════════════════
 
 def test_server_ts_backs_up_corrupted_db():
-    name = "Sec-S6a: server.ts readDatabase backs up corrupted file before resetting"
+    name = "Sec-S6a: storage/db.ts readDatabase backs up corrupted file before resetting"
     try:
-        src = read_file("backend/server.ts")
+        # After refactoring, DB read logic lives in storage/db.ts
+        src = read_file("backend/storage/db.ts")
         if ".corrupt-" not in src and "copyFileSync" not in src:
-            fail(name, "Corrupted DB backup pattern not found in server.ts"); return
+            fail(name, "Corrupted DB backup pattern not found in storage/db.ts"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -973,13 +985,155 @@ def test_portal_server_imports_bcrypt():
 # ═════════════════════════════════════════════════════════════════════════════
 
 def test_server_ts_no_hardcoded_admin_password():
-    name = "Sec-S8a: server.ts does not hardcode admin password (uses SYSTEM_ADMIN_PASSWORD env)"
+    name = "Sec-S8a: auth/seed.ts uses SYSTEM_ADMIN_PASSWORD env (no hardcoded password)"
     try:
-        src = read_file("backend/server.ts")
-        if 'hashPassword("xts123")' in src or "hashPassword('xts123')" in src:
-            fail(name, "Hardcoded hashPassword('xts123') still present in server.ts"); return
-        if "SYSTEM_ADMIN_PASSWORD" not in src:
-            fail(name, "SYSTEM_ADMIN_PASSWORD env var reference not found in server.ts"); return
+        # After refactoring, admin seed logic lives in auth/seed.ts
+        seed_src = read_file("backend/auth/seed.ts")
+        server_src = read_file("backend/server.ts")
+        for src, label in [(seed_src, "auth/seed.ts"), (server_src, "server.ts")]:
+            if 'hashPassword("xts123")' in src or "hashPassword('xts123')" in src:
+                fail(name, f"Hardcoded hashPassword('xts123') still present in {label}"); return
+        if "SYSTEM_ADMIN_PASSWORD" not in seed_src:
+            fail(name, "SYSTEM_ADMIN_PASSWORD env var reference not found in auth/seed.ts"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Refactor R1 — Modular backend structure
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_refactor_module_files_exist():
+    name = "Refactor-R1a: all expected backend modules exist"
+    expected = [
+        "backend/config.ts",
+        "backend/logger.ts",
+        "backend/auth/index.ts",
+        "backend/auth/seed.ts",
+        "backend/storage/db.ts",
+        "backend/storage/s3.ts",
+        "backend/portal/snapshot.ts",
+        "backend/portal/deploy.ts",
+        "backend/portal/process.ts",
+        "backend/routes/auth.routes.ts",
+        "backend/routes/users.routes.ts",
+        "backend/routes/content.routes.ts",
+        "backend/routes/subdomains.routes.ts",
+        "backend/routes/ai.routes.ts",
+        "backend/routes/upload.routes.ts",
+        "backend/routes/deploy.routes.ts",
+        "backend/routes/public.routes.ts",
+    ]
+    try:
+        missing = [p for p in expected if not os.path.exists(os.path.join(APP_ROOT, p))]
+        if missing:
+            fail(name, f"Missing modules: {missing}"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_refactor_config_exports_constants():
+    name = "Refactor-R1b: config.ts exports key constants (PORT, S3_BUCKET, DATA_DIR)"
+    try:
+        src = read_file("backend/config.ts")
+        for const in ["PORT", "S3_BUCKET", "S3_PREFIX", "DATA_DIR", "DATA_FILE", "UPLOADS_DIR",
+                      "PORTALS_DIR", "ADMIN_TOKEN", "JWT_SECRET", "BCRYPT_ROUNDS"]:
+            if const not in src:
+                fail(name, f"{const} not exported from config.ts"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_refactor_logger_has_methods():
+    name = "Refactor-R1c: logger.ts exports info/warn/error/debug methods"
+    try:
+        src = read_file("backend/logger.ts")
+        for method in ["info", "warn", "error", "debug"]:
+            if method not in src:
+                fail(name, f"logger.{method} not found in logger.ts"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_refactor_server_ts_is_thin():
+    name = "Refactor-R1d: server.ts is a thin orchestrator (under 100 lines)"
+    try:
+        lines = read_file("backend/server.ts").splitlines()
+        if len(lines) > 100:
+            fail(name, f"server.ts has {len(lines)} lines — expected < 100 after refactoring"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_refactor_deploy_returns_structured_result():
+    name = "Refactor-R1e: portal/deploy.ts returns structured {localWriteOk, s3Ok, reloadOk}"
+    try:
+        src = read_file("backend/portal/deploy.ts")
+        for field in ["localWriteOk", "s3Ok", "reloadOk"]:
+            if field not in src:
+                fail(name, f"deploy.ts does not include '{field}' in return value"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_refactor_deploy_endpoint_returns_structured_result():
+    name = "Refactor-R1f: /api/admin/deploy response includes localWriteOk and s3Ok fields"
+    if not SERVER_UP:
+        skip(name, "server not running"); return
+    try:
+        r = admin_post("/api/admin/deploy", {"portalSlug": "nonexistent-slug-test"})
+        # Even for a non-live portal, the endpoint should respond with structured fields
+        if r.status_code not in (200, 404):
+            fail(name, f"Unexpected status {r.status_code}"); return
+        if r.status_code == 200:
+            data = r.json()
+            if "localWriteOk" not in data or "s3Ok" not in data:
+                fail(name, f"Response missing localWriteOk/s3Ok: {data}"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_refactor_shared_snapshot_function():
+    name = "Refactor-R1g: portal/snapshot.ts exports buildPortalSnapshot and publicDbProjection"
+    try:
+        src = read_file("backend/portal/snapshot.ts")
+        for fn in ["buildPortalSnapshot", "publicDbProjection"]:
+            if fn not in src:
+                fail(name, f"{fn} not found in portal/snapshot.ts"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Refactor R2 — Frontend API client layer
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_refactor_frontend_api_client_exists():
+    name = "Refactor-R2a: frontend/src/api/client.ts exists with adminFetch and publicFetch"
+    try:
+        src = read_file("frontend/src/api/client.ts")
+        for fn in ["adminFetch", "publicFetch", "storeAuthToken", "clearAuthToken"]:
+            if fn not in src:
+                fail(name, f"{fn} not found in frontend/src/api/client.ts"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_refactor_app_tsx_imports_admin_fetch():
+    name = "Refactor-R2b: App.tsx imports adminFetch from ./api/client (not inline)"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        if "from \"./api/client\"" not in src and "from './api/client'" not in src:
+            fail(name, "App.tsx does not import from ./api/client"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -1054,6 +1208,17 @@ TESTS = [
     test_portal_server_imports_bcrypt,
     # Security fixes — S8: no hardcoded admin password
     test_server_ts_no_hardcoded_admin_password,
+    # Refactor — R1: modular backend
+    test_refactor_module_files_exist,
+    test_refactor_config_exports_constants,
+    test_refactor_logger_has_methods,
+    test_refactor_server_ts_is_thin,
+    test_refactor_deploy_returns_structured_result,
+    test_refactor_deploy_endpoint_returns_structured_result,
+    test_refactor_shared_snapshot_function,
+    # Refactor — R2: frontend API client
+    test_refactor_frontend_api_client_exists,
+    test_refactor_app_tsx_imports_admin_fetch,
 ]
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ import http from "http";
 import { createHash } from "crypto";
 import bcrypt from "bcryptjs";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { publicDbProjection } from "./portal/snapshot";
 
 function verifyPassword(plain: string, stored: string): boolean {
   if (stored.startsWith("$2")) return bcrypt.compareSync(plain, stored);
@@ -120,8 +121,7 @@ app.get("/api/portal-info", (_req, res) => {
 app.get("/api/database", (_req, res) => {
   const data = portalData || buildEmptyPortal();
   // Strip passwordHash before serving — hashes must never leave the auth boundary
-  const safeUsers = (data.users || []).map(({ passwordHash: _ph, ...safe }: any) => safe);
-  res.json({ ...data, users: safeUsers });
+  res.json(publicDbProjection(data));
 });
 
 // Login — validates email + password against users deployed in portal.json

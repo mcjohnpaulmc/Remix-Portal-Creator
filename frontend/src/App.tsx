@@ -41,6 +41,9 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { Solution, Collateral, UserLog, AppState, CurrentProject, UpcomingProject, CarouselItem, SubdomainPortal, PortalUser } from "../../shared/types";
 
+// Import API helpers
+import { adminFetch } from "./api/client";
+
 // Import custom parts
 import { AccessWall } from "./components/AccessWall";
 import { SafeImage } from "./components/SafeImage";
@@ -193,19 +196,6 @@ export default function App() {
   const [updatingHero, setUpdatingHero] = useState(false);
   const [updatingSubdomain, setUpdatingSubdomain] = useState(false);
   const [simulatedLaunchStatus, setSimulatedLaunchStatus] = useState<"idle" | "launching" | "ready">("idle");
-
-  // Fetch helper — attaches signed JWT for server-side admin verification
-  const adminFetch = (url: string, { headers, ...rest }: RequestInit = {}): Promise<Response> => {
-    const jwt = localStorage.getItem("mobius_admin_token");
-    return fetch(url, {
-      ...rest,
-      headers: {
-        "Content-Type": "application/json",
-        ...(headers as Record<string, string> | undefined),
-        ...(jwt ? { "Authorization": `Bearer ${jwt}` } : {}),
-      },
-    });
-  };
 
   // Fetch initial portal configuration from the database endpoints
   const fetchPortalData = async () => {
