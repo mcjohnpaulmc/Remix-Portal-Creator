@@ -13,12 +13,29 @@ import { createHash } from "crypto";
 import { createServer as createViteServer } from "vite";
 import OpenAI from "openai";
 import multer from "multer";
+import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
 import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { Solution, Collateral, UserLog, CurrentProject, UpcomingProject, SubdomainPortal, PortalUser } from "../shared/types";
 
-// Password hashing (SHA-256 — sufficient for internal portal auth)
+// Password hashing — bcrypt with cost 10
+const BCRYPT_ROUNDS = 10;
 function hashPassword(plain: string): string {
-  return createHash("sha256").update(plain).digest("hex");
+  return bcrypt.hashSync(plain, BCRYPT_ROUNDS);
+}
+
+// Verify password — accepts bcrypt hashes and migrates legacy SHA-256 hashes on the fly
+function verifyPassword(plain: string, stored: string, onMigrate?: (newHash: string) => void): boolean {
+  if (stored.startsWith("$2")) {
+    return bcrypt.compareSync(plain, stored);
+  }
+  // Legacy SHA-256 path — compare then migrate
+  const sha256 = createHash("sha256").update(plain).digest("hex");
+  if (sha256 === stored) {
+    onMigrate?.(hashPassword(plain));
+    return true;
+  }
+  return false;
 }
 
 // Internal user record — includes passwordHash, never sent to frontend
@@ -525,9 +542,15 @@ function readDatabase(): DatabaseSchema {
       return parsed;
     }
   } catch (error) {
-    console.error("Error reading database file, resetting to empty. Error:", error);
+    // Preserve the corrupted file for diagnosis before resetting
+    try {
+      const backupPath = DATA_FILE + `.corrupt-${Date.now()}.bak`;
+      fs.copyFileSync(DATA_FILE, backupPath);
+      console.error(`[DB] Corrupted database backed up to ${backupPath}`);
+    } catch { /* best-effort */ }
+    console.error("Error reading database file, resetting to defaults. Error:", error);
   }
-  
+
   const initialDb: DatabaseSchema = {
     solutions: DEFAULT_SOLUTIONS,
     collaterals: DEFAULT_COLLATERALS,
@@ -554,10 +577,13 @@ function readDatabase(): DatabaseSchema {
 }
 
 function writeDatabase(db: DatabaseSchema) {
+  const tmp = DATA_FILE + ".tmp";
   try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2), "utf-8");
+    fs.writeFileSync(tmp, JSON.stringify(db, null, 2), "utf-8");
+    fs.renameSync(tmp, DATA_FILE);
   } catch (error) {
     console.error("Error writing database:", error);
+    try { fs.unlinkSync(tmp); } catch { /* best-effort cleanup */ }
   }
 }
 
@@ -570,16 +596,31 @@ const ADMIN_TOKEN = process.env.ADMIN_TOKEN || (() => {
   return "dev-admin";
 })();
 
+const JWT_SECRET = process.env.JWT_SECRET || (() => {
+  console.warn("[WARN] JWT_SECRET env var not set. Using a random ephemeral secret — sessions will not survive restarts in production.");
+  return createHash("sha256").update(Math.random().toString()).digest("hex");
+})();
+
 function requireAdminAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+  // Path 1: server-to-server ADMIN_TOKEN (PM2 internal calls)
   const token = req.headers["x-admin-token"];
   if (token && token === ADMIN_TOKEN) return next();
 
-  // Accept logged-in admin users via X-Admin-User header — validate against S3-sourced cache
-  const adminUserEmail = req.headers["x-admin-user"] as string | undefined;
-  if (adminUserEmail) {
-    const users: InternalUser[] = usersCache ?? (readDatabase().users || []);
-    const user = users.find(u => u.email === adminUserEmail.trim().toLowerCase() && u.role === "admin" && u.enabled !== false);
-    if (user) return next();
+  // Path 2: browser session — signed JWT issued by /api/login
+  const authHeader = req.headers["authorization"];
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const jwtToken = authHeader.slice(7);
+    try {
+      const payload = jwt.verify(jwtToken, JWT_SECRET) as { email: string; role: string };
+      if (payload.role === "admin") {
+        // Confirm user is still enabled in the live user list
+        const users: InternalUser[] = usersCache ?? (readDatabase().users || []);
+        const user = users.find(u => u.email === payload.email && u.role === "admin" && u.enabled !== false);
+        if (user) return next();
+      }
+    } catch {
+      // Invalid or expired JWT — fall through to 401
+    }
   }
 
   return res.status(401).json({ error: "Unauthorized." });
@@ -606,13 +647,39 @@ const multerStorage = multer.diskStorage({
     cb(null, `${Date.now()}-${safe}`);
   },
 });
-const upload = multer({ storage: multerStorage, limits: { fileSize: 50 * 1024 * 1024 } });
+// Extensions that can execute in a browser and enable stored XSS
+const BLOCKED_EXTENSIONS = new Set([
+  ".html", ".htm", ".svg", ".js", ".mjs", ".cjs", ".jsx",
+  ".ts", ".tsx", ".php", ".asp", ".aspx", ".exe", ".bat",
+  ".cmd", ".ps1", ".sh", ".xml", ".xhtml",
+]);
 
-// Serve uploaded files as static assets
-app.use("/uploads", express.static(UPLOADS_DIR));
+const upload = multer({
+  storage: multerStorage,
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (BLOCKED_EXTENSIONS.has(ext)) {
+      return cb(new Error(`File type ${ext} is not allowed.`));
+    }
+    cb(null, true);
+  },
+});
+
+// Serve uploaded files as forced-download attachments to prevent stored XSS
+app.use("/uploads", (req, res, next) => {
+  res.setHeader("Content-Disposition", `attachment; filename="${path.basename(req.path)}"`);
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  next();
+}, express.static(UPLOADS_DIR));
 
 // File upload endpoint (admin only)
-app.post("/api/upload", requireAdminAuth, upload.single("file"), (req: any, res: any) => {
+app.post("/api/upload", requireAdminAuth, (req: any, res: any, next: any) => {
+  upload.single("file")(req, res, (err: any) => {
+    if (err) return res.status(400).json({ error: err.message || "Upload failed." });
+    next();
+  });
+}, (req: any, res: any) => {
   if (!req.file) {
     return res.status(400).json({ error: "No file received." });
   }
@@ -660,11 +727,19 @@ app.post("/api/login", (req, res) => {
   }
 
   const normalized = email.trim().toLowerCase();
-  const hash = hashPassword(password);
 
   // Prefer in-memory S3 cache; fall back to local DB if cache not yet loaded
   const users: InternalUser[] = usersCache ?? (readDatabase().users || []);
-  const user = users.find(u => u.email === normalized && u.passwordHash === hash && u.enabled !== false);
+  const user = users.find(u => u.email === normalized && u.enabled !== false &&
+    verifyPassword(password, u.passwordHash || "", (newHash) => {
+      // Migrate legacy SHA-256 hash to bcrypt on first successful login
+      u.passwordHash = newHash;
+      const db = readDatabase();
+      const idx = (db.users || []).findIndex((x: InternalUser) => x.email === normalized);
+      if (idx !== -1) { db.users[idx].passwordHash = newHash; writeDatabase(db); }
+      s3SyncUsers(db.users || []).catch(() => {});
+    })
+  );
 
   if (!user) {
     return res.status(401).json({ error: "Invalid email or password." });
@@ -681,7 +756,12 @@ app.post("/api/login", (req, res) => {
   });
   writeDatabase(db);
 
-  res.json({ success: true, email: normalized, name: user.name, role: user.role });
+  // Issue a signed JWT for admin users so the frontend can make authenticated admin API calls
+  const sessionToken = user.role === "admin"
+    ? jwt.sign({ email: normalized, role: user.role }, JWT_SECRET, { expiresIn: "12h" })
+    : undefined;
+
+  res.json({ success: true, email: normalized, name: user.name, role: user.role, token: sessionToken });
 });
 
 // Legacy email-login kept for backward compatibility — redirects to /api/login
@@ -1417,7 +1497,10 @@ app.get("/api/portal-info", (_req, res) => {
 
 async function seedDefaultAdmin(): Promise<void> {
   const SYSTEM_EMAIL = "eswar@xtract.io";
-  const SYSTEM_HASH = hashPassword("xts123");
+  const adminPassword = process.env.SYSTEM_ADMIN_PASSWORD;
+  if (!adminPassword) {
+    console.warn("[Auth] SYSTEM_ADMIN_PASSWORD env var not set — system admin password will not be enforced on startup");
+  }
 
   const db = readDatabase();
   if (!db.users) db.users = [];
@@ -1435,12 +1518,16 @@ async function seedDefaultAdmin(): Promise<void> {
   // Ensure system admin exists and is always correct regardless of prior UI actions
   const idx = db.users.findIndex(u => u.email === SYSTEM_EMAIL);
   if (idx === -1) {
+    if (!adminPassword) {
+      console.error("[Auth] Cannot seed system admin: SYSTEM_ADMIN_PASSWORD env var is required on first run");
+      return;
+    }
     db.users.unshift({
       id: "system-admin-eswar",
       email: SYSTEM_EMAIL,
       name: "Eswar (Admin)",
       role: "admin",
-      passwordHash: SYSTEM_HASH,
+      passwordHash: hashPassword(adminPassword),
       createdAt: new Date().toISOString(),
       enabled: true,
       isSystem: true,
@@ -1449,7 +1536,7 @@ async function seedDefaultAdmin(): Promise<void> {
   } else {
     db.users[idx] = {
       ...db.users[idx],
-      passwordHash: SYSTEM_HASH,
+      ...(adminPassword ? { passwordHash: hashPassword(adminPassword) } : {}),
       role: "admin",
       enabled: true,
       isSystem: true,

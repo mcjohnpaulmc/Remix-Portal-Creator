@@ -194,16 +194,18 @@ export default function App() {
   const [updatingSubdomain, setUpdatingSubdomain] = useState(false);
   const [simulatedLaunchStatus, setSimulatedLaunchStatus] = useState<"idle" | "launching" | "ready">("idle");
 
-  // Fetch helper — attaches logged-in admin user's email for server-side role validation
-  const adminFetch = (url: string, { headers, ...rest }: RequestInit = {}): Promise<Response> =>
-    fetch(url, {
+  // Fetch helper — attaches signed JWT for server-side admin verification
+  const adminFetch = (url: string, { headers, ...rest }: RequestInit = {}): Promise<Response> => {
+    const jwt = localStorage.getItem("mobius_admin_token");
+    return fetch(url, {
       ...rest,
       headers: {
         "Content-Type": "application/json",
         ...(headers as Record<string, string> | undefined),
-        ...(userEmail ? { "X-Admin-User": userEmail } : {}),
+        ...(jwt ? { "Authorization": `Bearer ${jwt}` } : {}),
       },
     });
+  };
 
   // Fetch initial portal configuration from the database endpoints
   const fetchPortalData = async () => {
@@ -335,6 +337,7 @@ export default function App() {
     localStorage.removeItem("mobius_work_email");
     localStorage.removeItem("mobius_user_name");
     localStorage.removeItem("mobius_user_role");
+    localStorage.removeItem("mobius_admin_token");
     setUserEmail(null);
     setUserName(null);
     setUserRole(null);

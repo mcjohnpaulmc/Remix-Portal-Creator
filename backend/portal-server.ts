@@ -10,10 +10,13 @@ import path from "path";
 import fs from "fs";
 import http from "http";
 import { createHash } from "crypto";
+import bcrypt from "bcryptjs";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 
-function hashPassword(plain: string): string {
-  return createHash("sha256").update(plain).digest("hex");
+function verifyPassword(plain: string, stored: string): boolean {
+  if (stored.startsWith("$2")) return bcrypt.compareSync(plain, stored);
+  // Legacy SHA-256 fallback
+  return createHash("sha256").update(plain).digest("hex") === stored;
 }
 
 // --- CLI args / env ---
@@ -115,7 +118,10 @@ app.get("/api/portal-info", (_req, res) => {
 
 // Main data endpoint — shaped identically to the Hub's /api/database
 app.get("/api/database", (_req, res) => {
-  res.json(portalData || buildEmptyPortal());
+  const data = portalData || buildEmptyPortal();
+  // Strip passwordHash before serving — hashes must never leave the auth boundary
+  const safeUsers = (data.users || []).map(({ passwordHash: _ph, ...safe }: any) => safe);
+  res.json({ ...data, users: safeUsers });
 });
 
 // Login — validates email + password against users deployed in portal.json
@@ -125,9 +131,8 @@ app.post("/api/login", (req, res) => {
     return res.status(400).json({ error: "Email and password are required." });
   }
   const normalized = email.trim().toLowerCase();
-  const hash = hashPassword(password);
   const users: any[] = portalData?.users || [];
-  const user = users.find(u => u.email === normalized && u.passwordHash === hash);
+  const user = users.find(u => u.email === normalized && verifyPassword(password, u.passwordHash || ""));
   if (!user) {
     return res.status(401).json({ error: "Invalid email or password." });
   }
