@@ -108,7 +108,7 @@ export function buildDefaultPortalJson(
     heroPrompt: "",
     users: (db.users || []).filter((u: any) => u.enabled !== false).map((u: any) => ({
       id: u.id, email: u.email, name: u.name, role: u.role,
-      passwordHash: u.passwordHash, createdAt: u.createdAt,
+      createdAt: u.createdAt,
     })),
   };
 }

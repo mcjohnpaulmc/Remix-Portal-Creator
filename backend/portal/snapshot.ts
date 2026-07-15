@@ -46,7 +46,6 @@ export function buildPortalSnapshot(
       email: u.email,
       name: u.name,
       role: u.role,
-      passwordHash: (u as any).passwordHash,
       createdAt: u.createdAt,
     })),
   };

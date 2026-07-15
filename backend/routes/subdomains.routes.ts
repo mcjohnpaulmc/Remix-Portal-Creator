@@ -40,7 +40,7 @@ router.post("/subdomain", (req, res) => {
 });
 
 // POST /subdomains — list management (create / create-dummy / update / toggle / delete)
-router.post("/subdomains", (req, res) => {
+router.post("/subdomains", async (req, res) => {
   const { action, name, subdomain, displayName, id } = req.body;
   const resolvedName = name || subdomain;
   const db = readDatabase();
@@ -182,9 +182,11 @@ router.post("/subdomains", (req, res) => {
       // Always write a fresh portal.json with current content before spawning,
       // so the portal starts with up-to-date solutions/collaterals from day one
       fs.mkdirSync(path.join(PORTALS_DIR, targetId, "assets"), { recursive: true });
-      deployPortalInProcess(targetId, db).catch(err =>
-        logger.warn(`toggle-deploy`, `${targetId}: ${err?.message}`)
-      );
+      try {
+        await deployPortalInProcess(targetId, db);
+      } catch (err: any) {
+        logger.warn(`toggle-deploy`, `${targetId}: ${err?.message}`);
+      }
       pm2SpawnPortal(targetId, portal.port);
     } else {
       pm2StopPortal(targetId);

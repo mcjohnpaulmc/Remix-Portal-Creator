@@ -51,8 +51,15 @@ if (!CFG_JWT_SECRET) {
   effectiveJwtSecret = CFG_JWT_SECRET;
 }
 
-if (ADMIN_TOKEN === "dev-admin") {
-  logger.warn("WARN", "ADMIN_TOKEN env var not set. Using default 'dev-admin' — set ADMIN_TOKEN in production.");
+let effectiveAdminToken: string;
+if (!ADMIN_TOKEN) {
+  effectiveAdminToken = createHash("sha256").update(`admin-${Math.random()}${Date.now()}`).digest("hex");
+  logger.warn(
+    "Auth",
+    "ADMIN_TOKEN env var not set — using ephemeral random token for X-Admin-Token header. Set ADMIN_TOKEN in .env for server-to-server calls."
+  );
+} else {
+  effectiveAdminToken = ADMIN_TOKEN;
 }
 
 // ── In-memory users cache ──────────────────────────────────────────────────────
@@ -82,7 +89,7 @@ export function requireAdminAuth(
 ): void {
   // Path 1: server-to-server ADMIN_TOKEN (PM2 internal calls)
   const token = req.headers["x-admin-token"];
-  if (token && token === ADMIN_TOKEN) {
+  if (token && token === effectiveAdminToken) {
     next();
     return;
   }

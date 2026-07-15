@@ -1139,6 +1139,155 @@ def test_refactor_app_tsx_imports_admin_fetch():
         fail(name, str(e))
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+# Manager Bug Fix MF1 — X-Admin-Token bypass with default "dev-admin" token
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_mf1_config_no_dev_admin_fallback():
+    name = "BugFix-MF1a (static): config.ts does not fall back to predictable 'dev-admin' string"
+    try:
+        src = read_file("backend/config.ts")
+        if '"dev-admin"' in src or "'dev-admin'" in src:
+            fail(name, "config.ts still uses 'dev-admin' as ADMIN_TOKEN fallback"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_mf1_auth_uses_effective_admin_token():
+    name = "BugFix-MF1b (static): auth/index.ts uses effectiveAdminToken (not bare ADMIN_TOKEN) in X-Admin-Token check"
+    try:
+        src = read_file("backend/auth/index.ts")
+        if "effectiveAdminToken" not in src:
+            fail(name, "effectiveAdminToken not defined in auth/index.ts"); return
+        if "token === effectiveAdminToken" not in src:
+            fail(name, "X-Admin-Token check does not compare against effectiveAdminToken"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_mf1_auth_generates_ephemeral_token_when_unset():
+    name = "BugFix-MF1c (static): auth/index.ts generates random ephemeral token when ADMIN_TOKEN is unset"
+    try:
+        src = read_file("backend/auth/index.ts")
+        has_random = "Math.random()" in src
+        has_createHash = "createHash" in src
+        has_condition = "if (!ADMIN_TOKEN)" in src or "if (ADMIN_TOKEN ===" not in src
+        if not (has_random and has_createHash):
+            fail(name, "Random ephemeral token generation not found in auth/index.ts"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_mf1_dev_admin_token_rejected():
+    name = "BugFix-MF1d (server): X-Admin-Token 'dev-admin' is rejected when ADMIN_TOKEN env var is not set"
+    if not SERVER_UP:
+        skip(name, "server not running"); return
+    # When the test suite's ADMIN_TOKEN is 'dev-admin' (the default), the server also has
+    # ADMIN_TOKEN=dev-admin explicitly configured (e.g. in .env), so the ephemeral-random
+    # path is not active. Only meaningful when ADMIN_TOKEN is unset on the server.
+    if ADMIN_TOKEN == "dev-admin":
+        skip(name, "ADMIN_TOKEN is 'dev-admin' in this env — server uses it explicitly, ephemeral path not active"); return
+    try:
+        r = server_post("/api/admin/solutions", {"action": "create", "solution": {}},
+                        headers={"X-Admin-Token": "dev-admin"})
+        if r.status_code != 401:
+            fail(name, f"Expected 401 (ephemeral token active), got {r.status_code}"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Manager Bug Fix MF2 — passwordHash still in portal.json artifacts
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_mf2_build_portal_snapshot_no_password_hash():
+    name = "BugFix-MF2a (static): buildPortalSnapshot does not include passwordHash in portal.json users"
+    try:
+        src = read_file("backend/portal/snapshot.ts")
+        # Find the buildPortalSnapshot function body and check passwordHash is absent from users map
+        snapshot_section = src[src.find("export function buildPortalSnapshot"):] if "export function buildPortalSnapshot" in src else src
+        # publicDbProjection has "passwordHash: _ph" for stripping — that is fine.
+        # We check the users mapping inside buildPortalSnapshot does NOT set passwordHash.
+        users_block_start = snapshot_section.find("users:")
+        users_block = snapshot_section[users_block_start:users_block_start + 400] if users_block_start != -1 else ""
+        if "passwordHash: (u as any).passwordHash" in users_block or "passwordHash: u.passwordHash" in users_block:
+            fail(name, "buildPortalSnapshot still maps passwordHash into portal.json users"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_mf2_build_default_portal_json_no_password_hash():
+    name = "BugFix-MF2b (static): buildDefaultPortalJson does not include passwordHash in portal.json users"
+    try:
+        src = read_file("backend/portal/deploy.ts")
+        deploy_section = src[src.find("export function buildDefaultPortalJson"):] if "export function buildDefaultPortalJson" in src else src
+        users_block_start = deploy_section.find("users:")
+        users_block = deploy_section[users_block_start:users_block_start + 400] if users_block_start != -1 else ""
+        if "passwordHash" in users_block:
+            fail(name, "buildDefaultPortalJson still maps passwordHash into portal.json users"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Manager Bug Fix MF3 — toggle-to-live races portal startup vs deploy
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_mf3_toggle_awaits_deploy_before_spawn():
+    name = "BugFix-MF3a (static): subdomains.routes.ts awaits deployPortalInProcess before pm2SpawnPortal in toggle"
+    try:
+        src = read_file("backend/routes/subdomains.routes.ts")
+        # Handler must be async
+        if "async (req, res)" not in src:
+            fail(name, "subdomains route handler is not async"); return
+        # The deploy call should be awaited, not fire-and-forget
+        if "deployPortalInProcess(targetId, db).catch(" in src:
+            fail(name, "deployPortalInProcess is still fire-and-forget (.catch) — should be awaited"); return
+        if "await deployPortalInProcess(" not in src:
+            fail(name, "deployPortalInProcess is not awaited before pm2SpawnPortal"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Manager Bug Fix MF4 — /api/admin/deploy always returns success: true
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_mf4_deploy_returns_failure_on_write_error():
+    name = "BugFix-MF4a (static): deploy.routes.ts returns 500 with success:false when localWriteOk is false"
+    try:
+        src = read_file("backend/routes/deploy.routes.ts")
+        if "!localWriteOk" not in src:
+            fail(name, "No guard for !localWriteOk in deploy.routes.ts"); return
+        if "success: false" not in src:
+            fail(name, "deploy.routes.ts never returns success: false"); return
+        if "status(500)" not in src and "res.status(500)" not in src:
+            fail(name, "deploy.routes.ts does not return HTTP 500 on failure"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_mf4_deploy_logs_failure_separately():
+    name = "BugFix-MF4b (static): deploy.routes.ts logs 'Portal Deploy Failed' separately from 'Portal Deployed'"
+    try:
+        src = read_file("backend/routes/deploy.routes.ts")
+        if "Portal Deploy Failed" not in src:
+            fail(name, "'Portal Deploy Failed' log action not found in deploy.routes.ts"); return
+        if "Portal Deployed" not in src:
+            fail(name, "'Portal Deployed' success log action not found in deploy.routes.ts"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 # ── run all tests ─────────────────────────────────────────────────────────────
 
 TESTS = [
@@ -1219,6 +1368,19 @@ TESTS = [
     # Refactor — R2: frontend API client
     test_refactor_frontend_api_client_exists,
     test_refactor_app_tsx_imports_admin_fetch,
+    # Manager Bug Fixes — MF1: X-Admin-Token default bypass
+    test_mf1_config_no_dev_admin_fallback,
+    test_mf1_auth_uses_effective_admin_token,
+    test_mf1_auth_generates_ephemeral_token_when_unset,
+    test_mf1_dev_admin_token_rejected,
+    # Manager Bug Fixes — MF2: passwordHash in portal artifacts
+    test_mf2_build_portal_snapshot_no_password_hash,
+    test_mf2_build_default_portal_json_no_password_hash,
+    # Manager Bug Fixes — MF3: toggle race condition
+    test_mf3_toggle_awaits_deploy_before_spawn,
+    # Manager Bug Fixes — MF4: deploy always returns success
+    test_mf4_deploy_returns_failure_on_write_error,
+    test_mf4_deploy_logs_failure_separately,
 ]
 
 if __name__ == "__main__":
