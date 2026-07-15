@@ -470,9 +470,10 @@ def test_download_serves_real_file():
             skip(name, "upload failed, cannot test download"); return
         filename = r.json()["filename"]
 
-        r2 = _requests.get(BASE_URL + f"/api/download/{filename}", timeout=5)
+        r2 = _requests.get(BASE_URL + f"/api/download/{filename}",
+                           headers={"X-Admin-Token": ADMIN_TOKEN}, timeout=5)
         if r2.status_code != 200:
-            fail(name, f"Expected 200, got {r2.status_code}"); return
+            fail(name, f"Expected 200 (with auth), got {r2.status_code}"); return
         if r2.content != content:
             fail(name, "Downloaded content does not match uploaded content"); return
         ok(name)
@@ -1288,6 +1289,150 @@ def test_mf4_deploy_logs_failure_separately():
         fail(name, str(e))
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+# Manager Security Fix MS3 — /api/reload is unauthenticated
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_ms3_portal_server_reload_requires_token():
+    name = "SecFix-MS3a (static): portal-server.ts /api/reload requires X-Admin-Token"
+    try:
+        src = read_file("backend/portal-server.ts")
+        reload_section = src[src.find('"/api/reload"'):src.find('"/api/reload"') + 400] if '"/api/reload"' in src else ""
+        if "x-admin-token" not in reload_section.lower():
+            fail(name, "/api/reload handler does not check X-Admin-Token"); return
+        if "401" not in reload_section:
+            fail(name, "/api/reload handler does not return 401 on missing/wrong token"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_ms3_hub_sends_token_on_reload():
+    name = "SecFix-MS3b (static): portal/deploy.ts sends X-Admin-Token header when calling /api/reload"
+    try:
+        src = read_file("backend/portal/deploy.ts")
+        if '"X-Admin-Token"' not in src and "'X-Admin-Token'" not in src:
+            fail(name, "deploy.ts does not send X-Admin-Token header on reload request"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Manager Security Fix MS4 — No rate limiting on login endpoints
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_ms4_hub_login_has_rate_limiter():
+    name = "SecFix-MS4a (static): auth.routes.ts /api/login applies express-rate-limit"
+    try:
+        src = read_file("backend/routes/auth.routes.ts")
+        if "express-rate-limit" not in src and "rateLimit" not in src:
+            fail(name, "express-rate-limit not imported in auth.routes.ts"); return
+        if "loginLimiter" not in src:
+            fail(name, "loginLimiter not defined/applied in auth.routes.ts"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_ms4_portal_login_has_rate_limiter():
+    name = "SecFix-MS4b (static): portal-server.ts /api/login applies rate limiting"
+    try:
+        src = read_file("backend/portal-server.ts")
+        if "rateLimit" not in src and "loginLimiter" not in src:
+            fail(name, "rate limiter not found in portal-server.ts"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_ms4_hub_login_returns_429_after_limit():
+    name = "SecFix-MS4c (server): /api/login returns 429 after 5 failed attempts"
+    if not SERVER_UP:
+        skip(name, "server not running"); return
+    try:
+        for _ in range(5):
+            server_post("/api/login", {"email": "nobody@test.invalid", "password": "wrong"})
+        r = server_post("/api/login", {"email": "nobody@test.invalid", "password": "wrong"})
+        if r.status_code != 429:
+            fail(name, f"Expected 429 after 5 attempts, got {r.status_code}"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Manager Security Fix MS5 — Uploaded files publicly retrievable
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_ms5_download_requires_auth():
+    name = "SecFix-MS5a (static): upload.routes.ts /api/download requires admin auth"
+    try:
+        src = read_file("backend/routes/upload.routes.ts")
+        # Check that requireAdminAuth appears before the download handler
+        download_pos = src.find('"/api/download/:filename"')
+        auth_pos = src.rfind("requireAdminAuth", 0, download_pos) if download_pos != -1 else -1
+        if download_pos == -1:
+            fail(name, "/api/download/:filename route not found in upload.routes.ts"); return
+        # requireAdminAuth can appear on the same line as the download route or earlier
+        download_line = src[max(0, download_pos - 20):download_pos + 80]
+        if "requireAdminAuth" not in download_line:
+            fail(name, "requireAdminAuth is not applied to /api/download/:filename"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_ms5_download_rejects_unauthenticated():
+    name = "SecFix-MS5b (server): GET /api/download/:file returns 401 without auth"
+    if not SERVER_UP:
+        skip(name, "server not running"); return
+    try:
+        r = server_get("/api/download/nonexistent.pdf")
+        if r.status_code != 401:
+            fail(name, f"Expected 401, got {r.status_code}"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Manager Security Fix MS6 — /api/log is unauthenticated and unbounded
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_ms6_log_rate_limited():
+    name = "SecFix-MS6a (static): public.routes.ts /api/log applies rate limiting"
+    try:
+        src = read_file("backend/routes/public.routes.ts")
+        if "rateLimit" not in src and "logLimiter" not in src:
+            fail(name, "rate limiter not found in public.routes.ts"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_ms6_log_fields_validated():
+    name = "SecFix-MS6b (static): public.routes.ts /api/log truncates field lengths"
+    try:
+        src = read_file("backend/routes/public.routes.ts")
+        if ".slice(" not in src:
+            fail(name, "field length truncation (.slice) not found in public.routes.ts"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_ms6_log_has_entry_cap():
+    name = "SecFix-MS6c (static): public.routes.ts caps total userLogs entries"
+    try:
+        src = read_file("backend/routes/public.routes.ts")
+        if "MAX_LOG_ENTRIES" not in src:
+            fail(name, "MAX_LOG_ENTRIES cap not found in public.routes.ts"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 # ── run all tests ─────────────────────────────────────────────────────────────
 
 TESTS = [
@@ -1381,6 +1526,21 @@ TESTS = [
     # Manager Bug Fixes — MF4: deploy always returns success
     test_mf4_deploy_returns_failure_on_write_error,
     test_mf4_deploy_logs_failure_separately,
+    # Manager Security Fixes — MS3: unauthenticated /api/reload
+    test_ms3_portal_server_reload_requires_token,
+    test_ms3_hub_sends_token_on_reload,
+    # Manager Security Fixes — MS4: login rate limiting
+    test_ms4_hub_login_has_rate_limiter,
+    test_ms4_portal_login_has_rate_limiter,
+    # Manager Security Fixes — MS5: /api/download requires auth
+    test_ms5_download_requires_auth,
+    test_ms5_download_rejects_unauthenticated,
+    # Manager Security Fixes — MS6: /api/log rate-limited and capped
+    test_ms6_log_rate_limited,
+    test_ms6_log_fields_validated,
+    test_ms6_log_has_entry_cap,
+    # MS4c last — it exhausts the rate-limit window and would block earlier login tests
+    test_ms4_hub_login_returns_429_after_limit,
 ]
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@
 import fs from "fs";
 import http from "http";
 import path from "path";
-import { PORTALS_DIR, S3_BUCKET, S3_PREFIX } from "../config";
+import { PORTALS_DIR, S3_BUCKET, S3_PREFIX, ADMIN_TOKEN } from "../config";
 import { logger } from "../logger";
 import { DatabaseSchema } from "../storage/db";
 import { SubdomainPortal } from "../../shared/types";
@@ -57,7 +57,11 @@ export async function deployPortalInProcess(
   if (portalPort) {
     reloadOk = await new Promise<boolean>((resolve) => {
       const reloadReq = http.request(
-        { hostname: "127.0.0.1", port: portalPort, path: "/api/reload", method: "POST", timeout: 3000 },
+        {
+          hostname: "127.0.0.1", port: portalPort, path: "/api/reload", method: "POST",
+          timeout: 3000,
+          headers: { "X-Admin-Token": ADMIN_TOKEN, "Content-Length": "0" },
+        },
         () => resolve(true)
       );
       reloadReq.on("error", () => resolve(false));

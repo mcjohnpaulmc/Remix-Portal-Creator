@@ -4,14 +4,23 @@
  */
 
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
 import { getUsersCache, setUsersCache, verifyPassword, issueJwt } from "../auth";
 import { readDatabase, writeDatabase, InternalUser } from "../storage/db";
 import { s3SyncUsers } from "../storage/s3";
 
 const router = Router();
 
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many login attempts. Please try again in 15 minutes." },
+});
+
 // POST /api/login — validates email + password against S3-sourced users cache
-router.post("/api/login", (req, res) => {
+router.post("/api/login", loginLimiter, (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ error: "Email and password are required." });

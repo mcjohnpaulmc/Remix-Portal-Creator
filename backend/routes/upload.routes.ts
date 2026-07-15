@@ -74,8 +74,8 @@ router.post("/api/upload", requireAdminAuth, (req: any, res: any, next: any) => 
   });
 });
 
-// File download — serve real files from uploads/
-router.get("/api/download/:filename", (req, res) => {
+// File download — serve real files from uploads/ (admin only)
+router.get("/api/download/:filename", requireAdminAuth, (req, res) => {
   const safeFilename = path.basename(req.params.filename);
   const portalSlug = ((req.query.portalSlug as string) || "").replace(/[^a-z0-9_-]/gi, "");
   const filePath = portalSlug

@@ -6,6 +6,7 @@
 
 import 'dotenv/config';
 import express from "express";
+import rateLimit from "express-rate-limit";
 import path from "path";
 import fs from "fs";
 import http from "http";
@@ -29,6 +30,7 @@ const getArg = (flag: string) => {
 
 const SLUG = process.env.PORTAL_SLUG || getArg("--slug") || "";
 const PORT = parseInt(process.env.PORTAL_PORT || getArg("--port") || "4000", 10);
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "";
 
 if (!SLUG) {
   console.error("[portal-server] --slug <slug> is required");
@@ -108,6 +110,14 @@ function buildEmptyPortal() {
 const app = express();
 app.use(express.json());
 
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many login attempts. Please try again in 15 minutes." },
+});
+
 // Portal identity — frontend uses this to suppress admin console
 app.get("/api/portal-info", (_req, res) => {
   res.json({
@@ -125,7 +135,7 @@ app.get("/api/database", (_req, res) => {
 });
 
 // Login — validates email + password against users deployed in portal.json
-app.post("/api/login", (req, res) => {
+app.post("/api/login", loginLimiter, (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ error: "Email and password are required." });
@@ -148,8 +158,12 @@ app.post("/api/log", (_req, res) => {
   res.json({ success: true });
 });
 
-// Hot-reload — Hub calls this after deploying to S3 so the portal picks up the latest data
-app.post("/api/reload", async (_req, res) => {
+// Hot-reload — Hub calls this after deploying to S3 so the portal picks up the latest data.
+// Requires X-Admin-Token to prevent unauthenticated external reload abuse.
+app.post("/api/reload", async (req, res) => {
+  if (!ADMIN_TOKEN || req.headers["x-admin-token"] !== ADMIN_TOKEN) {
+    return res.status(401).json({ error: "Unauthorized." });
+  }
   await loadPortalData();
   res.json({ success: true, reloadedAt: new Date().toISOString(), slug: SLUG });
 });
