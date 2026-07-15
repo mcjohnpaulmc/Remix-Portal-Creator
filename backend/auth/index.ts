@@ -3,11 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import fs from "fs";
+import path from "path";
 import { createHash } from "crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import express from "express";
-import { BCRYPT_ROUNDS, ADMIN_TOKEN, JWT_SECRET as CFG_JWT_SECRET } from "../config";
+import { BCRYPT_ROUNDS, ADMIN_TOKEN, JWT_SECRET as CFG_JWT_SECRET, DATA_DIR } from "../config";
 import { readDatabase, InternalUser } from "../storage/db";
 import { logger } from "../logger";
 
@@ -38,15 +40,30 @@ export function verifyPassword(
   return false;
 }
 
-// ── JWT secret — warn + use ephemeral fallback if not configured ───────────────
+// ── JWT secret ─────────────────────────────────────────────────────────────────
+// Prefer JWT_SECRET from env (required for multi-machine clusters).
+// If unset, derive a stable machine-local secret persisted in data/.jwt-secret
+// so sessions survive server restarts on single-machine deployments.
 
 let effectiveJwtSecret: string;
 if (!CFG_JWT_SECRET) {
+  const secretFile = path.join(DATA_DIR, ".jwt-secret");
+  let stable: string;
+  try {
+    stable = fs.readFileSync(secretFile, "utf-8").trim();
+    if (stable.length < 32) throw new Error("too short");
+  } catch {
+    stable = createHash("sha256").update(`jwt-${Math.random()}${Date.now()}`).digest("hex");
+    try {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+      fs.writeFileSync(secretFile, stable, { mode: 0o600 });
+    } catch { /* non-fatal — falls back to in-memory secret this boot */ }
+  }
+  effectiveJwtSecret = stable;
   logger.warn(
-    "WARN",
-    "JWT_SECRET env var not set. Using a random ephemeral secret — sessions will not survive restarts in production."
+    "Auth",
+    "JWT_SECRET env var not set — using persisted machine-local secret from data/.jwt-secret. Set JWT_SECRET in .env for multi-server deployments."
   );
-  effectiveJwtSecret = createHash("sha256").update(Math.random().toString()).digest("hex");
 } else {
   effectiveJwtSecret = CFG_JWT_SECRET;
 }
