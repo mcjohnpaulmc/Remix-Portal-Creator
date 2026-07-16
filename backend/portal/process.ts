@@ -42,7 +42,7 @@ export function pm2SpawnPortal(slug: string, port: number): void {
     logger.info(`portal-${slug}`, `Spawned on port ${port} (pid ${child.pid})`);
   } else {
     const cmd = `pm2 start node --name "portal-${slug}" --cwd "${cwd}" -- dist/portal-server.cjs --slug ${slug} --port ${port}`;
-    exec(cmd, (err, _stdout, stderr) => {
+    exec(cmd, { env: process.env }, (err, _stdout, stderr) => {
       if (err) logger.error("PM2", `Failed to start portal-${slug}: ${stderr}`);
       else logger.info("PM2", `Started portal-${slug} on port ${port}`);
     });
@@ -59,7 +59,7 @@ export function pm2StopPortal(slug: string): void {
       logger.info(`portal-${slug}`, "Stopped");
     }
   } else {
-    exec(`pm2 delete portal-${slug}`, (err) => {
+    exec(`pm2 delete portal-${slug}`, { env: process.env }, (err) => {
       if (err) logger.warn("PM2", `Could not delete portal-${slug}: ${err?.message}`);
       else logger.info("PM2", `Stopped portal-${slug}`);
     });
