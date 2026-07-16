@@ -110,6 +110,16 @@ function buildEmptyPortal() {
 const app = express();
 app.use(express.json());
 
+// CORS — the admin hub polls /api/portal-info from a different port, so public
+// API endpoints must allow cross-origin requests from any hub origin.
+app.use((_req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Admin-Token");
+  if (_req.method === "OPTIONS") { res.sendStatus(204); return; }
+  next();
+});
+
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
