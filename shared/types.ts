@@ -57,6 +57,20 @@ export interface UserLog {
   action: string;
   details: string;
   date: string;
+  subdomain?: string;
+}
+
+export interface MetricGroup {
+  id: string;
+  title: string;
+  deliveryLabels: string[];
+  deliveryValues: number[];
+  qualityLabels: string[];
+  qualityValues: number[];
+  tatTarget?: string;
+  tatActual?: string;
+  tatLabels?: string[];
+  tatValues?: number[];
 }
 
 export interface CurrentProject {
@@ -80,6 +94,7 @@ export interface CurrentProject {
   enabled?: boolean;
   createdAt: string;
   hiddenSections?: string[]; // list of hidden sections/charts, e.g. ['deliveryVolumeChart', 'qualitySLAChart']
+  metricGroups?: MetricGroup[];
 }
 
 export interface UpcomingProject {

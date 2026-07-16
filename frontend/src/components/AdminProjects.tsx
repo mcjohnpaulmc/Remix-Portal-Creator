@@ -4,13 +4,39 @@
  */
 
 import React, { useState } from "react";
-import { 
-  Plus, Edit2, Sparkles, X, Check, FileText, FileUp, Trash2, 
-  BarChart3, RefreshCw, Eye, EyeOff, LayoutTemplate, 
+import {
+  Plus, Edit2, Sparkles, X, Check, FileText, FileUp, Trash2,
+  BarChart3, RefreshCw, Eye, EyeOff, LayoutTemplate,
   MessageSquare, TrendingUp, HelpCircle, ShieldCheck,
   Link, Upload, FolderOpen, Folder
 } from "lucide-react";
-import { CurrentProject, UpcomingProject } from "../../../shared/types";
+import { CurrentProject, UpcomingProject, MetricGroup } from "../../../shared/types";
+
+interface MetricGroupForm {
+  id: string;
+  title: string;
+  deliveryLabelsStr: string;
+  deliveryValuesStr: string;
+  qualityLabelsStr: string;
+  qualityValuesStr: string;
+  tatTarget: string;
+  tatActual: string;
+  tatLabelsStr: string;
+  tatValuesStr: string;
+}
+
+const defaultMetricGroupForm = (): MetricGroupForm => ({
+  id: `mg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+  title: "Delivery Performance",
+  deliveryLabelsStr: "Jan, Feb, Mar, Apr, May, Jun",
+  deliveryValuesStr: "240, 280, 290, 310, 340, 380",
+  qualityLabelsStr: "Jan, Feb, Mar, Apr, May, Jun",
+  qualityValuesStr: "98.2, 98.7, 98.1, 99.0, 99.4, 99.6",
+  tatTarget: "24 hours",
+  tatActual: "18.5 hours",
+  tatLabelsStr: "Jan, Feb, Mar, Apr, May, Jun",
+  tatValuesStr: "22, 21, 20.5, 19.8, 19.1, 18.5",
+});
 import { motion, AnimatePresence } from "motion/react";
 
 interface AdminProjectsProps {
@@ -61,17 +87,11 @@ export function AdminProjects({
   }, [prefilledSubdomain]);
 
   // -- CURRENT PROJECT exclusive fields --
-  // Trends metrics as comma-separated or list states
-  const [deliveryLabelsStr, setDeliveryLabelsStr] = useState("Jan, Feb, Mar, Apr, May, Jun");
-  const [deliveryValuesStr, setDeliveryValuesStr] = useState("240, 280, 290, 310, 340, 380");
-  const [qualityLabelsStr, setQualityLabelsStr] = useState("Jan, Feb, Mar, Apr, May, Jun");
-  const [qualityValuesStr, setQualityValuesStr] = useState("98.2, 98.7, 98.1, 99.0, 99.4, 99.6");
+  const [metricGroups, setMetricGroups] = useState<MetricGroupForm[]>([defaultMetricGroupForm()]);
 
-  // TAT exclusive
-  const [tatTarget, setTatTarget] = useState("24 hours");
-  const [tatActual, setTatActual] = useState("18.5 hours");
-  const [tatLabelsStr, setTatLabelsStr] = useState("Jan, Feb, Mar, Apr, May, Jun");
-  const [tatValuesStr, setTatValuesStr] = useState("22, 21, 20.5, 19.8, 19.1, 18.5");
+  const updateMetricGroup = (id: string, field: keyof MetricGroupForm, value: string) => {
+    setMetricGroups((prev) => prev.map((mg) => (mg.id === id ? { ...mg, [field]: value } : mg)));
+  };
 
   // Innovations sublist state
   const [innovations, setInnovations] = useState<{ title: string; impact: string }[]>([]);
@@ -138,14 +158,7 @@ export function AdminProjects({
     setHiddenSections([]);
 
     // Current reset
-    setDeliveryLabelsStr("Jan, Feb, Mar, Apr, May, Jun");
-    setDeliveryValuesStr("240, 280, 290, 310, 340, 380");
-    setQualityLabelsStr("Jan, Feb, Mar, Apr, May, Jun");
-    setQualityValuesStr("98.2, 98.7, 98.1, 99.0, 99.4, 99.6");
-    setTatTarget("24 hours");
-    setTatActual("18.5 hours");
-    setTatLabelsStr("Jan, Feb, Mar, Apr, May, Jun");
-    setTatValuesStr("22, 21, 20.5, 19.8, 19.1, 18.5");
+    setMetricGroups([defaultMetricGroupForm()]);
     setInnovations([]);
     setFeedbackRepo([]);
     setUploadedFiles([]);
@@ -184,21 +197,21 @@ export function AdminProjects({
       setDepartment(data.department || "");
 
       if (activeSubTab === "current") {
-        if (data.deliveryValues) {
-          setDeliveryValuesStr(data.deliveryValues.join(", "));
-          setDeliveryLabelsStr((data.deliveryLabels || ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]).join(", "));
-        }
-        if (data.qualityValues) {
-          setQualityValuesStr(data.qualityValues.join(", "));
-          setQualityLabelsStr((data.qualityLabels || ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]).join(", "));
-        }
+        setMetricGroups((prev) => {
+          const first = prev[0] || defaultMetricGroupForm();
+          return [
+            {
+              ...first,
+              ...(data.deliveryValues ? { deliveryValuesStr: data.deliveryValues.join(", "), deliveryLabelsStr: (data.deliveryLabels || ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]).join(", ") } : {}),
+              ...(data.qualityValues ? { qualityValuesStr: data.qualityValues.join(", "), qualityLabelsStr: (data.qualityLabels || ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]).join(", ") } : {}),
+              ...(data.tatTarget ? { tatTarget: data.tatTarget } : {}),
+              ...(data.tatActual ? { tatActual: data.tatActual } : {}),
+              ...(data.tatValues ? { tatValuesStr: data.tatValues.join(", "), tatLabelsStr: (data.tatLabels || ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]).join(", ") } : {}),
+            },
+            ...prev.slice(1),
+          ];
+        });
         if (data.innovations) setInnovations(data.innovations);
-        if (data.tatTarget) setTatTarget(data.tatTarget);
-        if (data.tatActual) setTatActual(data.tatActual);
-        if (data.tatValues) {
-          setTatValuesStr(data.tatValues.join(", "));
-          setTatLabelsStr((data.tatLabels || ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]).join(", "));
-        }
         if (data.feedbackRepo) {
           setFeedbackRepo(data.feedbackRepo.map((f: any, idx: number) => ({
             ...f,
@@ -382,6 +395,19 @@ export function AdminProjects({
 
     try {
       if (activeSubTab === "current") {
+        const firstGroup = metricGroups[0] || defaultMetricGroupForm();
+        const builtGroups: MetricGroup[] = metricGroups.map((mg) => ({
+          id: mg.id,
+          title: mg.title,
+          deliveryLabels: mg.deliveryLabelsStr.split(",").map((s) => s.trim()).filter(Boolean),
+          deliveryValues: mg.deliveryValuesStr.split(",").map((s) => Number(s.trim())),
+          qualityLabels: mg.qualityLabelsStr.split(",").map((s) => s.trim()).filter(Boolean),
+          qualityValues: mg.qualityValuesStr.split(",").map((s) => Number(s.trim())),
+          tatTarget: mg.tatTarget,
+          tatActual: mg.tatActual,
+          tatLabels: mg.tatLabelsStr.split(",").map((s) => s.trim()).filter(Boolean),
+          tatValues: mg.tatValuesStr.split(",").map((s) => Number(s.trim())),
+        }));
         const payload = {
           id: editingId || undefined,
           customerName: customerNames[0] || "unilever",
@@ -389,15 +415,17 @@ export function AdminProjects({
           name,
           description,
           department,
-          deliveryLabels: deliveryLabelsStr.split(",").map(s => s.trim()),
-          deliveryValues: deliveryValuesStr.split(",").map(s => Number(s.trim())),
-          qualityLabels: qualityLabelsStr.split(",").map(s => s.trim()),
-          qualityValues: qualityValuesStr.split(",").map(s => Number(s.trim())),
+          // Legacy flat fields from first group (for backward compat with visitor dashboard)
+          deliveryLabels: builtGroups[0]?.deliveryLabels || [],
+          deliveryValues: builtGroups[0]?.deliveryValues || [],
+          qualityLabels: builtGroups[0]?.qualityLabels || [],
+          qualityValues: builtGroups[0]?.qualityValues || [],
+          tatTarget: firstGroup.tatTarget,
+          tatActual: firstGroup.tatActual,
+          tatLabels: builtGroups[0]?.tatLabels || [],
+          tatValues: builtGroups[0]?.tatValues || [],
+          metricGroups: builtGroups,
           innovations,
-          tatTarget,
-          tatActual,
-          tatLabels: tatLabelsStr.split(",").map(s => s.trim()),
-          tatValues: tatValuesStr.split(",").map(s => Number(s.trim())),
           feedbackRepo,
           documents: uploadedFiles,
           enabled: pubEnabled,
@@ -441,14 +469,33 @@ export function AdminProjects({
     setPubEnabled(proj.enabled !== false);
     setHiddenSections(proj.hiddenSections || []);
 
-    setDeliveryLabelsStr(proj.deliveryLabels.join(", "));
-    setDeliveryValuesStr(proj.deliveryValues.join(", "));
-    setQualityLabelsStr(proj.qualityLabels.join(", "));
-    setQualityValuesStr(proj.qualityValues.join(", "));
-    setTatTarget(proj.tatTarget || "");
-    setTatActual(proj.tatActual || "");
-    setTatLabelsStr(proj.tatLabels ? proj.tatLabels.join(", ") : "");
-    setTatValuesStr(proj.tatValues ? proj.tatValues.join(", ") : "");
+    if (proj.metricGroups && proj.metricGroups.length > 0) {
+      setMetricGroups(proj.metricGroups.map((mg) => ({
+        id: mg.id || `mg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        title: mg.title || "Delivery Performance",
+        deliveryLabelsStr: (mg.deliveryLabels || []).join(", "),
+        deliveryValuesStr: (mg.deliveryValues || []).join(", "),
+        qualityLabelsStr: (mg.qualityLabels || []).join(", "),
+        qualityValuesStr: (mg.qualityValues || []).join(", "),
+        tatTarget: mg.tatTarget || "",
+        tatActual: mg.tatActual || "",
+        tatLabelsStr: (mg.tatLabels || []).join(", "),
+        tatValuesStr: (mg.tatValues || []).join(", "),
+      })));
+    } else {
+      setMetricGroups([{
+        id: `mg-${Date.now()}`,
+        title: "Delivery Performance",
+        deliveryLabelsStr: (proj.deliveryLabels || []).join(", "),
+        deliveryValuesStr: (proj.deliveryValues || []).join(", "),
+        qualityLabelsStr: (proj.qualityLabels || []).join(", "),
+        qualityValuesStr: (proj.qualityValues || []).join(", "),
+        tatTarget: proj.tatTarget || "",
+        tatActual: proj.tatActual || "",
+        tatLabelsStr: (proj.tatLabels || []).join(", "),
+        tatValuesStr: (proj.tatValues || []).join(", "),
+      }]);
+    }
     setInnovations(proj.innovations || []);
     setFeedbackRepo(proj.feedbackRepo || []);
     setUploadedFiles(proj.documents || []);
@@ -711,110 +758,111 @@ export function AdminProjects({
             {/* CURRENT ENGAGEMENT CONDITIONAL FIELDS */}
             {activeSubTab === "current" && (
               <div className="space-y-4">
-                {/* SLA Graph inputs */}
-                <div className="p-5 bg-white border border-slate-100 rounded-2xl shadow-3xs grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="md:col-span-2">
-                    <h4 className="text-xs font-mono font-semibold text-slate-900 uppercase tracking-wider border-b border-slate-50 pb-2 mb-2">
-                      📈 Live Volumes & SLA Quality Trends (comma separated values)
-                    </h4>
-                  </div>
+                {/* Metric Groups — multiple named sets of SLA + TAT metrics */}
+                <div className="space-y-3">
+                  {metricGroups.map((mg, idx) => (
+                    <div key={mg.id} className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-3xs">
+                      {/* Group header row */}
+                      <div className="flex items-center gap-3 px-4 py-2.5 bg-slate-50 border-b border-slate-100">
+                        <span className="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-wider shrink-0">
+                          Group {idx + 1}
+                        </span>
+                        <input
+                          type="text"
+                          value={mg.title}
+                          onChange={(e) => updateMetricGroup(mg.id, "title", e.target.value)}
+                          placeholder="Group title (e.g., Delivery Performance)"
+                          className="flex-1 px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 focus:outline-hidden focus:ring-1 focus:ring-slate-300"
+                        />
+                        {metricGroups.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => setMetricGroups((prev) => prev.filter((g) => g.id !== mg.id))}
+                            className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors shrink-0"
+                            title="Remove this metric group"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
 
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-400 mb-1 uppercase">
-                      Delivery Monthly Months
-                    </label>
-                    <input
-                      type="text"
-                      value={deliveryLabelsStr}
-                      onChange={(e) => setDeliveryLabelsStr(e.target.value)}
-                      placeholder="Jan, Feb, Mar, Apr, May, Jun"
-                      className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-mono"
-                    />
-                  </div>
+                      {/* SLA Trends inputs */}
+                      <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3 border-b border-slate-50">
+                        <div className="md:col-span-2">
+                          <h4 className="text-[10px] font-mono font-semibold text-slate-600 uppercase tracking-wider pb-1.5 mb-1.5 border-b border-slate-50">
+                            📈 Live Volumes & SLA Quality Trends
+                          </h4>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-400 mb-1 uppercase">Delivery Monthly Months</label>
+                          <input type="text" value={mg.deliveryLabelsStr}
+                            onChange={(e) => updateMetricGroup(mg.id, "deliveryLabelsStr", e.target.value)}
+                            placeholder="Jan, Feb, Mar, Apr, May, Jun"
+                            className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-mono" />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-400 mb-1 uppercase">Delivery Values (Volume Packets)</label>
+                          <input type="text" value={mg.deliveryValuesStr}
+                            onChange={(e) => updateMetricGroup(mg.id, "deliveryValuesStr", e.target.value)}
+                            placeholder="180, 210, 240, 220, 280, 310"
+                            className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-mono" />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-400 mb-1 uppercase">Quality Monthly Months</label>
+                          <input type="text" value={mg.qualityLabelsStr}
+                            onChange={(e) => updateMetricGroup(mg.id, "qualityLabelsStr", e.target.value)}
+                            placeholder="Jan, Feb, Mar, Apr, May, Jun"
+                            className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-mono" />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-400 mb-1 uppercase">Quality Compliance Values %</label>
+                          <input type="text" value={mg.qualityValuesStr}
+                            onChange={(e) => updateMetricGroup(mg.id, "qualityValuesStr", e.target.value)}
+                            placeholder="98.5, 99.1, 98.4, 99.2, 99.5, 99.8"
+                            className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-mono" />
+                        </div>
+                      </div>
 
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-400 mb-1 uppercase">
-                      Delivery Values (Volume Packets)
-                    </label>
-                    <input
-                      type="text"
-                      value={deliveryValuesStr}
-                      onChange={(e) => setDeliveryValuesStr(e.target.value)}
-                      placeholder="180, 210, 240, 220, 280, 310"
-                      className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-mono"
-                    />
-                  </div>
+                      {/* TAT inputs */}
+                      <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className="md:col-span-3">
+                          <h4 className="text-[10px] font-mono font-semibold text-slate-600 uppercase tracking-wider pb-1.5 mb-1.5 border-b border-slate-50">
+                            ⏱️ Turnaround Time (TAT) Performance
+                          </h4>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-500 mb-1">Target TAT Bound</label>
+                          <input type="text" value={mg.tatTarget}
+                            onChange={(e) => updateMetricGroup(mg.id, "tatTarget", e.target.value)}
+                            placeholder="E.g., 24 Hours or 2 Hours"
+                            className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-900" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-500 mb-1">Current Actual Average</label>
+                          <input type="text" value={mg.tatActual}
+                            onChange={(e) => updateMetricGroup(mg.id, "tatActual", e.target.value)}
+                            placeholder="E.g., 18.5 Hours"
+                            className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-900" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-500 mb-1">TAT Values (Trend hours over time)</label>
+                          <input type="text" value={mg.tatValuesStr}
+                            onChange={(e) => updateMetricGroup(mg.id, "tatValuesStr", e.target.value)}
+                            placeholder="23, 21.5, 20, 19.8, 19.1, 18.5"
+                            className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-mono" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
 
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-400 mb-1 uppercase">
-                      Quality Monthly Months
-                    </label>
-                    <input
-                      type="text"
-                      value={qualityLabelsStr}
-                      onChange={(e) => setQualityLabelsStr(e.target.value)}
-                      placeholder="Jan, Feb, Mar, Apr, May, Jun"
-                      className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-mono"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-400 mb-1 uppercase">
-                      Quality complianceValues %
-                    </label>
-                    <input
-                      type="text"
-                      value={qualityValuesStr}
-                      onChange={(e) => setQualityValuesStr(e.target.value)}
-                      placeholder="98.5, 99.1, 98.4, 99.2, 99.5, 99.8"
-                      className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-mono"
-                    />
-                  </div>
-                </div>
-
-                {/* TAT exclusive details */}
-                <div className="p-5 bg-white border border-slate-100 rounded-2xl shadow-3xs grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="md:col-span-3">
-                    <h4 className="text-xs font-mono font-semibold text-slate-900 uppercase tracking-wider border-b border-slate-50 pb-2 mb-2">
-                      ⏱️ Turnaround Time (TAT) Performance metrics
-                    </h4>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1">
-                      Target TAT Bound
-                    </label>
-                    <input
-                      type="text"
-                      value={tatTarget}
-                      onChange={(e) => setTatTarget(e.target.value)}
-                      placeholder="E.g., 24 Hours or 2 Hours"
-                      className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-900"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1">
-                      Current Actual Average
-                    </label>
-                    <input
-                      type="text"
-                      value={tatActual}
-                      onChange={(e) => setTatActual(e.target.value)}
-                      placeholder="E.g., 18.5 Hours"
-                      className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-900"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1">
-                      TAT Values (Trend hours over time)
-                    </label>
-                    <input
-                      type="text"
-                      value={tatValuesStr}
-                      onChange={(e) => setTatValuesStr(e.target.value)}
-                      placeholder="23, 21.5, 20, 19.8, 19.1, 18.5"
-                      className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-mono"
-                    />
-                  </div>
+                  {/* Add Metric Group button */}
+                  <button
+                    type="button"
+                    onClick={() => setMetricGroups((prev) => [...prev, defaultMetricGroupForm()])}
+                    className="w-full py-2.5 border-2 border-dashed border-slate-200 rounded-2xl text-xs text-slate-500 hover:border-orange-300 hover:text-orange-600 hover:bg-orange-50/30 transition-all font-mono flex items-center justify-center gap-2"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add Metric Group
+                  </button>
                 </div>
 
                 {/* Innovations with impact Sub Form */}

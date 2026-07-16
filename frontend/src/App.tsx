@@ -285,7 +285,7 @@ export default function App() {
       await fetch("/api/log", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: userEmail, action, details }),
+        body: JSON.stringify({ email: userEmail, action, details, subdomain }),
       });
       // Fetch fresh dataset update without blocking
       const res = await fetch("/api/database");

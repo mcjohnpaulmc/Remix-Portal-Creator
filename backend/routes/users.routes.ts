@@ -36,7 +36,7 @@ router.post("/users", (req, res) => {
     db.users.unshift(newUser);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: "admin@mobiusservices.co.in",
+      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
       action: "User Created",
       details: `User "${newUser.name}" (${newUser.email}) onboarded with role: ${newUser.role}.`,
       date: new Date().toISOString()
@@ -58,7 +58,7 @@ router.post("/users", (req, res) => {
     });
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: "admin@mobiusservices.co.in",
+      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
       action: "User Updated",
       details: `User ID "${user.id}" updated.`,
       date: new Date().toISOString()
@@ -71,7 +71,7 @@ router.post("/users", (req, res) => {
     db.users = db.users.filter(u => u.id !== user.id);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: "admin@mobiusservices.co.in",
+      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
       action: "User Deleted",
       details: `User ID "${user.id}" removed.`,
       date: new Date().toISOString()

@@ -45,7 +45,7 @@ Format exactly:
     db.heroPrompt = prompt;
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: "admin@mobiusservices.co.in",
+      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
       action: "Hero Text Regenerated",
       details: "AI-generated portal headline updated.",
       date: new Date().toISOString()

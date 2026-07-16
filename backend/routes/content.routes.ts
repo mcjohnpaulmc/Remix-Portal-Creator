@@ -24,7 +24,7 @@ router.post("/solutions", (req, res) => {
     db.solutions.unshift(newSol);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: "admin@mobiusservices.co.in",
+      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
       action: "Solution Created",
       details: `Solution "${newSol.title}" onboarded successfully.`,
       date: new Date().toISOString()
@@ -33,7 +33,7 @@ router.post("/solutions", (req, res) => {
     db.solutions = db.solutions.map(s => s.id === solution.id ? { ...s, ...solution } : s);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: "admin@mobiusservices.co.in",
+      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
       action: "Solution Updated",
       details: `Solution "${solution.title}" details was edited.`,
       date: new Date().toISOString()
@@ -42,7 +42,7 @@ router.post("/solutions", (req, res) => {
     db.solutions = db.solutions.filter(s => s.id !== solution.id);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: "admin@mobiusservices.co.in",
+      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
       action: "Solution Deleted",
       details: `Solution with ID "${solution.id}" was soft deleted.`,
       date: new Date().toISOString()
@@ -68,7 +68,7 @@ router.post("/collaterals", (req, res) => {
     db.collaterals.unshift(newCol);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: "admin@mobiusservices.co.in",
+      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
       action: "Collateral Added",
       details: `Collateral study "${newCol.title}" created.`,
       date: new Date().toISOString()
@@ -77,7 +77,7 @@ router.post("/collaterals", (req, res) => {
     db.collaterals = db.collaterals.map(c => c.id === collateral.id ? { ...c, ...collateral } : c);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: "admin@mobiusservices.co.in",
+      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
       action: "Collateral Updated",
       details: `Collateral study "${collateral.title}" updated.`,
       date: new Date().toISOString()
@@ -86,7 +86,7 @@ router.post("/collaterals", (req, res) => {
     db.collaterals = db.collaterals.filter(c => c.id !== collateral.id);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: "admin@mobiusservices.co.in",
+      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
       action: "Collateral Deleted",
       details: `Collateral with ID "${collateral.id}" removed.`,
       date: new Date().toISOString()
@@ -114,7 +114,7 @@ router.post("/projects/current", (req, res) => {
     db.currentProjects.unshift(newProj);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: "admin@mobiusservices.co.in",
+      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
       action: "Current Project Created",
       details: `Project "${newProj.name}" created for customer: ${newProj.customerName}.`,
       date: new Date().toISOString()
@@ -123,7 +123,7 @@ router.post("/projects/current", (req, res) => {
     db.currentProjects = db.currentProjects.map(p => p.id === project.id ? { ...p, ...project } : p);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: "admin@mobiusservices.co.in",
+      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
       action: "Current Project Updated",
       details: `Project "${project.name}" details updated.`,
       date: new Date().toISOString()
@@ -132,7 +132,7 @@ router.post("/projects/current", (req, res) => {
     db.currentProjects = db.currentProjects.filter(p => p.id !== project.id);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: "admin@mobiusservices.co.in",
+      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
       action: "Current Project Deleted",
       details: `Project with ID "${project.id}" deleted.`,
       date: new Date().toISOString()
@@ -160,7 +160,7 @@ router.post("/projects/upcoming", (req, res) => {
     db.upcomingProjects.unshift(newProj);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: "admin@mobiusservices.co.in",
+      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
       action: "Upcoming Project Created",
       details: `Upcoming engagement "${newProj.name}" added for customer: ${newProj.customerName}.`,
       date: new Date().toISOString()
@@ -169,7 +169,7 @@ router.post("/projects/upcoming", (req, res) => {
     db.upcomingProjects = db.upcomingProjects.map(p => p.id === project.id ? { ...p, ...project } : p);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: "admin@mobiusservices.co.in",
+      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
       action: "Upcoming Project Updated",
       details: `Upcoming engagement "${project.name}" details revised.`,
       date: new Date().toISOString()
@@ -178,7 +178,7 @@ router.post("/projects/upcoming", (req, res) => {
     db.upcomingProjects = db.upcomingProjects.filter(p => p.id !== project.id);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: "admin@mobiusservices.co.in",
+      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
       action: "Upcoming Project Deleted",
       details: `Upcoming engagement with ID "${project.id}" deleted.`,
       date: new Date().toISOString()

@@ -36,12 +36,13 @@ router.get("/api/portal-info", (_req, res) => {
 
 // POST /api/log — client-side analytics logging (rate-limited, capped)
 router.post("/api/log", logLimiter, (req, res) => {
-  const { email, action, details } = req.body;
+  const { email, action, details, subdomain } = req.body;
 
   // Validate field lengths to prevent log injection / unbounded growth
-  const safeEmail   = String(email   || "anonymous-viewer").slice(0, 254);
-  const safeAction  = String(action  || "Page View").slice(0, 128);
-  const safeDetails = String(details || "").slice(0, 512);
+  const safeEmail     = String(email     || "anonymous-viewer").slice(0, 254);
+  const safeAction    = String(action    || "Page View").slice(0, 128);
+  const safeDetails   = String(details   || "").slice(0, 512);
+  const safeSubdomain = subdomain ? String(subdomain).slice(0, 64) : undefined;
 
   const db = readDatabase();
 
@@ -50,7 +51,8 @@ router.post("/api/log", logLimiter, (req, res) => {
     email: safeEmail,
     action: safeAction,
     details: safeDetails,
-    date: new Date().toISOString()
+    date: new Date().toISOString(),
+    ...(safeSubdomain ? { subdomain: safeSubdomain } : {}),
   };
 
   db.userLogs.unshift(newLog);

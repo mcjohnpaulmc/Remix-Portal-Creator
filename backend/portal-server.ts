@@ -163,9 +163,28 @@ app.post("/api/email-login", (_req, res) => {
   res.status(410).json({ error: "Please use email and password to login." });
 });
 
-// Analytics logging (fire-and-forget, no persistence on portal servers for now)
-app.post("/api/log", (_req, res) => {
+// Analytics logging — forward to hub for central persistence, tagged with this portal's slug
+app.post("/api/log", (req, res) => {
   res.json({ success: true });
+  const hubPort = parseInt(process.env.PORT || "8816", 10);
+  const body = JSON.stringify({
+    email: String(req.body?.email || "anonymous-viewer").slice(0, 254),
+    action: String(req.body?.action || "Page View").slice(0, 128),
+    details: String(req.body?.details || "").slice(0, 512),
+    subdomain: SLUG,
+  });
+  try {
+    const proxyReq = http.request({
+      hostname: "127.0.0.1",
+      port: hubPort,
+      path: "/api/log",
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+    });
+    proxyReq.on("error", () => {});
+    proxyReq.write(body);
+    proxyReq.end();
+  } catch { /* best-effort */ }
 });
 
 // Hot-reload — Hub calls this after deploying to S3 so the portal picks up the latest data.

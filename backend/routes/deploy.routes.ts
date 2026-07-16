@@ -30,7 +30,7 @@ router.post("/deploy", async (req, res) => {
     logger.error("Deploy", `Local write failed for ${cleanSlug}`);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: "admin@mobiusservices.co.in",
+      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
       action: "Portal Deploy Failed",
       details: `Failed to write portal.json for ${cleanSlug}. S3: ${s3Status}`,
       date: deployedAt,

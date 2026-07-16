@@ -53,7 +53,7 @@ router.post("/subdomains", async (req, res) => {
     if (req.body.displayName !== undefined) portal.displayName = req.body.displayName.trim();
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: "admin@mobiusservices.co.in",
+      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
       action: "Portal Updated",
       details: `Portal "${targetId}" settings saved.`,
       date: new Date().toISOString(),
@@ -112,7 +112,7 @@ router.post("/subdomains", async (req, res) => {
 
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: "admin@mobiusservices.co.in",
+      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
       action: "Customer Subdomain Portal Created",
       details: `Created portal: ${cleanSub}.${selectedDomain} on port ${port}. Toggle to Live when ready.`,
       date: new Date().toISOString()
@@ -154,7 +154,7 @@ router.post("/subdomains", async (req, res) => {
 
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: "admin@mobiusservices.co.in",
+      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
       action: "Dummy Portal Created",
       details: `Created local dev portal "${dummyDisplayName}" on port ${port} (localhost:${port}). Toggle to Live when ready.`,
       date: new Date().toISOString()
@@ -195,7 +195,7 @@ router.post("/subdomains", async (req, res) => {
     portal.status = targetStatus;
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: "admin@mobiusservices.co.in",
+      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
       action: targetStatus === "live" ? "Portal Started" : "Portal Stopped",
       details: `Portal "${portal.displayName}" toggled to ${targetStatus} on port ${portal.port}.`,
       date: new Date().toISOString()
@@ -241,7 +241,7 @@ router.post("/subdomains", async (req, res) => {
 
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: "admin@mobiusservices.co.in",
+      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
       action: "Customer Subdomain Portal Deleted",
       details: `Deleted portal "${targetId}", removed its slug from all content mappings.`,
       date: new Date().toISOString()

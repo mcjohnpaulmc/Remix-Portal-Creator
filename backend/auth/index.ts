@@ -124,6 +124,7 @@ export function requireAdminAuth(
           u => u.email === payload.email && u.role === "admin" && u.enabled !== false
         );
         if (user) {
+          (req as any).adminEmail = payload.email;
           next();
           return;
         }

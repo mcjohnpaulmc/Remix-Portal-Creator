@@ -41,19 +41,29 @@ export function CurrentProjectsDashboard({ projects, userEmail }: CurrentProject
     return "text-slate-500 bg-slate-50 border-slate-205";
   };
 
-  // Prepare Chart Data Helper
+  // Prepare Chart Data Helper (legacy single-set)
   const buildTrendData = (proj: CurrentProject) => {
-    const data: any[] = [];
     const len = proj.deliveryLabels?.length || 6;
-    for (let i = 0; i < len; i++) {
-      data.push({
-        month: proj.deliveryLabels?.[i] || `Month ${i + 1}`,
-        volume: proj.deliveryValues?.[i] || 0,
-        quality: proj.qualityValues?.[i] || 0,
-        tat: proj.tatValues?.[i] || 0
-      });
-    }
-    return data;
+    return Array.from({ length: len }, (_, i) => ({
+      month: proj.deliveryLabels?.[i] || `Month ${i + 1}`,
+      volume: proj.deliveryValues?.[i] || 0,
+      quality: proj.qualityValues?.[i] || 0,
+      tat: proj.tatValues?.[i] || 0,
+    }));
+  };
+
+  // Build chart data from a named metric group
+  const buildGroupTrendData = (g: {
+    deliveryLabels?: string[]; deliveryValues?: number[];
+    qualityValues?: number[]; tatValues?: number[];
+  }) => {
+    const len = g.deliveryLabels?.length || 6;
+    return Array.from({ length: len }, (_, i) => ({
+      month: g.deliveryLabels?.[i] || `M${i + 1}`,
+      volume: g.deliveryValues?.[i] || 0,
+      quality: g.qualityValues?.[i] || 0,
+      tat: g.tatValues?.[i] || 0,
+    }));
   };
 
   return (
@@ -194,93 +204,131 @@ export function CurrentProjectsDashboard({ projects, userEmail }: CurrentProject
               </div>
             </div>
 
-            {/* CHARTS CONTAINER (GRID 12) */}
+            {/* CHARTS CONTAINER — one section per metric group (or legacy single set) */}
+            {(() => {
+              const groups = selectedProj.metricGroups?.length
+                ? selectedProj.metricGroups
+                : [{
+                    id: "legacy",
+                    title: "",
+                    deliveryLabels: selectedProj.deliveryLabels,
+                    deliveryValues: selectedProj.deliveryValues,
+                    qualityLabels: selectedProj.qualityLabels,
+                    qualityValues: selectedProj.qualityValues,
+                    tatTarget: selectedProj.tatTarget,
+                    tatActual: selectedProj.tatActual,
+                    tatLabels: selectedProj.tatLabels,
+                    tatValues: selectedProj.tatValues,
+                  }];
+              return groups.map((group, gIdx) => (
+                <div key={group.id || gIdx} className="space-y-6">
+                  {groups.length > 1 && (
+                    <div className="flex items-center gap-3">
+                      <div className="h-px flex-1 bg-slate-100" />
+                      <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 px-3 py-1 bg-slate-50 border border-slate-150 rounded-full whitespace-nowrap">
+                        {group.title || `Metric Group ${gIdx + 1}`}
+                      </span>
+                      <div className="h-px flex-1 bg-slate-100" />
+                    </div>
+                  )}
+                  {groups.length > 1 && (group.tatActual || group.tatTarget) && (
+                    <div className="flex gap-6 p-4 bg-slate-50 border border-slate-150 rounded-xl text-left">
+                      {group.tatActual && (
+                        <div>
+                          <span className="block text-[10px] uppercase text-slate-400 font-semibold font-sans">Actual average TAT</span>
+                          <span className="text-slate-900 font-bold font-mono text-base">{group.tatActual}</span>
+                        </div>
+                      )}
+                      {group.tatTarget && (
+                        <div className="border-l border-slate-200 pl-4">
+                          <span className="block text-[10px] uppercase text-slate-400 font-semibold font-sans">Target TAT SLA</span>
+                          <span className="text-orange-650 font-bold font-mono text-base">{group.tatTarget}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    {/* Delivery Volumes */}
+                    {!(selectedProj.hiddenSections?.includes("deliveryVolumeChart")) && (
+                      <div className="lg:col-span-6 p-5 bg-white border border-slate-100 rounded-2xl shadow-3xs space-y-3 animate-fade-in">
+                        <div className="flex items-center justify-between border-b border-slate-50 pb-2.5">
+                          <h4 className="text-xs font-mono font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                            <TrendingUp className="h-4 w-4 text-orange-500" /> Delivery Volumes & Trends
+                          </h4>
+                          <span className="text-[10px] font-sans text-slate-400">Month-over-Month volume trends</span>
+                        </div>
+                        <div className="h-64 pt-2 font-mono text-[11px]">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={buildGroupTrendData(group)} margin={{ left: -10, right: 10, top: 10, bottom: 5 }}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                              <XAxis dataKey="month" stroke="#94a3b8" fontSize={10} />
+                              <YAxis stroke="#94a3b8" fontSize={10} />
+                              <Tooltip contentStyle={{ fontSize: 11, background: "#0f172a", borderRadius: 8, color: "#fff", border: "none" }} labelStyle={{ fontWeight: "bold" }} />
+                              <Bar dataKey="volume" name="Fulfillment Units" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Quality Trends */}
+                    {!(selectedProj.hiddenSections?.includes("qualitySLAChart")) && (
+                      <div className="lg:col-span-6 p-5 bg-white border border-slate-100 rounded-2xl shadow-3xs space-y-3 animate-fade-in">
+                        <div className="flex items-center justify-between border-b border-slate-50 pb-2.5">
+                          <h4 className="text-xs font-mono font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                            <Award className="h-4.5 w-4.5 text-emerald-500" /> Quality & SLA Fulfillment (%)
+                          </h4>
+                          <span className="text-[10px] font-sans text-slate-400">Target Benchmark: 98.0%</span>
+                        </div>
+                        <div className="h-64 pt-2 font-mono text-[11px]">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={buildGroupTrendData(group)} margin={{ left: -20, right: 10, top: 10, bottom: 5 }}>
+                              <defs>
+                                <linearGradient id={`qualityColor-${group.id || gIdx}`} x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
+                                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                                </linearGradient>
+                              </defs>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                              <XAxis dataKey="month" stroke="#94a3b8" fontSize={10} />
+                              <YAxis stroke="#94a3b8" domain={[95, 100]} fontSize={10} />
+                              <Tooltip contentStyle={{ fontSize: 11, background: "#0f172a", borderRadius: 8, color: "#fff", border: "none" }} labelStyle={{ fontWeight: "bold" }} />
+                              <Area type="monotone" name="SLA Correctness" dataKey="quality" stroke="#10b981" fillOpacity={1} fill={`url(#qualityColor-${group.id || gIdx})`} strokeWidth={2} />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* TAT Line chart */}
+                    {!(selectedProj.hiddenSections?.includes("tatChart")) && (
+                      <div className="lg:col-span-6 p-5 bg-white border border-slate-100 rounded-2xl shadow-3xs space-y-3 animate-fade-in">
+                        <div className="flex items-center justify-between border-b border-slate-50 pb-2.5">
+                          <h4 className="text-xs font-mono font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                            <Clock className="h-4 w-4 text-sky-500" /> Turnaround (TAT) reduction report
+                          </h4>
+                          <span className="text-[10px] text-slate-400">Average completion (hours)</span>
+                        </div>
+                        <div className="h-64 pt-2 font-mono text-[11px]">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={buildGroupTrendData(group)} margin={{ left: -15, right: 10, top: 10, bottom: 5 }}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                              <XAxis dataKey="month" stroke="#94a3b8" fontSize={10} />
+                              <YAxis stroke="#94a3b8" fontSize={10} />
+                              <Tooltip contentStyle={{ fontSize: 11, background: "#0f172a", borderRadius: 8, color: "#fff", border: "none" }} />
+                              <Line type="monotone" name="Completed TAT Average" dataKey="tat" stroke="#0ea5e9" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ));
+            })()}
+
+            {/* Non-per-group sections: Documents, Innovations, Feedback */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              {/* Delivery Volumes Column */}
-              {!(selectedProj.hiddenSections?.includes("deliveryVolumeChart")) && (
-                <div className="lg:col-span-6 p-5 bg-white border border-slate-100 rounded-2xl shadow-3xs space-y-3 animate-fade-in">
-                  <div className="flex items-center justify-between border-b border-slate-50 pb-2.5">
-                    <h4 className="text-xs font-mono font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                      <TrendingUp className="h-4 w-4 text-orange-500" /> Delivery Volumes & Trends
-                    </h4>
-                    <span className="text-[10px] font-sans text-slate-400">Month-over-Month volume trends</span>
-                  </div>
-
-                  <div className="h-64 pt-2 font-mono text-[11px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={buildTrendData(selectedProj)} margin={{ left:-10, right:10, top: 10, bottom: 5 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                        <XAxis dataKey="month" stroke="#94a3b8" fontSize={10} />
-                        <YAxis stroke="#94a3b8" fontSize={10} />
-                        <Tooltip 
-                          contentStyle={{ fontSize: 11, background: "#0f172a", borderRadius: 8, color: "#fff", border: "none" }}
-                          labelStyle={{ fontWeight: "bold" }}
-                        />
-                        <Bar dataKey="volume" name="Fulfillment Units" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              )}
-
-              {/* Quality Trends Column */}
-              {!(selectedProj.hiddenSections?.includes("qualitySLAChart")) && (
-                <div className="lg:col-span-6 p-5 bg-white border border-slate-100 rounded-2xl shadow-3xs space-y-3 animate-fade-in">
-                  <div className="flex items-center justify-between border-b border-slate-50 pb-2.5">
-                    <h4 className="text-xs font-mono font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                      <Award className="h-4.5 w-4.5 text-emerald-500" /> Quality & SLA Fulfillment (%)
-                    </h4>
-                    <span className="text-[10px] font-sans text-slate-400">Target Benchmark: 98.0%</span>
-                  </div>
-
-                  <div className="h-64 pt-2 font-mono text-[11px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={buildTrendData(selectedProj)} margin={{ left:-20, right:10, top: 10, bottom: 5 }}>
-                        <defs>
-                          <linearGradient id="qualityColor" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
-                            <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                        <XAxis dataKey="month" stroke="#94a3b8" fontSize={10} />
-                        <YAxis stroke="#94a3b8" domain={[95, 100]} fontSize={10} />
-                        <Tooltip 
-                          contentStyle={{ fontSize: 11, background: "#0f172a", borderRadius: 8, color: "#fff", border: "none" }}
-                          labelStyle={{ fontWeight: "bold" }}
-                        />
-                        <Area type="monotone" name="SLA Correctness" dataKey="quality" stroke="#10b981" fillOpacity={1} fill="url(#qualityColor)" strokeWidth={2} />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              )}
-
-              {/* TAT Trajectory Line chart */}
-              {!(selectedProj.hiddenSections?.includes("tatChart")) && (
-                <div className="lg:col-span-6 p-5 bg-white border border-slate-100 rounded-2xl shadow-3xs space-y-3 animate-fade-in">
-                  <div className="flex items-center justify-between border-b border-slate-50 pb-2.5">
-                    <h4 className="text-xs font-mono font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                      <Clock className="h-4 w-4 text-sky-500" /> Turnaround (TAT) reduction report
-                    </h4>
-                    <span className="text-[10px] text-slate-400">Average completion (hours)</span>
-                  </div>
-
-                  <div className="h-64 pt-2 font-mono text-[11px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={buildTrendData(selectedProj)} margin={{ left:-15, right:10, top: 10, bottom: 5 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                        <XAxis dataKey="month" stroke="#94a3b8" fontSize={10} />
-                        <YAxis stroke="#94a3b8" fontSize={10} />
-                        <Tooltip 
-                          contentStyle={{ fontSize: 11, background: "#0f172a", borderRadius: 8, color: "#fff", border: "none" }}
-                        />
-                        <Line type="monotone" name="Completed TAT Average" dataKey="tat" stroke="#0ea5e9" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              )}
 
               {/* Downloadable Source Materials Cabinet */}
               {!(selectedProj.hiddenSections?.includes("governanceDocs")) && (
