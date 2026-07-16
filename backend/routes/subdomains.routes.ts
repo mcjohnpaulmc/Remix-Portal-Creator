@@ -203,7 +203,7 @@ router.post("/subdomains", async (req, res) => {
 
   } else if (action === "delete") {
     const targetId = id || resolvedName;
-    db.subdomains = db.subdomains.filter(s => s.id !== targetId);
+    db.subdomains = db.subdomains.filter(s => s.id !== targetId && s.name !== targetId);
 
     if (db.subdomain === targetId) {
       db.subdomain = db.subdomains[0]?.name || "unilever";

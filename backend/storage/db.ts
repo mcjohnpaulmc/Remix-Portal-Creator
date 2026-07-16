@@ -252,6 +252,11 @@ export function readDatabase(): DatabaseSchema {
         parsed.subdomains.push({ id: "icis", name: "icis", displayName: "ICIS Services", createdAt: new Date().toISOString() });
         altered = true;
       }
+      // Backfill id from name for portals created before the id field was introduced
+      if (parsed.subdomains) {
+        parsed.subdomains = parsed.subdomains.map((s: any) => s.id ? s : { ...s, id: s.name });
+        altered = true;
+      }
       if (!parsed.carousel) {
         parsed.carousel = DEFAULT_CAROUSEL;
         altered = true;
