@@ -18,6 +18,7 @@ export interface SubdomainPortal {
   s3Key?: string;     // S3 prefix: 'Mobius_Portal_Creator_Hub/<slug>/'
   isDummy?: boolean;  // true = localhost-only dev portal, no subdomain/domain
   status?: "live" | "sleep"; // "live" = PM2 process running, "sleep" = stopped (port still reserved)
+  dnsStatus?: "pending" | "active" | "not_required"; // Cloudflare DNS assignment state
 }
 
 export interface Solution {

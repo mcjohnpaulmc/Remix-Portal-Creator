@@ -12,6 +12,7 @@ import { readDatabase, writeDatabase, DEFAULT_SUBDOMAINS } from "../storage/db";
 import { s3PutPortalFile } from "../storage/s3";
 import { assignNextPort, pm2SpawnPortal, pm2StopPortal } from "../portal/process";
 import { deployPortalInProcess, buildDefaultPortalJson } from "../portal/deploy";
+import { ensureDnsRecord, deleteDnsRecord, checkDnsRecord } from "../dns/cloudflare";
 import { logger } from "../logger";
 
 const router = Router();
@@ -90,6 +91,7 @@ router.post("/subdomains", async (req, res) => {
       domain: selectedDomain,
       s3Key,
       status: "sleep",
+      dnsStatus: "pending", // will be updated to "active" after Cloudflare confirms
     };
     db.subdomains.unshift(newSub);
     db.subdomain = cleanSub;
@@ -110,11 +112,19 @@ router.post("/subdomains", async (req, res) => {
       domain: selectedDomain, port, s3Key, createdAt: newSub.createdAt,
     }).catch(err => logger.error(`portal-${cleanSub}`, `Failed to init config: ${err?.message}`));
 
+    // Attempt Cloudflare DNS record creation — mark active immediately if it succeeds
+    const dnsOk = await ensureDnsRecord(cleanSub, selectedDomain).catch(() => false);
+    if (dnsOk) {
+      const portalEntry = db.subdomains.find(s => s.id === cleanSub);
+      if (portalEntry) portalEntry.dnsStatus = "active";
+      writeDatabase(db);
+    }
+
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
       email: (req as any).adminEmail || "admin@mobiusservices.co.in",
       action: "Customer Subdomain Portal Created",
-      details: `Created portal: ${cleanSub}.${selectedDomain} on port ${port}. Toggle to Live when ready.`,
+      details: `Created portal: ${cleanSub}.${selectedDomain} on port ${port}. DNS: ${dnsOk ? "active" : "pending"}.`,
       date: new Date().toISOString()
     });
 
@@ -136,6 +146,7 @@ router.post("/subdomains", async (req, res) => {
       s3Key,
       isDummy: true,
       status: "sleep",
+      dnsStatus: "not_required",
     };
     db.subdomains.unshift(newDummy);
 
@@ -173,6 +184,14 @@ router.post("/subdomains", async (req, res) => {
     }
 
     if (targetStatus === "live") {
+      // Block live toggle until DNS is confirmed (non-dummy portals only)
+      if (!portal.isDummy && portal.dnsStatus === "pending") {
+        return res.status(400).json({
+          error: "DNS not yet assigned. Refresh DNS status and wait for Cloudflare to confirm the subdomain before going live.",
+          dnsStatus: "pending",
+        });
+      }
+
       // Ensure portal has a port (assign one if missing for legacy portals)
       if (!portal.port) {
         if (!db.portAssignments) db.portAssignments = {};
@@ -188,6 +207,10 @@ router.post("/subdomains", async (req, res) => {
         logger.warn(`toggle-deploy`, `${targetId}: ${err?.message}`);
       }
       pm2SpawnPortal(targetId, portal.port);
+      // Fire-and-forget: create/update DNS A record for this subdomain
+      if (!portal.isDummy && portal.domain) {
+        ensureDnsRecord(targetId, portal.domain).catch(() => {});
+      }
     } else {
       pm2StopPortal(targetId);
     }
@@ -203,6 +226,9 @@ router.post("/subdomains", async (req, res) => {
 
   } else if (action === "delete") {
     const targetId = id || resolvedName;
+    // Capture portal info BEFORE removing from list (needed for DNS cleanup)
+    const deletedPortal = (db.subdomains || []).find(s => s.id === targetId || s.name === targetId);
+
     db.subdomains = db.subdomains.filter(s => s.id !== targetId && s.name !== targetId);
 
     if (db.subdomain === targetId) {
@@ -220,8 +246,11 @@ router.post("/subdomains", async (req, res) => {
     db.currentProjects = stripSlug(db.currentProjects || []);
     db.upcomingProjects = stripSlug(db.upcomingProjects || []);
 
-    // Stop PM2 portal process
+    // Stop PM2 portal process and remove DNS record
     pm2StopPortal(targetId);
+    if (deletedPortal && !deletedPortal.isDummy && deletedPortal.domain) {
+      deleteDnsRecord(targetId, deletedPortal.domain).catch(() => {});
+    }
 
     // Free the port assignment
     if (db.portAssignments) {
@@ -250,6 +279,35 @@ router.post("/subdomains", async (req, res) => {
 
   writeDatabase(db);
   res.json({ success: true, subdomain: db.subdomain, subdomains: db.subdomains, database: db });
+});
+
+// POST /refresh-dns — re-check and update DNS status for all pending portals
+router.post("/refresh-dns", async (req, res) => {
+  const db = readDatabase();
+  const pendingPortals = (db.subdomains || []).filter(
+    s => !s.isDummy && s.domain && s.dnsStatus === "pending"
+  );
+
+  let updated = 0;
+  await Promise.all(
+    pendingPortals.map(async (portal) => {
+      const active = await checkDnsRecord(portal.id, portal.domain!).catch(() => false);
+      if (active) {
+        portal.dnsStatus = "active";
+        updated++;
+      }
+    })
+  );
+
+  if (updated > 0) writeDatabase(db);
+
+  res.json({
+    success: true,
+    checked: pendingPortals.length,
+    activated: updated,
+    subdomains: db.subdomains,
+    database: db,
+  });
 });
 
 export default router;

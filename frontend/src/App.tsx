@@ -36,7 +36,8 @@ import {
   Eye,
   EyeOff,
   Copy,
-  Key
+  Key,
+  RefreshCw
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Solution, Collateral, UserLog, AppState, CurrentProject, UpcomingProject, CarouselItem, SubdomainPortal, PortalUser } from "../../shared/types";
@@ -519,6 +520,21 @@ export default function App() {
     } catch {
       setStartingPortals(prev => { const s = new Set(prev); s.delete(portalId); return s; });
       alert("Server error toggling portal status.");
+    }
+  };
+
+  const [refreshingDns, setRefreshingDns] = useState(false);
+  const handleRefreshDns = async () => {
+    setRefreshingDns(true);
+    try {
+      const res = await adminFetch("/api/admin/refresh-dns", { method: "POST" });
+      const data = await res.json();
+      if (data.success) await fetchPortalData();
+      else alert(data.error || "DNS refresh failed.");
+    } catch {
+      alert("Server error during DNS refresh.");
+    } finally {
+      setRefreshingDns(false);
     }
   };
 
@@ -1486,9 +1502,21 @@ export default function App() {
                         {/* List of active customer portals */}
                         <div className="lg:col-span-7 p-6 bg-slate-900 text-slate-105 border border-slate-800 rounded-2xl shadow-md text-left space-y-4 flex flex-col justify-between">
                           <div>
-                            <span className="text-[10px] bg-slate-800 text-white px-2.5 py-0.5 rounded-sm font-mono tracking-widest uppercase inline-block">
-                              Step 2: Onboard Assets & Configure
-                            </span>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[10px] bg-slate-800 text-white px-2.5 py-0.5 rounded-sm font-mono tracking-widest uppercase inline-block">
+                                Step 2: Onboard Assets & Configure
+                              </span>
+                              <button
+                                type="button"
+                                onClick={handleRefreshDns}
+                                disabled={refreshingDns}
+                                title="Refresh DNS status for pending subdomains"
+                                className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono bg-slate-700 hover:bg-slate-600 text-slate-300 rounded transition-colors disabled:opacity-50"
+                              >
+                                <RefreshCw className={`h-3 w-3 ${refreshingDns ? "animate-spin" : ""}`} />
+                                {refreshingDns ? "Checking…" : "Refresh DNS"}
+                              </button>
+                            </div>
 
                             <div className="mt-3 space-y-3 max-h-80 overflow-y-auto custom-scroll pr-1.5 font-mono text-xs">
                               {subdomainsList.map((portal) => (
@@ -1501,6 +1529,17 @@ export default function App() {
                                       <h4 className="font-display font-bold text-white text-xs">
                                         {portal.displayName}
                                       </h4>
+                                      {/* DNS status badge */}
+                                      {!portal.isDummy && portal.dnsStatus === "pending" && (
+                                        <span className="px-1.5 py-0.5 bg-amber-900/60 text-amber-300 border border-amber-700 text-[8px] font-bold uppercase rounded tracking-wider">
+                                          DNS Pending
+                                        </span>
+                                      )}
+                                      {!portal.isDummy && portal.dnsStatus === "active" && (
+                                        <span className="px-1.5 py-0.5 bg-emerald-900/50 text-emerald-400 border border-emerald-800 text-[8px] font-bold uppercase rounded tracking-wider">
+                                          DNS Active
+                                        </span>
+                                      )}
                                     </div>
                                     <span className="text-orange-400 font-mono text-[10px] block mt-0.5 truncate">
                                       {portal.isDummy
@@ -1535,10 +1574,13 @@ export default function App() {
                                             {isStarting ? "Starting…" : isLive ? "Live" : "Sleep"}
                                           </button>
 
-                                          {/* Access — only when live and not starting */}
+                                          {/* Access — only when live, not starting, and DNS confirmed */}
+                                          {(() => {
+                                            const dnsPending = !portal.isDummy && portal.dnsStatus === "pending";
+                                            return (
                                           <button
                                             type="button"
-                                            disabled={!isLive || isStarting}
+                                            disabled={!isLive || isStarting || dnsPending}
                                             onClick={() => {
                                               const url = portal.port
                                                 ? `http://${window.location.hostname}:${portal.port}`
@@ -1546,14 +1588,16 @@ export default function App() {
                                               window.open(url, "_blank");
                                             }}
                                             className={`px-2.5 py-1 font-semibold text-[10px] rounded-lg transition-colors flex items-center gap-1 ${
-                                              isLive && !isStarting
+                                              isLive && !isStarting && !dnsPending
                                                 ? "bg-slate-700 hover:bg-slate-600 text-slate-100 cursor-pointer"
                                                 : "bg-slate-800 text-slate-600 cursor-not-allowed opacity-50"
                                             }`}
-                                            title={!isLive ? "Start portal first" : isStarting ? "Starting…" : "Open portal"}
+                                            title={dnsPending ? "DNS not yet active — click Refresh DNS" : !isLive ? "Start portal first" : isStarting ? "Starting…" : "Open portal"}
                                           >
-                                            <Globe className="h-3 w-3" /> Access
+                                            <Globe className="h-3 w-3" /> {dnsPending ? "DNS Pending" : "Access"}
                                           </button>
+                                          );
+                                          })()}
                                         </>
                                       );
                                     })()}

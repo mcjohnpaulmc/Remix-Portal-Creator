@@ -18,3 +18,5 @@ export const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "";
 export const JWT_SECRET = process.env.JWT_SECRET || "";
 export const SYSTEM_ADMIN_EMAIL = "eswar@xtract.io";
 export const BCRYPT_ROUNDS = 10;
+export const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN || "";
+export const SERVER_PUBLIC_IP = process.env.SERVER_PUBLIC_IP || "";
