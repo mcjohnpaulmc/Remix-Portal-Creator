@@ -551,7 +551,7 @@ export default function App() {
       if (res.ok) {
         setSubdomain(data.subdomain);
         setLogs(data.database.userLogs || []);
-        alert(`Host subdomain pointing set to: ${data.subdomain}.mobiusservices.co.in`);
+        alert(`Host subdomain pointing set to: ${data.subdomain}.mobiusservices.io`);
       } else {
         alert(data.error);
       }
@@ -685,7 +685,7 @@ export default function App() {
             </h1>
             <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 mt-0.5 select-none text-left">
               <span className="text-[10px] font-mono text-slate-400 leading-none">
-                Portal: <strong className="text-orange-600 font-mono">{subdomain}</strong>.mobiusservices.co.in
+                Portal: <strong className="text-orange-600 font-mono">{subdomain}</strong>.mobiusservices.io
               </span>
             </div>
           </div>
@@ -1385,7 +1385,7 @@ export default function App() {
                           🚀 Customer Portals Launch Pad
                         </h3>
                         <p className="text-xs text-slate-500">
-                          Configure tenant subdomains under <strong className="font-semibold text-slate-500">mobiusservices.co.in</strong>. Create a subdomain first, prefill assets context, then proceed to organize Solutions, Case Studies, and Projects.
+                          Configure tenant subdomains under <strong className="font-semibold text-slate-500">mobiusservices.io</strong>. Create a subdomain first, prefill assets context, then proceed to organize Solutions, Case Studies, and Projects.
                         </p>
                       </div>
 
@@ -1436,7 +1436,7 @@ export default function App() {
                                   required
                                 />
                                 <div className="absolute right-3 top-2.5 text-[9.5px] font-mono text-slate-400 select-none">
-                                  .mobiusservices.co.in
+                                  .mobiusservices.io
                                 </div>
                               </div>
                               <span className="block text-[9.5px] text-slate-400 leading-normal mt-1">
@@ -1679,7 +1679,7 @@ export default function App() {
                               <option value="all">All Portals (Global)</option>
                               {subdomainsList.map((sub) => (
                                 <option key={sub.id} value={sub.name}>
-                                  {sub.displayName} ({sub.name}.mobiusservices.co.in)
+                                  {sub.displayName} ({sub.name}.mobiusservices.io)
                                 </option>
                               ))}
                             </select>
@@ -2095,7 +2095,7 @@ export default function App() {
       {userEmail && userRole === "admin" && isHub && <footer className="w-full h-12 bg-slate-900 flex items-center justify-between px-8 text-slate-400 shrink-0 font-mono text-[10px] border-t border-slate-850 relative z-30 mt-auto select-none">
         <div className="flex items-center space-x-6">
           <span className="text-[10px] font-medium tracking-widest uppercase text-slate-450 leading-none">
-            Host instance: {subdomain}.mobiusservices.co.in
+            Host instance: {subdomain}.mobiusservices.io
           </span>
           <div className="hidden md:flex space-x-4 border-l border-slate-800 pl-6 leading-none">
             <span className="text-[10px] flex items-center text-slate-400">

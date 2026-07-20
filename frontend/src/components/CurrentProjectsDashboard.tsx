@@ -106,7 +106,7 @@ export function CurrentProjectsDashboard({ projects, userEmail }: CurrentProject
                     <div>
                       {/* Subdomain Category Label */}
                       <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-[8px] px-2.5 py-0.8 bg-slate-50 border border-slate-200 text-slate-400 rounded-sm inline-block">
-                        Tenant: {proj.customerName}.mobiusservices.co.in
+                        Tenant: {proj.customerName}.mobiusservices.io
                       </span>
 
                       <h4 className="font-display font-bold text-sm text-slate-900 mt-3 group-hover:text-orange-750 transition-colors leading-snug">
@@ -178,7 +178,7 @@ export function CurrentProjectsDashboard({ projects, userEmail }: CurrentProject
             <div className="p-6 bg-white border border-slate-100 rounded-2xl shadow-3xs flex flex-col md:flex-row justify-between gap-6">
               <div className="space-y-2">
                 <span className="text-[9px] font-mono font-bold uppercase tracking-widest bg-slate-100 border text-slate-500 px-3 py-1 rounded">
-                  {selectedProj.customerName}.mobiusservices.co.in
+                  {selectedProj.customerName}.mobiusservices.io
                 </span>
                 <h3 className="font-display font-medium text-lg text-slate-950 mt-2 leading-snug">
                   {selectedProj.name}

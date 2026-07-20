@@ -88,7 +88,7 @@ export function UpcomingProjectsDashboard({ projects, userEmail }: UpcomingProje
                     {/* Status Ribbon Tag */}
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-slate-400">
-                        {proj.customerName}.mobiusservices.co.in
+                        {proj.customerName}.mobiusservices.io
                       </span>
 
                       <span className={`px-2 py-0.5 text-[9px] font-mono border rounded-sm font-bold uppercase ${getStatusBadgeColor(proj.status)}`}>

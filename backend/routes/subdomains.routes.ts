@@ -32,7 +32,7 @@ router.post("/subdomain", (req, res) => {
     id: `log-${Date.now()}`,
     email: "admin@mobiusservices.co.in",
     action: "Server Subdomain Adjusted",
-    details: `Portal host target set to: ${cleanSub}.mobiusservices.co.in`,
+    details: `Portal host target set to: ${cleanSub}.mobiusservices.io`,
     date: new Date().toISOString()
   });
 
@@ -72,7 +72,7 @@ router.post("/subdomains", async (req, res) => {
     }
     const exists = db.subdomains.some(s => s.name === cleanSub);
     if (exists) {
-      return res.status(400).json({ error: `Subdomain portal ${cleanSub}.mobiusservices.co.in already exists.` });
+      return res.status(400).json({ error: `Subdomain portal ${cleanSub}.mobiusservices.io already exists.` });
     }
 
     if (!db.portAssignments) db.portAssignments = {};

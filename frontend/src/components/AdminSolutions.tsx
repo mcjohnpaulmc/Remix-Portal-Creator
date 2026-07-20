@@ -276,7 +276,7 @@ export function AdminSolutions({
                 type="url"
                 value={appUrl}
                 onChange={(e) => setAppUrl(e.target.value)}
-                placeholder="https://dashboard.mobiusservices.co.in or http://localhost:8080"
+                placeholder="https://dashboard.mobiusservices.io or http://localhost:8080"
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-1 focus:ring-slate-800"
               />
             </div>
