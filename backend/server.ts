@@ -21,8 +21,12 @@ import aiRouter from "./routes/ai.routes";
 import uploadRouter from "./routes/upload.routes";
 import deployRouter from "./routes/deploy.routes";
 import publicRouter from "./routes/public.routes";
+import { subdomainProxyMiddleware } from "./middleware/subdomain-proxy";
 
 const app = express();
+
+// ── Subdomain proxy — MUST be first, before body parsers consume the stream ───
+app.use(subdomainProxyMiddleware);
 
 // ── Body parsers ───────────────────────────────────────────────────────────────
 app.use(express.json({ limit: "50mb" }));
