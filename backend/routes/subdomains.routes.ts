@@ -232,7 +232,7 @@ router.post("/subdomains", async (req, res) => {
     db.subdomains = db.subdomains.filter(s => s.id !== targetId && s.name !== targetId);
 
     if (db.subdomain === targetId) {
-      db.subdomain = db.subdomains[0]?.name || "unilever";
+      db.subdomain = db.subdomains[0]?.name || "";
     }
 
     // Remove the deleted portal's slug from all content mappings so nothing carries over

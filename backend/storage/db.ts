@@ -51,12 +51,7 @@ ensureDirectories();
 
 // ── Default constants ──────────────────────────────────────────────────────────
 
-export const DEFAULT_SUBDOMAINS: SubdomainPortal[] = [
-  { id: "unilever", name: "unilever", displayName: "Unilever APAC", createdAt: new Date().toISOString() },
-  { id: "reliance", name: "reliance", displayName: "Reliance Industries", createdAt: new Date().toISOString() },
-  { id: "tatamotors", name: "tatamotors", displayName: "Tata Motors Co", createdAt: new Date().toISOString() },
-  { id: "icis", name: "icis", displayName: "ICIS Services", createdAt: new Date().toISOString() }
-];
+export const DEFAULT_SUBDOMAINS: SubdomainPortal[] = [];
 
 export const DEFAULT_CAROUSEL: CarouselItem[] = [
   {
@@ -75,14 +70,6 @@ export const DEFAULT_CAROUSEL: CarouselItem[] = [
     linkType: "collateral",
     linkTarget: "col-1"
   },
-  {
-    id: "car-3",
-    title: "ICIS Portal Launch Pad",
-    description: "Access specialized customer telemetry dashboards configured securely for ICIS workflows.",
-    imageUrl: "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&q=80&w=1200",
-    linkType: "subdomain",
-    linkTarget: "icis"
-  }
 ];
 
 export const DEFAULT_CURRENT_PROJECTS: CurrentProject[] = [
@@ -247,10 +234,12 @@ export function readDatabase(): DatabaseSchema {
         parsed.subdomains = DEFAULT_SUBDOMAINS;
         altered = true;
       }
-      // Ensure icis exists in subdomains list
-      if (parsed.subdomains && !parsed.subdomains.some((s: any) => s.name === "icis")) {
-        parsed.subdomains.push({ id: "icis", name: "icis", displayName: "ICIS Services", createdAt: new Date().toISOString() });
-        altered = true;
+      // Remove legacy demo portals that were seeded in earlier versions
+      const LEGACY_PORTAL_IDS = ["unilever", "reliance", "tatamotors", "icis"];
+      if (parsed.subdomains) {
+        const before = parsed.subdomains.length;
+        parsed.subdomains = parsed.subdomains.filter((s: any) => !LEGACY_PORTAL_IDS.includes(s.id));
+        if (parsed.subdomains.length !== before) altered = true;
       }
       // Backfill id from name for portals created before the id field was introduced
       if (parsed.subdomains) {
@@ -261,8 +250,8 @@ export function readDatabase(): DatabaseSchema {
         parsed.carousel = DEFAULT_CAROUSEL;
         altered = true;
       }
-      if (!parsed.subdomain || parsed.subdomain === "retail") {
-        parsed.subdomain = "unilever";
+      if (!parsed.subdomain || parsed.subdomain === "retail" || LEGACY_PORTAL_IDS.includes(parsed.subdomain)) {
+        parsed.subdomain = parsed.subdomains?.[0]?.name || "";
         altered = true;
       }
       if (altered) {
@@ -296,7 +285,7 @@ export function readDatabase(): DatabaseSchema {
     ],
     heroText: DEFAULT_HERO_TEXT,
     heroPrompt: DEFAULT_HERO_PROMPT,
-    subdomain: "unilever",
+    subdomain: "",
     subdomains: DEFAULT_SUBDOMAINS,
     currentProjects: DEFAULT_CURRENT_PROJECTS,
     upcomingProjects: DEFAULT_UPCOMING_PROJECTS,

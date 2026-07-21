@@ -119,6 +119,7 @@ export default function App() {
   const [showDummyForm, setShowDummyForm] = useState(false);
   const [dummyPortalName, setDummyPortalName] = useState("");
   const [creatingDummy, setCreatingDummy] = useState(false);
+  const [creatingPortal, setCreatingPortal] = useState(false);
   const [startingPortals, setStartingPortals] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   // true = this is the Hub (has admin console); false = customer portal instance (read-only)
@@ -445,6 +446,7 @@ export default function App() {
 
   // Create or Delete dynamic subdomains
   const handleManageSubdomains = async (action: "create" | "delete", subdomainName: string, displayName?: string) => {
+    if (action === "create") setCreatingPortal(true);
     try {
       const res = await adminFetch("/api/admin/subdomains", {
         method: "POST",
@@ -462,6 +464,9 @@ export default function App() {
       }
     } catch (err) {
       console.error("Management error for customer portals:", err);
+      if (action === "create") alert("Server error creating portal. Check the console for details.");
+    } finally {
+      if (action === "create") setCreatingPortal(false);
     }
   };
 
@@ -758,6 +763,34 @@ export default function App() {
               />
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Portal creation loading overlay */}
+      <AnimatePresence>
+        {creatingPortal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl p-8 shadow-2xl flex flex-col items-center gap-4 max-w-xs w-full mx-4"
+            >
+              <svg className="animate-spin h-10 w-10 text-orange-600" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              <div className="text-center">
+                <p className="font-bold text-slate-900 text-sm">Creating Portal…</p>
+                <p className="text-xs text-slate-500 mt-1">Allocating port, setting up DNS, and writing config</p>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -1446,9 +1479,18 @@ export default function App() {
 
                             <button
                               type="submit"
-                              className="w-full py-2 bg-gradient-to-r from-orange-600 to-orange-800 hover:from-orange-700 hover:to-orange-900 text-white font-semibold text-xs rounded-lg transition-all"
+                              disabled={creatingPortal}
+                              className="w-full py-2 bg-gradient-to-r from-orange-600 to-orange-800 hover:from-orange-700 hover:to-orange-900 text-white font-semibold text-xs rounded-lg transition-all disabled:opacity-60 flex items-center justify-center gap-1.5"
                             >
-                              🌟 Create Portal with Subdomain
+                              {creatingPortal ? (
+                                <>
+                                  <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                  </svg>
+                                  Creating…
+                                </>
+                              ) : "🌟 Create Portal with Subdomain"}
                             </button>
                           </form>
 
