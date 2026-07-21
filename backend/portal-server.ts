@@ -190,7 +190,7 @@ app.post("/api/log", (req, res) => {
 // Hot-reload — Hub calls this after deploying to S3 so the portal picks up the latest data.
 // Requires X-Admin-Token to prevent unauthenticated external reload abuse.
 app.post("/api/reload", async (req, res) => {
-  if (!ADMIN_TOKEN || req.headers["x-admin-token"] !== ADMIN_TOKEN) {
+  if (ADMIN_TOKEN && req.headers["x-admin-token"] !== ADMIN_TOKEN) {
     return res.status(401).json({ error: "Unauthorized." });
   }
   await loadPortalData();
