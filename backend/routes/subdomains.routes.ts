@@ -184,14 +184,6 @@ router.post("/subdomains", async (req, res) => {
     }
 
     if (targetStatus === "live") {
-      // Block live toggle until DNS is confirmed (non-dummy portals only)
-      if (!portal.isDummy && portal.dnsStatus === "pending") {
-        return res.status(400).json({
-          error: "DNS not yet assigned. Refresh DNS status and wait for Cloudflare to confirm the subdomain before going live.",
-          dnsStatus: "pending",
-        });
-      }
-
       // Ensure portal has a port (assign one if missing for legacy portals)
       if (!portal.port) {
         if (!db.portAssignments) db.portAssignments = {};

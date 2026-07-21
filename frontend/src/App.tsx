@@ -493,6 +493,9 @@ export default function App() {
   };
 
   const handleTogglePortal = async (portalId: string, targetStatus: "live" | "sleep", port?: number) => {
+    const revertStatus = targetStatus === "live" ? "sleep" : "live";
+    // Optimistically flip the status immediately
+    setSubdomainsList(prev => prev.map(p => p.id === portalId ? { ...p, status: targetStatus } : p));
     if (targetStatus === "live" && port) {
       setStartingPortals(prev => new Set(prev).add(portalId));
     }
@@ -519,10 +522,14 @@ export default function App() {
           setTimeout(poll, 1500);
         }
       } else {
+        // Revert optimistic update
+        setSubdomainsList(prev => prev.map(p => p.id === portalId ? { ...p, status: revertStatus } : p));
         setStartingPortals(prev => { const s = new Set(prev); s.delete(portalId); return s; });
         alert(data.error || "Failed to toggle portal status.");
       }
     } catch {
+      // Revert optimistic update
+      setSubdomainsList(prev => prev.map(p => p.id === portalId ? { ...p, status: revertStatus } : p));
       setStartingPortals(prev => { const s = new Set(prev); s.delete(portalId); return s; });
       alert("Server error toggling portal status.");
     }
@@ -1659,12 +1666,26 @@ export default function App() {
 
                                     <button
                                       type="button"
-                                      onClick={() => {
-                                        if (confirm(`Delete portal "${portal.displayName}"?\n\nThis will stop the process and permanently delete all local files for this portal. This cannot be undone.`)) {
-                                          handleManageSubdomains("delete", portal.name);
+                                      onClick={async () => {
+                                        if (!confirm(`Delete "${portal.displayName}"?\n\nThis will stop the portal process and permanently remove all its files. This cannot be undone.`)) return;
+                                        // Optimistically remove from list immediately
+                                        setSubdomainsList(prev => prev.filter(s => s.id !== portal.id));
+                                        try {
+                                          const res = await adminFetch("/api/admin/subdomains", {
+                                            method: "POST",
+                                            body: JSON.stringify({ action: "delete", id: portal.id }),
+                                          });
+                                          const data = await res.json();
+                                          if (!data.success) {
+                                            await fetchPortalData(); // restore list on failure
+                                            alert(data.error || "Delete failed.");
+                                          }
+                                        } catch {
+                                          await fetchPortalData(); // restore list on error
+                                          alert("Server error deleting portal.");
                                         }
                                       }}
-                                      className="p-1 text-slate-400 hover:text-red-450 transition-colors cursor-pointer"
+                                      className="p-1 text-slate-400 hover:text-red-400 transition-colors cursor-pointer"
                                       title="Delete portal and all its files"
                                     >
                                       <Trash2 className="h-3.5 w-3.5" />
