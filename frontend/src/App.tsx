@@ -1544,7 +1544,7 @@ export default function App() {
                                     <span className="text-orange-400 font-mono text-[10px] block mt-0.5 truncate">
                                       {portal.isDummy
                                         ? `${window.location.hostname}:${portal.port}`
-                                        : `${portal.name}.${portal.domain || "mobiusservices.io"}${portal.port ? ` · :${portal.port}` : ""}`}
+                                        : `${portal.name}.${portal.domain || "mobiusservices.io"}`}
                                     </span>
                                   </div>
 
@@ -1582,7 +1582,7 @@ export default function App() {
                                             type="button"
                                             disabled={!isLive || isStarting || dnsPending}
                                             onClick={() => {
-                                              const url = portal.port
+                                              const url = portal.isDummy
                                                 ? `http://${window.location.hostname}:${portal.port}`
                                                 : `https://${portal.name}.${portal.domain || "mobiusservices.io"}`;
                                               window.open(url, "_blank");
@@ -2012,14 +2012,14 @@ export default function App() {
                     <div className="flex-1 flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg overflow-hidden">
                       <Globe className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                       <span className="text-xs font-mono text-orange-600 truncate">
-                        {portalSettingsTarget.port
+                        {portalSettingsTarget.isDummy
                           ? `http://${window.location.hostname}:${portalSettingsTarget.port}`
                           : `https://${portalSettingsTarget.name}.${portalSettingsTarget.domain || "mobiusservices.io"}`}
                       </span>
                     </div>
                     <button
                       onClick={() => {
-                        const url = portalSettingsTarget.port
+                        const url = portalSettingsTarget.isDummy
                           ? `http://${window.location.hostname}:${portalSettingsTarget.port}`
                           : `https://${portalSettingsTarget.name}.${portalSettingsTarget.domain || "mobiusservices.io"}`;
                         navigator.clipboard.writeText(url).catch(() => {});
@@ -2031,7 +2031,7 @@ export default function App() {
                     </button>
                     <button
                       onClick={() => {
-                        const url = portalSettingsTarget.port
+                        const url = portalSettingsTarget.isDummy
                           ? `http://${window.location.hostname}:${portalSettingsTarget.port}`
                           : `https://${portalSettingsTarget.name}.${portalSettingsTarget.domain || "mobiusservices.io"}`;
                         window.open(url, "_blank");
