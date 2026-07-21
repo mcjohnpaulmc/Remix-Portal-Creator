@@ -166,7 +166,7 @@ app.post("/api/email-login", (_req, res) => {
 // Analytics logging — forward to hub for central persistence, tagged with this portal's slug
 app.post("/api/log", (req, res) => {
   res.json({ success: true });
-  const hubPort = parseInt(process.env.PORT || "8816", 10);
+  const hubPort = parseInt(process.env.HUB_PORT || process.env.PORT || "3000", 10);
   const body = JSON.stringify({
     email: String(req.body?.email || "anonymous-viewer").slice(0, 254),
     action: String(req.body?.action || "Page View").slice(0, 128),
