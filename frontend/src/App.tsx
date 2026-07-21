@@ -446,27 +446,78 @@ export default function App() {
 
   // Create or Delete dynamic subdomains
   const handleManageSubdomains = async (action: "create" | "delete", subdomainName: string, displayName?: string) => {
-    if (action === "create") setCreatingPortal(true);
+    if (action === "create") {
+      setCreatingPortal(true);
+      const formattedSlug = subdomainName.trim().toLowerCase().replace(/[^a-z0-9-_]/g, "");
+      try {
+        const res = await adminFetch("/api/admin/subdomains", {
+          method: "POST",
+          body: JSON.stringify({ action, subdomain: subdomainName, displayName })
+        });
+        const resData = await res.json();
+        if (!resData.success) {
+          alert(resData.error || "Failed to create portal.");
+          setCreatingPortal(false);
+          return;
+        }
+        // Use response data immediately so we don't depend on a second DB read
+        const respList: SubdomainPortal[] = resData.database?.subdomains || resData.subdomains || [];
+        if (respList.length) setSubdomainsList(respList);
+
+        // Keep loading screen until the portal appears in /api/database (up to 15s)
+        const deadline = Date.now() + 15000;
+        const pollUntilAppears = async () => {
+          try {
+            const dbRes = await fetch("/api/database");
+            const dbData = await dbRes.json();
+            const list: SubdomainPortal[] = dbData.subdomains || [];
+            if (list.some((s: SubdomainPortal) => s.id === formattedSlug || s.name === formattedSlug)) {
+              setSolutions(dbData.solutions || []);
+              setCollaterals(dbData.collaterals || []);
+              setSubdomainsList(list);
+              setCurrentProjects(dbData.currentProjects || []);
+              setUpcomingProjects(dbData.upcomingProjects || []);
+              setLogs(dbData.userLogs || []);
+              setHeroText(dbData.heroText || "");
+              setCarousel(dbData.carousel || []);
+              setSubdomain(dbData.subdomain || "");
+              setPortalUsers(dbData.users || []);
+              setNewSubdomainSlug("");
+              setNewSubdomainDisplayName("");
+              setCreatingPortal(false);
+              return;
+            }
+          } catch {}
+          if (Date.now() < deadline) {
+            setTimeout(pollUntilAppears, 1500);
+          } else {
+            // Timed out — use response data we already have and dismiss
+            setNewSubdomainSlug("");
+            setNewSubdomainDisplayName("");
+            setCreatingPortal(false);
+          }
+        };
+        pollUntilAppears();
+      } catch (err) {
+        console.error("Error creating portal:", err);
+        alert("Server error creating portal. Check the console for details.");
+        setCreatingPortal(false);
+      }
+      return;
+    }
+
+    // Delete path
     try {
       const res = await adminFetch("/api/admin/subdomains", {
         method: "POST",
-        body: JSON.stringify({ action, subdomain: subdomainName, displayName })
+        body: JSON.stringify({ action, subdomain: subdomainName })
       });
       const resData = await res.json();
-      if (resData.success) {
-        await fetchPortalData();
-        if (action === "create") {
-          setNewSubdomainSlug("");
-          setNewSubdomainDisplayName("");
-        }
-      } else {
+      if (!resData.success) {
         alert(resData.error || "Persistence mismatch handling portal list.");
       }
     } catch (err) {
       console.error("Management error for customer portals:", err);
-      if (action === "create") alert("Server error creating portal. Check the console for details.");
-    } finally {
-      if (action === "create") setCreatingPortal(false);
     }
   };
 
@@ -506,7 +557,10 @@ export default function App() {
       });
       const data = await res.json();
       if (data.success) {
-        await fetchPortalData();
+        // Update list directly from response — avoids a second DB read that may race
+        const freshList: SubdomainPortal[] = data.database?.subdomains || data.subdomains || [];
+        if (freshList.length) setSubdomainsList(freshList);
+        else await fetchPortalData();
         // Poll the portal port until it responds (up to 20s)
         if (targetStatus === "live" && port) {
           const url = `http://${window.location.hostname}:${port}/api/portal-info`;
