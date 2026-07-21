@@ -211,7 +211,7 @@ export default function App() {
         setViewMode("user");
       }
 
-      const res = await fetch("/api/database");
+      const res = await fetch("/api/database", { cache: "no-store" });
       const data = await res.json();
       setSolutions(data.solutions || []);
       setCollaterals(data.collaterals || []);
@@ -223,10 +223,10 @@ export default function App() {
       setHeroPrompt(data.heroPrompt || "");
       setLogo(data.logo || "");
       setCarousel(data.carousel || []);
-      setSubdomain(data.subdomain || "unilever");
+      setSubdomain(data.subdomain || "");
       setPortalUsers(data.users || []);
       setAdminHeroPrompt(data.heroPrompt || "");
-      setAdminSubdomainInput(data.subdomain || "unilever");
+      setAdminSubdomainInput(data.subdomain || "");
     } catch (err) {
       console.error("Failed to load initial portal data:", err);
     } finally {
@@ -468,7 +468,7 @@ export default function App() {
         const deadline = Date.now() + 15000;
         const pollUntilAppears = async () => {
           try {
-            const dbRes = await fetch("/api/database");
+            const dbRes = await fetch("/api/database", { cache: "no-store" });
             const dbData = await dbRes.json();
             const list: SubdomainPortal[] = dbData.subdomains || [];
             if (list.some((s: SubdomainPortal) => s.id === formattedSlug || s.name === formattedSlug)) {
@@ -595,8 +595,14 @@ export default function App() {
     try {
       const res = await adminFetch("/api/admin/refresh-dns", { method: "POST" });
       const data = await res.json();
-      if (data.success) await fetchPortalData();
-      else alert(data.error || "DNS refresh failed.");
+      if (data.success) {
+        // Use response data directly — avoids a second GET that may return a cached result
+        const freshList: SubdomainPortal[] = data.database?.subdomains || data.subdomains || [];
+        if (freshList.length > 0) setSubdomainsList(freshList);
+        else await fetchPortalData();
+      } else {
+        alert(data.error || "DNS refresh failed.");
+      }
     } catch {
       alert("Server error during DNS refresh.");
     } finally {
@@ -1730,7 +1736,11 @@ export default function App() {
                                             body: JSON.stringify({ action: "delete", id: portal.id }),
                                           });
                                           const data = await res.json();
-                                          if (!data.success) {
+                                          if (data.success) {
+                                            // Use response list to confirm delete persisted
+                                            const freshList: SubdomainPortal[] = data.database?.subdomains || data.subdomains || [];
+                                            setSubdomainsList(freshList);
+                                          } else {
                                             await fetchPortalData(); // restore list on failure
                                             alert(data.error || "Delete failed.");
                                           }

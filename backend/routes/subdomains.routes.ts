@@ -218,6 +218,9 @@ router.post("/subdomains", async (req, res) => {
 
   } else if (action === "delete") {
     const targetId = id || resolvedName;
+    if (!targetId) {
+      return res.status(400).json({ error: "Portal ID is required for delete." });
+    }
     // Capture portal info BEFORE removing from list (needed for DNS cleanup)
     const deletedPortal = (db.subdomains || []).find(s => s.id === targetId || s.name === targetId);
 
