@@ -169,6 +169,26 @@ export function AdminSolutions({
     }
   };
 
+  // Clear optimistic overrides once the solutions prop has caught up to reflect the saved value.
+  // This prevents the UI from flashing back to the stale prop value when finally() runs before
+  // the parent's setSolutions re-render has been committed.
+  React.useEffect(() => {
+    if (Object.keys(optimisticEnabled).length === 0) return;
+    setOptimisticEnabled(prev => {
+      const next = { ...prev };
+      let changed = false;
+      for (const [id, enabled] of Object.entries(next)) {
+        const match = solutions.find(s => s.id === id);
+        // Prop has caught up: actual value equals optimistic, or solution was deleted
+        if (!match || (match.enabled !== false) === enabled) {
+          delete next[id];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [solutions]);
+
   const handleToggleEnable = async (sol: Solution) => {
     if (togglingId) return;
     const currentEnabled = sol.id in optimisticEnabled ? optimisticEnabled[sol.id] : sol.enabled !== false;
@@ -178,10 +198,12 @@ export function AdminSolutions({
     try {
       await onRefresh("update", { ...sol, enabled: nextState });
     } catch {
+      // Revert optimistic state on failure
       setOptimisticEnabled(prev => { const n = { ...prev }; delete n[sol.id]; return n; });
     } finally {
       setTogglingId(null);
-      setOptimisticEnabled(prev => { const n = { ...prev }; delete n[sol.id]; return n; });
+      // Do NOT clear optimisticEnabled here — the useEffect above clears it once
+      // the solutions prop actually reflects the saved value, preventing the flash.
     }
   };
 
