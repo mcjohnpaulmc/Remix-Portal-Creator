@@ -20,3 +20,4 @@ export const BCRYPT_ROUNDS = 10;
 export const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN || "";
 export const SERVER_PUBLIC_IP = process.env.SERVER_PUBLIC_IP || "";
 export const HUB_ORIGIN = process.env.HUB_ORIGIN || "http://localhost:3000";
+export const IIS_PORTALS_DIR = process.env.IIS_PORTALS_DIR || "C:\\iis-portals";

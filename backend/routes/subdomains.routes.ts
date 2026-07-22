@@ -13,6 +13,7 @@ import { s3PutPortalFile } from "../storage/s3";
 import { assignNextPort, pm2SpawnPortal, pm2StopPortal } from "../portal/process";
 import { deployPortalInProcess, buildDefaultPortalJson } from "../portal/deploy";
 import { ensureDnsRecord, deleteDnsRecord, checkDnsRecord } from "../dns/cloudflare";
+import { ensureIisSite, removeIisSite } from "../iis/site";
 import { logger } from "../logger";
 
 const router = Router();
@@ -199,12 +200,16 @@ router.post("/subdomains", async (req, res) => {
         logger.warn(`toggle-deploy`, `${targetId}: ${err?.message}`);
       }
       pm2SpawnPortal(targetId, portal.port);
-      // Fire-and-forget: create/update DNS A record for this subdomain
+      // Fire-and-forget: DNS + IIS site for real (non-dummy) portals
       if (!portal.isDummy && portal.domain) {
         ensureDnsRecord(targetId, portal.domain).catch(() => {});
+        ensureIisSite(targetId, `${targetId}.${portal.domain}`, portal.port).catch(() => {});
       }
     } else {
       pm2StopPortal(targetId);
+      if (!portal.isDummy) {
+        removeIisSite(targetId).catch(() => {});
+      }
     }
 
     portal.status = targetStatus;
@@ -241,10 +246,13 @@ router.post("/subdomains", async (req, res) => {
     db.currentProjects = stripSlug(db.currentProjects || []);
     db.upcomingProjects = stripSlug(db.upcomingProjects || []);
 
-    // Stop PM2 portal process and remove DNS record
+    // Stop PM2 portal process, remove DNS record and IIS site
     pm2StopPortal(targetId);
     if (deletedPortal && !deletedPortal.isDummy && deletedPortal.domain) {
       deleteDnsRecord(targetId, deletedPortal.domain).catch(() => {});
+    }
+    if (deletedPortal && !deletedPortal.isDummy) {
+      removeIisSite(targetId).catch(() => {});
     }
 
     // Free the port assignment
