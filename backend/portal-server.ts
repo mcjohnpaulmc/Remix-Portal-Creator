@@ -110,13 +110,21 @@ function buildEmptyPortal() {
 const app = express();
 app.use(express.json());
 
-// CORS — the admin hub polls /api/portal-info from a different port, so public
-// API endpoints must allow cross-origin requests from any hub origin.
-app.use((_req, res, next) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Admin-Token");
-  if (_req.method === "OPTIONS") { res.sendStatus(204); return; }
+// CORS — only allow requests from the configured hub origin (never wildcard).
+// X-Admin-Token is intentionally absent — it is a server-to-server header only.
+const HUB_ORIGIN_ENV = process.env.HUB_ORIGIN || "http://localhost:3000";
+const ALLOWED_ORIGINS = new Set(HUB_ORIGIN_ENV.split(",").map(o => o.trim()).filter(Boolean));
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin || "";
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+  }
+  if (req.method === "OPTIONS") { res.sendStatus(204); return; }
   next();
 });
 
@@ -187,10 +195,15 @@ app.post("/api/log", (req, res) => {
   } catch { /* best-effort */ }
 });
 
-// Hot-reload — Hub calls this after deploying to S3 so the portal picks up the latest data.
-// Requires X-Admin-Token to prevent unauthenticated external reload abuse.
+// Hot-reload — Hub calls this after deploying so the portal picks up the latest data.
+// Double-guarded: only localhost can reach it (IP check) AND must carry ADMIN_TOKEN.
 app.post("/api/reload", async (req, res) => {
-  if (ADMIN_TOKEN && req.headers["x-admin-token"] !== ADMIN_TOKEN) {
+  const remote = req.socket.remoteAddress;
+  const isLocal = remote === "127.0.0.1" || remote === "::1" || remote === "::ffff:127.0.0.1";
+  if (!isLocal) {
+    return res.status(403).json({ error: "Forbidden." });
+  }
+  if (!ADMIN_TOKEN || req.headers["x-admin-token"] !== ADMIN_TOKEN) {
     return res.status(401).json({ error: "Unauthorized." });
   }
   await loadPortalData();

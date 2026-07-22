@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import { ShieldCheck, Mail, AlertTriangle, Building, ArrowRight, Eye, EyeOff, Copy, Check, Key, X, Lock } from "lucide-react";
 import { motion } from "motion/react";
 import { Solution } from "../../../shared/types";
-import { storeAuthToken } from "../api/client";
 
 interface AccessWallProps {
   onSuccess: (email: string, name?: string, role?: string) => void;
@@ -76,7 +75,6 @@ export function AccessWall({ onSuccess, onClose, solutions = [], targetSolutionI
         localStorage.setItem("mobius_work_email", data.email);
         localStorage.setItem("mobius_user_name", data.name || "");
         localStorage.setItem("mobius_user_role", data.role || "viewer");
-        if (data.token) storeAuthToken(data.token);
         onSuccess(data.email, data.name, data.role);
       }
     } catch {

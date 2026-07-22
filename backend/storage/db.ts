@@ -14,7 +14,7 @@ import {
   PortalUser,
   CarouselItem,
 } from "../../shared/types";
-import { DATA_DIR, DATA_FILE, UPLOADS_DIR, PORTALS_DIR } from "../config";
+import { DATA_DIR, DATA_FILE, PORTALS_DIR } from "../config";
 
 // Internal user record — includes passwordHash, never sent to frontend
 export interface InternalUser extends PortalUser {
@@ -43,7 +43,6 @@ export type { CarouselItem };
 // Ensure required directories exist (called at module load)
 function ensureDirectories(): void {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-  if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
   if (!fs.existsSync(PORTALS_DIR)) fs.mkdirSync(PORTALS_DIR, { recursive: true });
 }
 

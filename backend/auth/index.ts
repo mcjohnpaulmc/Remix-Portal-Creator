@@ -3,13 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import fs from "fs";
-import path from "path";
 import { createHash } from "crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import express from "express";
-import { BCRYPT_ROUNDS, ADMIN_TOKEN, JWT_SECRET as CFG_JWT_SECRET, DATA_DIR } from "../config";
+import { BCRYPT_ROUNDS, ADMIN_TOKEN, JWT_SECRET as CFG_JWT_SECRET } from "../config";
 import { readDatabase, InternalUser } from "../storage/db";
 import { logger } from "../logger";
 
@@ -41,42 +39,52 @@ export function verifyPassword(
 }
 
 // ── JWT secret ─────────────────────────────────────────────────────────────────
-// Prefer JWT_SECRET from env (required for multi-machine clusters).
-// If unset, derive a stable machine-local secret persisted in data/.jwt-secret
-// so sessions survive server restarts on single-machine deployments.
+// In production JWT_SECRET must be set in the environment — no fallback is
+// allowed because the Windows filesystem does not enforce 0o600 permissions
+// on persisted secret files, making any auto-generated file world-readable.
 
-let effectiveJwtSecret: string;
-if (!CFG_JWT_SECRET) {
-  const secretFile = path.join(DATA_DIR, ".jwt-secret");
-  let stable: string;
-  try {
-    stable = fs.readFileSync(secretFile, "utf-8").trim();
-    if (stable.length < 32) throw new Error("too short");
-  } catch {
-    stable = createHash("sha256").update(`jwt-${Math.random()}${Date.now()}`).digest("hex");
-    try {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-      fs.writeFileSync(secretFile, stable, { mode: 0o600 });
-    } catch { /* non-fatal — falls back to in-memory secret this boot */ }
-  }
-  effectiveJwtSecret = stable;
-  logger.warn(
-    "Auth",
-    "JWT_SECRET env var not set — using persisted machine-local secret from data/.jwt-secret. Set JWT_SECRET in .env for multi-server deployments."
+if (process.env.NODE_ENV === "production" && !CFG_JWT_SECRET) {
+  // eslint-disable-next-line no-console
+  console.error(
+    "[Auth] FATAL: JWT_SECRET env var is not set. " +
+    "Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\" " +
+    "and add it to your .env file."
   );
-} else {
-  effectiveJwtSecret = CFG_JWT_SECRET;
+  process.exit(1);
 }
 
-let effectiveAdminToken: string;
-if (!ADMIN_TOKEN) {
-  effectiveAdminToken = createHash("sha256").update(`admin-${Math.random()}${Date.now()}`).digest("hex");
+export const effectiveJwtSecret: string = CFG_JWT_SECRET ||
+  createHash("sha256").update(`jwt-${Math.random()}${Date.now()}`).digest("hex");
+
+if (!CFG_JWT_SECRET) {
   logger.warn(
     "Auth",
-    "ADMIN_TOKEN env var not set — using ephemeral random token for X-Admin-Token header. Set ADMIN_TOKEN in .env for server-to-server calls."
+    "JWT_SECRET env var not set — using in-memory ephemeral secret (dev only). " +
+    "Sessions will not survive a server restart. Set JWT_SECRET in .env for production."
   );
-} else {
-  effectiveAdminToken = ADMIN_TOKEN;
+}
+
+// ── Admin token ────────────────────────────────────────────────────────────────
+
+if (process.env.NODE_ENV === "production" && !ADMIN_TOKEN) {
+  // eslint-disable-next-line no-console
+  console.error(
+    "[Auth] FATAL: ADMIN_TOKEN env var is not set. " +
+    "Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\" " +
+    "and add it to your .env file."
+  );
+  process.exit(1);
+}
+
+export const effectiveAdminToken: string = ADMIN_TOKEN ||
+  createHash("sha256").update(`admin-${Math.random()}${Date.now()}`).digest("hex");
+
+if (!ADMIN_TOKEN) {
+  logger.warn(
+    "Auth",
+    "ADMIN_TOKEN env var not set — using ephemeral random token (dev only). " +
+    "Set ADMIN_TOKEN in .env so portal processes can receive hot-reload signals."
+  );
 }
 
 // ── In-memory users cache ──────────────────────────────────────────────────────
@@ -91,10 +99,20 @@ export function setUsersCache(users: InternalUser[] | null): void {
   usersCache = users;
 }
 
-// ── JWT issue ─────────────────────────────────────────────────────────────────
+// ── JWT issue / verify helpers ─────────────────────────────────────────────────
 
 export function issueJwt(email: string, role: string): string {
   return jwt.sign({ email, role }, effectiveJwtSecret, { expiresIn: "12h" });
+}
+
+function extractJwtFromRequest(req: express.Request): string | null {
+  // Prefer HttpOnly cookie (browser sessions)
+  const cookieToken = (req as any).cookies?.mobius_token as string | undefined;
+  if (cookieToken) return cookieToken;
+  // Fall back to Authorization header (server-to-server / Postman)
+  const authHeader = req.headers["authorization"];
+  if (authHeader && authHeader.startsWith("Bearer ")) return authHeader.slice(7);
+  return null;
 }
 
 // ── Admin auth middleware ──────────────────────────────────────────────────────
@@ -111,12 +129,11 @@ export function requireAdminAuth(
     return;
   }
 
-  // Path 2: browser session — signed JWT issued by /api/login
-  const authHeader = req.headers["authorization"];
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    const jwtToken = authHeader.slice(7);
+  // Path 2: browser session — signed JWT (cookie or Authorization header)
+  const jwtRaw = extractJwtFromRequest(req);
+  if (jwtRaw) {
     try {
-      const payload = jwt.verify(jwtToken, effectiveJwtSecret) as { email: string; role: string };
+      const payload = jwt.verify(jwtRaw, effectiveJwtSecret) as { email: string; role: string };
       if (payload.role === "admin") {
         // Confirm user is still enabled in the live user list
         const users: InternalUser[] = usersCache ?? (readDatabase().users || []);
@@ -134,5 +151,27 @@ export function requireAdminAuth(
     }
   }
 
+  res.status(401).json({ error: "Unauthorized." });
+}
+
+// ── Any-user auth middleware (viewer or admin) ─────────────────────────────────
+// Used to gate endpoints that require a login but not necessarily admin role
+// (e.g. GET /api/database on the hub).
+
+export function requireAnyAuth(
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
+): void {
+  const jwtRaw = extractJwtFromRequest(req);
+  if (jwtRaw) {
+    try {
+      jwt.verify(jwtRaw, effectiveJwtSecret);
+      next();
+      return;
+    } catch {
+      // Invalid or expired
+    }
+  }
   res.status(401).json({ error: "Unauthorized." });
 }

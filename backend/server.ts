@@ -5,6 +5,7 @@
 
 import 'dotenv/config';
 import express from "express";
+import cookieParser from "cookie-parser";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { PORT } from "./config";
@@ -28,7 +29,8 @@ const app = express();
 // ── Subdomain proxy — MUST be first, before body parsers consume the stream ───
 app.use(subdomainProxyMiddleware);
 
-// ── Body parsers ───────────────────────────────────────────────────────────────
+// ── Body parsers & cookie parser ──────────────────────────────────────────────
+app.use(cookieParser());
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 

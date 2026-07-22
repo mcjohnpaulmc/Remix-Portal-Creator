@@ -11,6 +11,31 @@ import { s3SyncUsers } from "../storage/s3";
 
 const router = Router();
 
+const IS_PROD = process.env.NODE_ENV === "production";
+
+// 12 hours in seconds
+const SESSION_MAX_AGE = 12 * 60 * 60;
+
+function setSessionCookie(res: any, token: string): void {
+  res.cookie("mobius_token", token, {
+    httpOnly: true,
+    secure: IS_PROD,
+    sameSite: "strict" as const,
+    maxAge: SESSION_MAX_AGE * 1000,
+    path: "/",
+  });
+}
+
+function clearSessionCookie(res: any): void {
+  res.cookie("mobius_token", "", {
+    httpOnly: true,
+    secure: IS_PROD,
+    sameSite: "strict" as const,
+    maxAge: 0,
+    path: "/",
+  });
+}
+
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
@@ -19,7 +44,7 @@ const loginLimiter = rateLimit({
   message: { error: "Too many login attempts. Please try again in 15 minutes." },
 });
 
-// POST /api/login — validates email + password against S3-sourced users cache
+// POST /api/login — validates email + password, issues JWT as an HttpOnly cookie
 router.post("/api/login", loginLimiter, (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
@@ -56,12 +81,19 @@ router.post("/api/login", loginLimiter, (req, res) => {
   });
   writeDatabase(db);
 
-  // Issue a signed JWT for admin users so the frontend can make authenticated admin API calls
-  const sessionToken = user.role === "admin"
-    ? issueJwt(normalized, user.role)
-    : undefined;
+  // Issue JWT for all users and deliver it as an HttpOnly cookie.
+  // The token field in the body is kept for backward compatibility (scripts/Postman)
+  // but browsers should rely on the cookie going forward.
+  const sessionToken = issueJwt(normalized, user.role);
+  setSessionCookie(res, sessionToken);
 
   res.json({ success: true, email: normalized, name: user.name, role: user.role, token: sessionToken });
+});
+
+// POST /api/logout — clears the session cookie
+router.post("/api/logout", (_req, res) => {
+  clearSessionCookie(res);
+  res.json({ success: true });
 });
 
 // POST /api/email-login — kept for backward compatibility

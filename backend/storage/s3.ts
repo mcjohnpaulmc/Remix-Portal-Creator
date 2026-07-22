@@ -48,6 +48,27 @@ export async function s3GetPortalFile(slug: string, filename: string): Promise<a
   }
 }
 
+export async function s3PutUpload(slug: string, filename: string, buffer: Buffer, contentType: string): Promise<void> {
+  const key = `${S3_PREFIX}/uploads/${slug}/${filename}`;
+  await s3.send(new PutObjectCommand({
+    Bucket: S3_BUCKET,
+    Key: key,
+    Body: buffer,
+    ContentType: contentType,
+  }));
+  logger.info("S3", `Uploaded s3://${S3_BUCKET}/${key}`);
+}
+
+export async function s3GetUpload(slug: string, filename: string): Promise<{ body: any; contentType: string | undefined } | null> {
+  const key = `${S3_PREFIX}/uploads/${slug}/${filename}`;
+  try {
+    const resp = await s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: key }));
+    return { body: resp.Body, contentType: resp.ContentType };
+  } catch {
+    return null;
+  }
+}
+
 export async function s3SyncUsers(users: InternalUser[]): Promise<void> {
   const key = `${S3_PREFIX}/users.json`;
   const payload = {

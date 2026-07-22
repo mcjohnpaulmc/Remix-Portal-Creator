@@ -7,6 +7,7 @@ import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { PortalUser, UserLog } from "../../shared/types";
 import { readDatabase, writeDatabase } from "../storage/db";
+import { requireAnyAuth } from "../auth";
 
 const router = Router();
 
@@ -22,11 +23,12 @@ const logLimiter = rateLimit({
   message: { error: "Too many log requests." },
 });
 
-// GET /api/database — strips passwordHash from users before sending to frontend
-router.get("/api/database", (_req, res) => {
+// GET /api/database — requires any valid session; strips passwordHash and portAssignments
+router.get("/api/database", requireAnyAuth, (_req, res) => {
   const db = readDatabase();
-  const safeUsers: PortalUser[] = (db.users || []).map(({ passwordHash: _ph, ...safe }) => safe);
-  res.json({ ...db, users: safeUsers });
+  const { portAssignments: _pa, ...safeDb } = db as any;
+  const safeUsers: PortalUser[] = (safeDb.users || []).map(({ passwordHash: _ph, ...safe }: any) => safe);
+  res.json({ ...safeDb, users: safeUsers });
 });
 
 // GET /api/portal-info — hub identity endpoint

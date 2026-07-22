@@ -324,12 +324,12 @@ export default function App() {
     }
   };
 
-  // Sign out
-  const handleSignOut = () => {
+  // Sign out — clears the HttpOnly session cookie server-side, then local state
+  const handleSignOut = async () => {
+    try { await fetch("/api/logout", { method: "POST", credentials: "include" }); } catch {}
     localStorage.removeItem("mobius_work_email");
     localStorage.removeItem("mobius_user_name");
     localStorage.removeItem("mobius_user_role");
-    localStorage.removeItem("mobius_admin_token");
     setUserEmail(null);
     setUserName(null);
     setUserRole(null);
