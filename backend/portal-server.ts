@@ -73,19 +73,21 @@ async function loadPortalData(): Promise<void> {
     }
   }
 
-  // Always refresh the global users list from S3 — it is the auth source of truth
-  try {
-    const usersKey = `${S3_PREFIX}/users.json`;
-    const uresp = await s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: usersKey }));
-    const ubody = await (uresp.Body as any).transformToString();
-    const { users } = JSON.parse(ubody);
-    if (Array.isArray(users)) {
-      portalData.users = users;
-      console.log(`[portal-${SLUG}] Loaded ${users.length} users from global users.json`);
-    }
-  } catch {
-    // users.json may not exist yet — fall back to users embedded in portal.json
-  }
+  // Refresh the global users list (has passwordHash) from S3 in the background.
+  // This must not block the reload response — the portal reads portal.json from disk
+  // instantly and is ready to serve requests immediately after local load completes.
+  s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: `${S3_PREFIX}/users.json` }))
+    .then(async (uresp) => {
+      const ubody = await (uresp.Body as any).transformToString();
+      const { users } = JSON.parse(ubody);
+      if (Array.isArray(users) && portalData) {
+        portalData.users = users;
+        console.log(`[portal-${SLUG}] Refreshed ${users.length} users from global users.json`);
+      }
+    })
+    .catch(() => {
+      // users.json may not exist yet — users embedded in portal.json are used instead
+    });
 }
 
 function buildEmptyPortal() {

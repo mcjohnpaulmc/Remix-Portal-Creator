@@ -32,6 +32,8 @@ export function AdminSolutions({
 }: AdminSolutionsProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [optimisticEnabled, setOptimisticEnabled] = useState<Record<string, boolean>>({});
 
   // Form states
   const [customerNames, setCustomerNames] = useState<string[]>(["all"]);
@@ -168,8 +170,19 @@ export function AdminSolutions({
   };
 
   const handleToggleEnable = async (sol: Solution) => {
-    const nextState = sol.enabled === false ? true : false;
-    await onRefresh("update", { ...sol, enabled: nextState });
+    if (togglingId) return;
+    const currentEnabled = sol.id in optimisticEnabled ? optimisticEnabled[sol.id] : sol.enabled !== false;
+    const nextState = !currentEnabled;
+    setOptimisticEnabled(prev => ({ ...prev, [sol.id]: nextState }));
+    setTogglingId(sol.id);
+    try {
+      await onRefresh("update", { ...sol, enabled: nextState });
+    } catch {
+      setOptimisticEnabled(prev => { const n = { ...prev }; delete n[sol.id]; return n; });
+    } finally {
+      setTogglingId(null);
+      setOptimisticEnabled(prev => { const n = { ...prev }; delete n[sol.id]; return n; });
+    }
   };
 
   const handleDelete = async (sol: Solution) => {
@@ -540,12 +553,14 @@ export function AdminSolutions({
 
       {/* Solutions Catalogue Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {solutions.map((sol) => (
+        {solutions.map((sol) => {
+          const effectiveEnabled = sol.id in optimisticEnabled ? optimisticEnabled[sol.id] : sol.enabled !== false;
+          return (
           <div
             key={sol.id}
             id={`onboarded-${sol.id}`}
             className={`flex gap-4 p-4.5 bg-white rounded-2xl border transition-all relative overflow-hidden group ${
-              sol.enabled === false ? "border-slate-200 bg-slate-50/50 opacity-80" : "border-slate-100 hover:border-slate-200 hover:shadow-2xs"
+              !effectiveEnabled ? "border-slate-200 bg-slate-50/50 opacity-80" : "border-slate-100 hover:border-slate-200 hover:shadow-2xs"
             }`}
           >
             {/* Visual preview */}
@@ -563,7 +578,7 @@ export function AdminSolutions({
               <div>
                 <h4 className="font-display font-semibold text-xs text-slate-900 uppercase tracking-wide truncate flex items-center gap-1.5">
                   <span className="truncate">{sol.title}</span>
-                  {sol.enabled === false ? (
+                  {!effectiveEnabled ? (
                     <span className="shrink-0 text-[8px] bg-amber-50 text-amber-600 border border-amber-200 px-1 py-0.5 rounded-sm uppercase tracking-wide font-semibold font-sans">
                       Hidden
                     </span>
@@ -607,15 +622,24 @@ export function AdminSolutions({
                 <button
                   type="button"
                   onClick={() => handleToggleEnable(sol)}
-                  className={`flex items-center gap-1 px-2 py-1 rounded border text-[10px] font-semibold transition-all whitespace-nowrap ${
-                    sol.enabled === false
+                  disabled={togglingId === sol.id}
+                  className={`relative flex items-center gap-1 px-2 py-1 rounded border text-[10px] font-semibold transition-all whitespace-nowrap overflow-hidden ${
+                    !effectiveEnabled
                       ? "bg-emerald-50 border-emerald-200 hover:bg-emerald-100 text-emerald-700 font-sans"
                       : "bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700 font-sans"
                   }`}
-                  title={sol.enabled === false ? "Show on User View" : "Hide from User View"}
+                  title={!effectiveEnabled ? "Show on User View" : "Hide from User View"}
                 >
-                  {sol.enabled === false ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
-                  <span>{sol.enabled === false ? "Show" : "Hide"}</span>
+                  {togglingId === sol.id && (
+                    <span className="absolute bottom-0 left-0 h-0.5 w-full overflow-hidden">
+                      <span
+                        className="absolute h-full bg-slate-500"
+                        style={{ width: "45%", animation: "indeterminate-bar 1.2s linear infinite" }}
+                      />
+                    </span>
+                  )}
+                  {!effectiveEnabled ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+                  <span>{!effectiveEnabled ? "Show" : "Hide"}</span>
                 </button>
                 <button
                   type="button"
@@ -637,7 +661,8 @@ export function AdminSolutions({
               </button>
             </div>
           </div>
-        ))}
+        );
+        })}
         {solutions.length === 0 && (
           <div className="md:col-span-2 text-center p-8 bg-slate-50 rounded-2xl border border-slate-150">
             <p className="text-xs text-slate-400 font-mono">No corporate solutions onboarded as of this session.</p>

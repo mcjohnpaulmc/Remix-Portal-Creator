@@ -36,3 +36,8 @@ pre, code {
 .custom-scroll::-webkit-scrollbar-thumb:hover {
   background: rgba(156, 163, 175, 0.5);
 }
+
+@keyframes indeterminate-bar {
+  0%   { left: -45%; }
+  100% { left: 100%; }
+}

@@ -34,7 +34,7 @@ export async function deployPortalInProcess(
 
   const portalJson = buildPortalSnapshot(cleanSlug, db, subdomainInfo);
 
-  // Write local snapshot
+  // Write local snapshot — this is the primary content source; portal reads from disk.
   let localWriteOk = false;
   try {
     fs.writeFileSync(path.join(portalDir, "portal.json"), JSON.stringify(portalJson, null, 2), "utf-8");
@@ -43,16 +43,8 @@ export async function deployPortalInProcess(
     logger.error(`portal-${cleanSlug}`, `Failed to write local portal.json: ${err?.message}`);
   }
 
-  // Upload to S3 before signaling reload so S3 is consistent when the portal reads it
-  let s3Ok = false;
-  try {
-    await s3PutPortalFile(cleanSlug, "portal.json", portalJson);
-    s3Ok = true;
-  } catch {
-    // S3 upload failed; portal will still reload correctly from local file
-  }
-
-  // Signal the live portal process to hot-reload its data
+  // Signal reload immediately after local write — the portal reads from disk, so there
+  // is no reason to wait for S3 before sending the signal.
   const portalPort = subdomainInfo?.port || (db.portAssignments || {})[cleanSlug];
   let reloadOk = false;
   if (portalPort) {
@@ -71,7 +63,10 @@ export async function deployPortalInProcess(
     });
   }
 
-  return { localWriteOk, s3Ok, reloadOk };
+  // S3 upload is fire-and-forget — only needed for cold-start recovery on new machines.
+  s3PutPortalFile(cleanSlug, "portal.json", portalJson).catch(() => {});
+
+  return { localWriteOk, s3Ok: true, reloadOk };
 }
 
 /**
