@@ -268,6 +268,18 @@ export default function App() {
     };
   }, []);
 
+  // Subscribe to portal SSE push notifications.
+  // When the hub pushes a content change, the portal server broadcasts "data-updated"
+  // and every connected browser tab instantly re-fetches without a manual refresh.
+  // Runs only on portal instances (isHub === false); hub state is updated via applyDatabase.
+  useEffect(() => {
+    if (isHub) return;
+    const es = new EventSource("/api/events");
+    es.addEventListener("data-updated", () => { fetchPortalData(); });
+    es.onerror = () => {}; // EventSource reconnects automatically; silence console noise
+    return () => es.close();
+  }, [isHub]);
+
   // Close auth overlays on Escape key
   useEffect(() => {
     if (!authNeededItem && !showLoginModal) return;

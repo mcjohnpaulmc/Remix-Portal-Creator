@@ -112,6 +112,15 @@ function buildEmptyPortal() {
 const app = express();
 app.use(express.json());
 
+// SSE client registry — every browser tab connected to this portal holds an open response here.
+const sseClients = new Set<import("http").ServerResponse>();
+
+function broadcastDataUpdated() {
+  for (const client of sseClients) {
+    try { client.write("event: data-updated\ndata: {}\n\n"); } catch { sseClients.delete(client); }
+  }
+}
+
 // CORS — only allow requests from the configured hub origin (never wildcard).
 // X-Admin-Token is intentionally absent — it is a server-to-server header only.
 const HUB_ORIGIN_ENV = process.env.HUB_ORIGIN || "http://localhost:3000";
@@ -128,6 +137,30 @@ app.use((req, res, next) => {
   }
   if (req.method === "OPTIONS") { res.sendStatus(204); return; }
   next();
+});
+
+// SSE endpoint — browsers subscribe here to receive instant data-change notifications.
+// When the hub signals /api/reload, all connected tabs receive a "data-updated" event
+// and re-fetch /api/database without needing a manual page refresh.
+app.get("/api/events", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no"); // disable Nginx/IIS response buffering
+  res.flushHeaders();
+  res.write(": connected\n\n");
+
+  (res.socket as any)?.setNoDelay?.(true);
+  sseClients.add(res as any);
+
+  const keepalive = setInterval(() => {
+    try { res.write(": keepalive\n\n"); } catch { clearInterval(keepalive); }
+  }, 20000);
+
+  req.on("close", () => {
+    clearInterval(keepalive);
+    sseClients.delete(res as any);
+  });
 });
 
 const loginLimiter = rateLimit({
@@ -209,6 +242,7 @@ app.post("/api/reload", async (req, res) => {
     return res.status(401).json({ error: "Unauthorized." });
   }
   await loadPortalData();
+  broadcastDataUpdated(); // push data-updated event to all connected browser tabs
   res.json({ success: true, reloadedAt: new Date().toISOString(), slug: SLUG });
 });
 
