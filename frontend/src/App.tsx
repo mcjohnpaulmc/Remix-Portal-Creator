@@ -595,14 +595,15 @@ export default function App() {
         const freshList: SubdomainPortal[] = data.database?.subdomains || data.subdomains || [];
         if (freshList.length) setSubdomainsList(freshList);
         else await fetchPortalData();
-        // Poll the portal port until it responds (up to 20s)
-        if (targetStatus === "live" && port) {
-          const url = `http://${window.location.hostname}:${port}/api/portal-info`;
+        // Poll via the hub's server-side probe so the browser never issues
+        // a mixed-content http:// request to the portal's raw port.
+        if (targetStatus === "live") {
           const deadline = Date.now() + 20000;
           const poll = async () => {
             try {
-              const r = await fetch(url);
-              if (r.ok) { setStartingPortals(prev => { const s = new Set(prev); s.delete(portalId); return s; }); return; }
+              const r = await fetch(`/api/admin/portal-ready/${portalId}`, { cache: "no-store" });
+              const d = await r.json();
+              if (d.ready) { setStartingPortals(prev => { const s = new Set(prev); s.delete(portalId); return s; }); return; }
             } catch {}
             if (Date.now() < deadline) setTimeout(poll, 1500);
             else setStartingPortals(prev => { const s = new Set(prev); s.delete(portalId); return s; });

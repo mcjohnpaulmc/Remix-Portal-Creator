@@ -313,4 +313,23 @@ router.post("/refresh-dns", async (req, res) => {
   });
 });
 
+// GET /portal-ready/:id — server-side readiness probe so the browser never needs
+// to fetch http:// URLs directly (which would be blocked as mixed content when
+// the hub is served over HTTPS).  The hub reaches the portal over 127.0.0.1.
+router.get("/portal-ready/:id", (req, res) => {
+  const { id } = req.params;
+  const db = readDatabase();
+  const portal = (db.subdomains || []).find(s => s.id === id);
+  const port = portal?.port || (db.portAssignments || {})[id];
+  if (!port) return res.json({ ready: false });
+
+  const probeReq = require("http").request(
+    { hostname: "127.0.0.1", port, path: "/api/portal-info", method: "GET", timeout: 2000 },
+    (probeRes: any) => { res.json({ ready: probeRes.statusCode === 200 }); }
+  );
+  probeReq.on("error", () => res.json({ ready: false }));
+  probeReq.on("timeout", () => { probeReq.destroy(); res.json({ ready: false }); });
+  probeReq.end();
+});
+
 export default router;
