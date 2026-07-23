@@ -11,7 +11,7 @@ import { autoDeployLivePortals } from "../portal/deploy";
 const router = Router();
 
 // POST /solutions — mounted at /api/admin
-router.post("/solutions", (req, res) => {
+router.post("/solutions", async (req, res) => {
   const { action, solution } = req.body;
   const db = readDatabase();
 
@@ -50,12 +50,12 @@ router.post("/solutions", (req, res) => {
   }
 
   writeDatabase(db);
-  autoDeployLivePortals(db);
+  await autoDeployLivePortals(db);
   res.json({ success: true, database: db });
 });
 
 // POST /collaterals — mounted at /api/admin
-router.post("/collaterals", (req, res) => {
+router.post("/collaterals", async (req, res) => {
   const { action, collateral } = req.body;
   const db = readDatabase();
 
@@ -94,12 +94,12 @@ router.post("/collaterals", (req, res) => {
   }
 
   writeDatabase(db);
-  autoDeployLivePortals(db);
+  await autoDeployLivePortals(db);
   res.json({ success: true, database: db });
 });
 
 // POST /projects/current — mounted at /api/admin
-router.post("/projects/current", (req, res) => {
+router.post("/projects/current", async (req, res) => {
   const { action, project } = req.body;
   const db = readDatabase();
 
@@ -140,12 +140,12 @@ router.post("/projects/current", (req, res) => {
   }
 
   writeDatabase(db);
-  autoDeployLivePortals(db);
+  await autoDeployLivePortals(db);
   res.json({ success: true, database: db });
 });
 
 // POST /projects/upcoming — mounted at /api/admin
-router.post("/projects/upcoming", (req, res) => {
+router.post("/projects/upcoming", async (req, res) => {
   const { action, project } = req.body;
   const db = readDatabase();
 
@@ -186,12 +186,12 @@ router.post("/projects/upcoming", (req, res) => {
   }
 
   writeDatabase(db);
-  autoDeployLivePortals(db);
+  await autoDeployLivePortals(db);
   res.json({ success: true, database: db });
 });
 
 // POST /update-carousel — mounted at /api/admin
-router.post("/update-carousel", (req, res) => {
+router.post("/update-carousel", async (req, res) => {
   const { carousel } = req.body;
   if (!Array.isArray(carousel)) {
     return res.status(400).json({ error: "Carousel data must be an array." });
@@ -209,7 +209,7 @@ router.post("/update-carousel", (req, res) => {
   });
 
   writeDatabase(db);
-  autoDeployLivePortals(db);
+  await autoDeployLivePortals(db);
   res.json({ success: true, carousel: db.carousel, database: db });
 });
 

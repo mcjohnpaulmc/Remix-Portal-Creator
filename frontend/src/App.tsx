@@ -367,6 +367,28 @@ export default function App() {
     }
   };
 
+  // Apply a database payload returned by any admin POST directly to React state.
+  // This avoids a second GET /api/database round-trip and eliminates stale-read races:
+  // the backend only responds after the DB is written AND all portals have reloaded,
+  // so the data here is the confirmed, post-deploy snapshot.
+  const applyDatabase = (db: any) => {
+    if (!db) return;
+    setSolutions(db.solutions || []);
+    setCollaterals(db.collaterals || []);
+    setSubdomainsList(db.subdomains || []);
+    setCurrentProjects(db.currentProjects || []);
+    setUpcomingProjects(db.upcomingProjects || []);
+    setLogs(db.userLogs || []);
+    setHeroText(db.heroText || "");
+    setHeroPrompt(db.heroPrompt || "");
+    setLogo(db.logo || "");
+    setCarousel(db.carousel || []);
+    setSubdomain(db.subdomain || "");
+    setPortalUsers((db.users || []).map(({ passwordHash: _, ...u }: any) => u));
+    setAdminHeroPrompt(db.heroPrompt || "");
+    setAdminSubdomainInput(db.subdomain || "");
+  };
+
   // Onboarder/AI updater callback for Solutions & Collaterals
   const handleAdminDatabaseUpdate = async (endpoint: "solutions" | "collaterals", action: string, data: any) => {
     try {
@@ -376,7 +398,7 @@ export default function App() {
       });
       const resData = await res.json();
       if (resData.success) {
-        await fetchPortalData();
+        applyDatabase(resData.database);
       } else {
         alert("Encountered failure during database persistence updates.");
       }
@@ -394,7 +416,7 @@ export default function App() {
       });
       const resData = await res.json();
       if (resData.success) {
-        await fetchPortalData();
+        applyDatabase(resData.database);
       } else {
         alert("Encountered failure updating core projects datastore.");
       }
@@ -412,7 +434,7 @@ export default function App() {
       });
       const resData = await res.json();
       if (resData.success) {
-        await fetchPortalData();
+        applyDatabase(resData.database);
       } else {
         alert("Encountered failure updating core proposal datastore.");
       }

@@ -33,7 +33,6 @@ export function AdminSolutions({
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
-  const [optimisticEnabled, setOptimisticEnabled] = useState<Record<string, boolean>>({});
 
   // Form states
   const [customerNames, setCustomerNames] = useState<string[]>(["all"]);
@@ -169,41 +168,13 @@ export function AdminSolutions({
     }
   };
 
-  // Clear optimistic overrides once the solutions prop has caught up to reflect the saved value.
-  // This prevents the UI from flashing back to the stale prop value when finally() runs before
-  // the parent's setSolutions re-render has been committed.
-  React.useEffect(() => {
-    if (Object.keys(optimisticEnabled).length === 0) return;
-    setOptimisticEnabled(prev => {
-      const next = { ...prev };
-      let changed = false;
-      for (const [id, enabled] of Object.entries(next)) {
-        const match = solutions.find(s => s.id === id);
-        // Prop has caught up: actual value equals optimistic, or solution was deleted
-        if (!match || (match.enabled !== false) === enabled) {
-          delete next[id];
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [solutions]);
-
   const handleToggleEnable = async (sol: Solution) => {
     if (togglingId) return;
-    const currentEnabled = sol.id in optimisticEnabled ? optimisticEnabled[sol.id] : sol.enabled !== false;
-    const nextState = !currentEnabled;
-    setOptimisticEnabled(prev => ({ ...prev, [sol.id]: nextState }));
     setTogglingId(sol.id);
     try {
-      await onRefresh("update", { ...sol, enabled: nextState });
-    } catch {
-      // Revert optimistic state on failure
-      setOptimisticEnabled(prev => { const n = { ...prev }; delete n[sol.id]; return n; });
+      await onRefresh("update", { ...sol, enabled: sol.enabled !== false ? false : true });
     } finally {
       setTogglingId(null);
-      // Do NOT clear optimisticEnabled here — the useEffect above clears it once
-      // the solutions prop actually reflects the saved value, preventing the flash.
     }
   };
 
@@ -576,13 +547,14 @@ export function AdminSolutions({
       {/* Solutions Catalogue Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {solutions.map((sol) => {
-          const effectiveEnabled = sol.id in optimisticEnabled ? optimisticEnabled[sol.id] : sol.enabled !== false;
+          const isEnabled = sol.enabled !== false;
+          const isToggling = togglingId === sol.id;
           return (
           <div
             key={sol.id}
             id={`onboarded-${sol.id}`}
             className={`flex gap-4 p-4.5 bg-white rounded-2xl border transition-all relative overflow-hidden group ${
-              !effectiveEnabled ? "border-slate-200 bg-slate-50/50 opacity-80" : "border-slate-100 hover:border-slate-200 hover:shadow-2xs"
+              !isEnabled ? "border-slate-200 bg-slate-50/50 opacity-80" : "border-slate-100 hover:border-slate-200 hover:shadow-2xs"
             }`}
           >
             {/* Visual preview */}
@@ -600,7 +572,11 @@ export function AdminSolutions({
               <div>
                 <h4 className="font-display font-semibold text-xs text-slate-900 uppercase tracking-wide truncate flex items-center gap-1.5">
                   <span className="truncate">{sol.title}</span>
-                  {!effectiveEnabled ? (
+                  {isToggling ? (
+                    <span className="shrink-0 text-[8px] bg-slate-100 text-slate-400 border border-slate-200 px-1 py-0.5 rounded-sm uppercase tracking-wide font-semibold font-sans animate-pulse">
+                      Updating…
+                    </span>
+                  ) : !isEnabled ? (
                     <span className="shrink-0 text-[8px] bg-amber-50 text-amber-600 border border-amber-200 px-1 py-0.5 rounded-sm uppercase tracking-wide font-semibold font-sans">
                       Hidden
                     </span>
@@ -644,15 +620,15 @@ export function AdminSolutions({
                 <button
                   type="button"
                   onClick={() => handleToggleEnable(sol)}
-                  disabled={togglingId === sol.id}
+                  disabled={isToggling}
                   className={`relative flex items-center gap-1 px-2 py-1 rounded border text-[10px] font-semibold transition-all whitespace-nowrap overflow-hidden ${
-                    !effectiveEnabled
+                    !isEnabled
                       ? "bg-emerald-50 border-emerald-200 hover:bg-emerald-100 text-emerald-700 font-sans"
                       : "bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700 font-sans"
                   }`}
-                  title={!effectiveEnabled ? "Show on User View" : "Hide from User View"}
+                  title={!isEnabled ? "Show on User View" : "Hide from User View"}
                 >
-                  {togglingId === sol.id && (
+                  {isToggling && (
                     <span className="absolute bottom-0 left-0 h-0.5 w-full overflow-hidden">
                       <span
                         className="absolute h-full bg-slate-500"
@@ -660,8 +636,8 @@ export function AdminSolutions({
                       />
                     </span>
                   )}
-                  {!effectiveEnabled ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
-                  <span>{!effectiveEnabled ? "Show" : "Hide"}</span>
+                  {!isEnabled ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+                  <span>{!isEnabled ? "Show" : "Hide"}</span>
                 </button>
                 <button
                   type="button"

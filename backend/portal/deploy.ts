@@ -71,15 +71,18 @@ export async function deployPortalInProcess(
 
 /**
  * autoDeployLivePortals — after any content CRUD, push fresh portal.json to every
- * live portal (fire-and-forget).
+ * live portal and wait until every portal has confirmed its reload.
+ * Deploys in parallel so multiple portals don't add latency.
  */
-export function autoDeployLivePortals(db: DatabaseSchema): void {
+export async function autoDeployLivePortals(db: DatabaseSchema): Promise<void> {
   const livePortals = (db.subdomains || []).filter(s => s.status === "live");
-  for (const portal of livePortals) {
-    deployPortalInProcess(portal.name, db).catch(err =>
-      logger.warn("auto-deploy", `${portal.name}: ${err?.message}`)
-    );
-  }
+  await Promise.all(
+    livePortals.map(portal =>
+      deployPortalInProcess(portal.name, db).catch(err =>
+        logger.warn("auto-deploy", `${portal.name}: ${err?.message}`)
+      )
+    )
+  );
 }
 
 /**
