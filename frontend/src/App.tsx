@@ -209,6 +209,9 @@ export default function App() {
       if (!hubMode) {
         // Lock to user mode on customer portal instances — admin console not available
         setViewMode("user");
+      } else {
+        // Hub always opens the admin console — login gate is shown if unauthenticated
+        setViewMode("admin");
       }
 
       const res = await fetch("/api/database", { cache: "no-store" });
@@ -243,9 +246,10 @@ export default function App() {
         window.location.hash === "#admin"
       ) {
         setViewMode("admin");
-      } else {
-        setViewMode("user");
       }
+      // No "else" here — the hub's admin mode is set by fetchPortalData once isHub is
+      // confirmed, and portal user mode is also set there. URL-based routing only
+      // handles an explicit /admin override; it does not reset the hub to user view.
     };
 
     window.addEventListener("hashchange", handleUrlChange);
@@ -272,10 +276,32 @@ export default function App() {
   // When the hub pushes a content change, the portal server broadcasts "data-updated"
   // and every connected browser tab instantly re-fetches without a manual refresh.
   // Runs only on portal instances (isHub === false); hub state is updated via applyDatabase.
+  //
+  // IMPORTANT: do NOT call fetchPortalData() here. fetchPortalData() re-fetches
+  // /api/portal-info and may set isHub=true if that request briefly fails (e.g. during
+  // a portal reload), which triggers the useEffect([isHub]) cleanup to close this
+  // EventSource permanently. Instead, inline a direct /api/database refresh that only
+  // updates content state and never touches isHub.
   useEffect(() => {
     if (isHub) return;
     const es = new EventSource("/api/events");
-    es.addEventListener("data-updated", () => { fetchPortalData(); });
+    es.addEventListener("data-updated", async () => {
+      try {
+        const res = await fetch("/api/database", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        setSolutions(data.solutions || []);
+        setCollaterals(data.collaterals || []);
+        setCurrentProjects(data.currentProjects || []);
+        setUpcomingProjects(data.upcomingProjects || []);
+        setLogs(data.userLogs || []);
+        setHeroText(data.heroText || "");
+        setHeroPrompt(data.heroPrompt || "");
+        setLogo(data.logo || "");
+        setCarousel(data.carousel || []);
+        setPortalUsers(data.users || []);
+      } catch {}
+    });
     es.onerror = () => {}; // EventSource reconnects automatically; silence console noise
     return () => es.close();
   }, [isHub]);
