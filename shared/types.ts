@@ -13,6 +13,7 @@ export interface SubdomainPortal {
   name: string; // e.g., 'unilever'
   displayName: string; // e.g., 'Unilever APAC'
   createdAt: string;
+  createdBy?: string;  // email of the admin who created this portal; used for isolation
   port?: number;      // assigned port this portal runs on (e.g. 4001)
   domain?: string;    // selected domain (e.g. 'mobiusservices.io')
   s3Key?: string;     // S3 prefix: 'Mobius_Portal_Creator_Hub/<slug>/'

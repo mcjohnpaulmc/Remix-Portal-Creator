@@ -23,12 +23,24 @@ const logLimiter = rateLimit({
   message: { error: "Too many log requests." },
 });
 
-// GET /api/database — requires any valid session; strips passwordHash and portAssignments
-router.get("/api/database", requireAnyAuth, (_req, res) => {
+// GET /api/database — requires any valid session; strips passwordHash and portAssignments.
+// Portals are filtered by ownership: admins only see portals they created.
+// Legacy portals without a createdBy are visible to all admins for backward compatibility.
+router.get("/api/database", requireAnyAuth, (req, res) => {
   const db = readDatabase();
   const { portAssignments: _pa, ...safeDb } = db as any;
   const safeUsers: PortalUser[] = (safeDb.users || []).map(({ passwordHash: _ph, ...safe }: any) => safe);
-  res.json({ ...safeDb, users: safeUsers });
+
+  const userEmail: string | undefined = (req as any).userEmail;
+  const userRole: string | undefined = (req as any).userRole;
+
+  // Admins see only their own portals (plus legacy portals with no createdBy).
+  // Viewers never need portal management data, so they receive an empty list.
+  const filteredSubdomains = userRole === "admin"
+    ? (safeDb.subdomains || []).filter((s: any) => !s.createdBy || s.createdBy === userEmail)
+    : [];
+
+  res.json({ ...safeDb, users: safeUsers, subdomains: filteredSubdomains });
 });
 
 // GET /api/portal-info — hub identity endpoint

@@ -52,6 +52,10 @@ router.post("/subdomains", async (req, res) => {
     const targetId = id || resolvedName;
     const portal = (db.subdomains || []).find(s => s.id === targetId);
     if (!portal) return res.status(404).json({ error: "Portal not found." });
+    const adminEmail = (req as any).adminEmail;
+    if (portal.createdBy && portal.createdBy !== adminEmail) {
+      return res.status(403).json({ error: "You do not have permission to modify this portal." });
+    }
     if (req.body.displayName !== undefined) portal.displayName = req.body.displayName.trim();
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
@@ -88,6 +92,7 @@ router.post("/subdomains", async (req, res) => {
       name: cleanSub,
       displayName: displayName.trim(),
       createdAt: new Date().toISOString(),
+      createdBy: (req as any).adminEmail || undefined,
       port,
       domain: selectedDomain,
       s3Key,
@@ -143,6 +148,7 @@ router.post("/subdomains", async (req, res) => {
       name: slug,
       displayName: dummyDisplayName,
       createdAt: new Date().toISOString(),
+      createdBy: (req as any).adminEmail || undefined,
       port,
       s3Key,
       isDummy: true,
@@ -182,6 +188,9 @@ router.post("/subdomains", async (req, res) => {
     const portal = (db.subdomains || []).find(s => s.id === targetId);
     if (!portal) {
       return res.status(404).json({ error: `Portal "${targetId}" not found.` });
+    }
+    if (portal.createdBy && portal.createdBy !== (req as any).adminEmail) {
+      return res.status(403).json({ error: "You do not have permission to modify this portal." });
     }
 
     if (targetStatus === "live") {
@@ -226,8 +235,11 @@ router.post("/subdomains", async (req, res) => {
     if (!targetId) {
       return res.status(400).json({ error: "Portal ID is required for delete." });
     }
-    // Capture portal info BEFORE removing from list (needed for DNS cleanup)
+    // Capture portal info BEFORE removing from list (needed for DNS cleanup and ownership check)
     const deletedPortal = (db.subdomains || []).find(s => s.id === targetId || s.name === targetId);
+    if (deletedPortal?.createdBy && deletedPortal.createdBy !== (req as any).adminEmail) {
+      return res.status(403).json({ error: "You do not have permission to delete this portal." });
+    }
 
     db.subdomains = db.subdomains.filter(s => s.id !== targetId && s.name !== targetId);
 

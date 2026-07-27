@@ -166,7 +166,13 @@ export function requireAnyAuth(
   const jwtRaw = extractJwtFromRequest(req);
   if (jwtRaw) {
     try {
-      jwt.verify(jwtRaw, effectiveJwtSecret);
+      const payload = jwt.verify(jwtRaw, effectiveJwtSecret) as { email: string; role: string };
+      // Expose identity for downstream handlers (e.g. portal ownership filtering)
+      (req as any).userEmail = payload.email;
+      (req as any).userRole = payload.role;
+      if (payload.role === "admin") {
+        (req as any).adminEmail = payload.email;
+      }
       next();
       return;
     } catch {
