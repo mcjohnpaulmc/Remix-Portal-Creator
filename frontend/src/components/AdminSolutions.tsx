@@ -4,8 +4,20 @@
  */
 
 import React, { useState } from "react";
-import { Plus, Edit2, Check, X, Shield, Globe, Image, Tag, Key, Eye, EyeOff, FolderOpen, Link2, Download, AlertCircle, Upload, Trash2, RefreshCw } from "lucide-react";
+import { Plus, Edit2, Check, X, Shield, Globe, Image, Tag, Key, Eye, EyeOff, FolderOpen, Link2, Download, AlertCircle, Upload, Trash2, RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
 import { Solution } from "../../../shared/types";
+
+interface ExternalSolution {
+  id: string;
+  title: string;
+  targetUrl: string;
+  thumbnailUrl: string;
+  practice: string;
+  solutionType: string;
+  credentialsNote: string;
+  defaultUsername: string;
+  collateralCount: number;
+}
 
 interface AdminSolutionsProps {
   solutions: Solution[];
@@ -52,12 +64,27 @@ export function AdminSolutions({
   const [submitting, setSubmitting] = useState(false);
   const [uploadTab, setUploadTab] = useState<"local" | "drive">("local");
 
+  // Portal import state
+  const [portalSolutions, setPortalSolutions] = useState<{ mobius: ExternalSolution[]; techmobius: ExternalSolution[] } | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
+  const [selectedMobius, setSelectedMobius] = useState<Set<string>>(new Set());
+  const [selectedTechmobius, setSelectedTechmobius] = useState<Set<string>>(new Set());
+  const [mobiusOpen, setMobiusOpen] = useState(false);
+  const [techMobiusOpen, setTechMobiusOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+
   React.useEffect(() => {
     if (prefilledSubdomain) {
       setCustomerNames([prefilledSubdomain]);
       setCustomerName(prefilledSubdomain);
     }
   }, [prefilledSubdomain]);
+
+  React.useEffect(() => {
+    if (isEditing && !editingId && portalSolutions === null && !portalLoading) {
+      loadPortalSolutions();
+    }
+  }, [isEditing, editingId]);
 
   const resetForm = () => {
     setIsEditing(false);
@@ -73,6 +100,75 @@ export function AdminSolutions({
     setTagsInput("");
     setGoogleDriveUrl("");
     setUploadedFiles([]);
+    setPortalSolutions(null);
+    setSelectedMobius(new Set());
+    setSelectedTechmobius(new Set());
+    setMobiusOpen(false);
+    setTechMobiusOpen(false);
+  };
+
+  const loadPortalSolutions = async () => {
+    setPortalLoading(true);
+    try {
+      const res = await fetch("/api/admin/external-portals/solutions", { credentials: "include" });
+      if (res.ok) setPortalSolutions(await res.json());
+    } catch {
+      setPortalSolutions({ mobius: [], techmobius: [] });
+    } finally {
+      setPortalLoading(false);
+    }
+  };
+
+  const handleBulkImport = async () => {
+    if (!portalSolutions) return;
+    const toImport: ExternalSolution[] = [];
+    for (const id of selectedMobius) {
+      const sol = portalSolutions.mobius.find(s => s.id === id);
+      if (sol) toImport.push(sol);
+    }
+    for (const id of selectedTechmobius) {
+      const sol = portalSolutions.techmobius.find(s => s.id === id);
+      if (sol) toImport.push(sol);
+    }
+
+    const existingTitles = new Set(solutions.map(s => s.title.toLowerCase().trim()));
+    const fresh = toImport.filter(sol => !existingTitles.has(sol.title.toLowerCase().trim()));
+    const skippedCount = toImport.length - fresh.length;
+
+    if (fresh.length === 0) {
+      alert(`All selected solution(s) already exist in the hub.`);
+      return;
+    }
+
+    setImporting(true);
+    try {
+      for (const sol of fresh) {
+        const tags: string[] = [];
+        if (sol.practice) tags.push(sol.practice);
+        if (sol.solutionType) tags.push(sol.solutionType);
+        await onRefresh("create", {
+          title: sol.title,
+          url: sol.targetUrl,
+          thumbnail: sol.thumbnailUrl?.startsWith("https://") ? sol.thumbnailUrl : "",
+          credentialsDescription: sol.credentialsNote || "",
+          usernamePrefill: sol.defaultUsername || "",
+          passwordPrefill: "",
+          tags,
+          customerName: "all",
+          customerNames: ["all"],
+          googleDriveUrl: "",
+          uploadedFiles: [],
+          enabled: true,
+        });
+      }
+      alert(`Imported ${fresh.length} solution(s).${skippedCount > 0 ? ` Skipped ${skippedCount} duplicate(s).` : ""}`);
+      setSelectedMobius(new Set());
+      setSelectedTechmobius(new Set());
+      setMobiusOpen(false);
+      setTechMobiusOpen(false);
+    } finally {
+      setImporting(false);
+    }
   };
 
   const handleEditClick = (sol: Solution) => {
@@ -242,6 +338,161 @@ export function AdminSolutions({
               <X className="h-4 w-4" />
             </button>
           </div>
+
+          {/* ── Portal Import Section (only shown when creating, not editing) ── */}
+          {!editingId && (
+            <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded uppercase tracking-wider inline-block">
+                  🔗 Import from Portal (optional)
+                </span>
+                {(selectedMobius.size + selectedTechmobius.size) > 0 && (
+                  <button
+                    type="button"
+                    disabled={importing}
+                    onClick={handleBulkImport}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {importing
+                      ? "Importing…"
+                      : `Import ${selectedMobius.size + selectedTechmobius.size} Selected →`}
+                  </button>
+                )}
+              </div>
+
+              {portalLoading ? (
+                <p className="text-[11px] text-blue-500 animate-pulse">Fetching portal solutions…</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* Mobius Portal dropdown */}
+                  {(() => {
+                    const list = portalSolutions?.mobius ?? [];
+                    const existingTitles = new Set(solutions.map(s => s.title.toLowerCase().trim()));
+                    return (
+                      <div className="bg-white rounded-lg border border-blue-100 overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => setMobiusOpen(o => !o)}
+                          className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-slate-50 transition-colors"
+                        >
+                          <span className="text-xs font-bold text-slate-800">
+                            Mobius Portal
+                            <span className="ml-1.5 text-[10px] font-normal text-slate-400">
+                              ({list.length} solutions{selectedMobius.size > 0 ? `, ${selectedMobius.size} selected` : ""})
+                            </span>
+                          </span>
+                          {mobiusOpen ? <ChevronDown className="h-3.5 w-3.5 text-slate-400" /> : <ChevronRight className="h-3.5 w-3.5 text-slate-400" />}
+                        </button>
+                        {mobiusOpen && (
+                          <div className="max-h-48 overflow-y-auto border-t border-slate-100 divide-y divide-slate-50">
+                            {list.length === 0 ? (
+                              <p className="px-3 py-3 text-[11px] text-slate-400">Portal unreachable or no solutions found.</p>
+                            ) : list.map(sol => {
+                              const alreadyIn = existingTitles.has(sol.title.toLowerCase().trim());
+                              const checked = selectedMobius.has(sol.id);
+                              return (
+                                <label
+                                  key={sol.id}
+                                  className={`flex items-start gap-2.5 px-3 py-2 cursor-pointer transition-colors ${alreadyIn ? "opacity-50 cursor-not-allowed bg-slate-50" : "hover:bg-blue-50/50"}`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    disabled={alreadyIn}
+                                    checked={checked}
+                                    onChange={() => {
+                                      setSelectedMobius(prev => {
+                                        const next = new Set(prev);
+                                        next.has(sol.id) ? next.delete(sol.id) : next.add(sol.id);
+                                        return next;
+                                      });
+                                    }}
+                                    className="mt-0.5 h-3.5 w-3.5 accent-blue-700 shrink-0"
+                                  />
+                                  <div className="min-w-0">
+                                    <p className="text-[11px] font-semibold text-slate-800 truncate">{sol.title}</p>
+                                    <p className="text-[10px] text-slate-400">
+                                      {sol.collateralCount} collateral{sol.collateralCount !== 1 ? "s" : ""}
+                                      {alreadyIn && <span className="ml-1.5 text-amber-500 font-semibold">· already in hub</span>}
+                                    </p>
+                                  </div>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Techmobius Portal dropdown */}
+                  {(() => {
+                    const list = portalSolutions?.techmobius ?? [];
+                    const existingTitles = new Set(solutions.map(s => s.title.toLowerCase().trim()));
+                    return (
+                      <div className="bg-white rounded-lg border border-blue-100 overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => setTechMobiusOpen(o => !o)}
+                          className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-slate-50 transition-colors"
+                        >
+                          <span className="text-xs font-bold text-slate-800">
+                            Techmobius Portal
+                            <span className="ml-1.5 text-[10px] font-normal text-slate-400">
+                              ({list.length} solutions{selectedTechmobius.size > 0 ? `, ${selectedTechmobius.size} selected` : ""})
+                            </span>
+                          </span>
+                          {techMobiusOpen ? <ChevronDown className="h-3.5 w-3.5 text-slate-400" /> : <ChevronRight className="h-3.5 w-3.5 text-slate-400" />}
+                        </button>
+                        {techMobiusOpen && (
+                          <div className="max-h-48 overflow-y-auto border-t border-slate-100 divide-y divide-slate-50">
+                            {list.length === 0 ? (
+                              <p className="px-3 py-3 text-[11px] text-slate-400">Portal unreachable or no solutions found.</p>
+                            ) : list.map(sol => {
+                              const alreadyIn = existingTitles.has(sol.title.toLowerCase().trim());
+                              const checked = selectedTechmobius.has(sol.id);
+                              return (
+                                <label
+                                  key={sol.id}
+                                  className={`flex items-start gap-2.5 px-3 py-2 cursor-pointer transition-colors ${alreadyIn ? "opacity-50 cursor-not-allowed bg-slate-50" : "hover:bg-blue-50/50"}`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    disabled={alreadyIn}
+                                    checked={checked}
+                                    onChange={() => {
+                                      setSelectedTechmobius(prev => {
+                                        const next = new Set(prev);
+                                        next.has(sol.id) ? next.delete(sol.id) : next.add(sol.id);
+                                        return next;
+                                      });
+                                    }}
+                                    className="mt-0.5 h-3.5 w-3.5 accent-blue-700 shrink-0"
+                                  />
+                                  <div className="min-w-0">
+                                    <p className="text-[11px] font-semibold text-slate-800 truncate">{sol.title}</p>
+                                    <p className="text-[10px] text-slate-400">
+                                      {sol.collateralCount} collateral{sol.collateralCount !== 1 ? "s" : ""}
+                                      {alreadyIn && <span className="ml-1.5 text-amber-500 font-semibold">· already in hub</span>}
+                                    </p>
+                                  </div>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 pt-1">
+                <div className="flex-1 border-t border-blue-100" />
+                <span className="text-[10px] text-slate-400 font-medium shrink-0">— or fill in manually below —</span>
+                <div className="flex-1 border-t border-blue-100" />
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Target Subdomain Checkboxes */}
