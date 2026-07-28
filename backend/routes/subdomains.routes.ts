@@ -83,7 +83,7 @@ router.post("/subdomains", async (req, res) => {
     }
 
     if (!db.portAssignments) db.portAssignments = {};
-    const port = assignNextPort(db.portAssignments);
+    const port = await assignNextPort(db.portAssignments);
     db.portAssignments[cleanSub] = port;
 
     const selectedDomain = req.body.domain || "mobiusservices.io";
@@ -138,7 +138,7 @@ router.post("/subdomains", async (req, res) => {
 
   } else if (action === "create-dummy") {
     if (!db.portAssignments) db.portAssignments = {};
-    const port = assignNextPort(db.portAssignments);
+    const port = await assignNextPort(db.portAssignments);
     const slug = `local-${Date.now()}`;
     db.portAssignments[slug] = port;
 
@@ -199,7 +199,7 @@ router.post("/subdomains", async (req, res) => {
       // Ensure portal has a port (assign one if missing for legacy portals)
       if (!portal.port) {
         if (!db.portAssignments) db.portAssignments = {};
-        portal.port = assignNextPort(db.portAssignments);
+        portal.port = await assignNextPort(db.portAssignments);
         db.portAssignments[targetId] = portal.port;
       }
       // Always write a fresh portal.json with current content before spawning,

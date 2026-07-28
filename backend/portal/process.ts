@@ -4,6 +4,7 @@
  */
 
 import { exec, spawn, ChildProcess } from "child_process";
+import net from "net";
 import os from "os";
 import path from "path";
 import { PORTAL_PORT_BASE } from "../config";
@@ -23,11 +24,35 @@ function pm2Env(): NodeJS.ProcessEnv {
   return { ...process.env, PM2_HOME };
 }
 
-export function assignNextPort(portAssignments: { [slug: string]: number }): number {
+// Probes whether a port is actually free at the OS level right now, by attempting
+// to bind a throwaway server to it.
+function isPortFree(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const tester = net.createServer();
+    tester.once("error", () => resolve(false));
+    tester.once("listening", () => {
+      tester.close(() => resolve(true));
+    });
+    tester.listen(port, "0.0.0.0");
+  });
+}
+
+// Picks the next port for a new portal. `db.portAssignments` bookkeeping alone is
+// NOT trustworthy: a portal's process can outlive its own portAssignments entry
+// being deleted (e.g. `pm2 delete` reporting success while the OS socket lingers,
+// or any teardown that silently didn't finish) — trusting bookkeeping alone would
+// hand a brand-new portal a port a completely different, still-alive portal
+// process is bound to, and every request to the new subdomain would then silently
+// be served by that other portal instead. So every candidate port is also
+// confirmed free by actually trying to bind it before it's handed out.
+export async function assignNextPort(portAssignments: { [slug: string]: number }): Promise<number> {
   const used = new Set(Object.values(portAssignments));
   let port = PORTAL_PORT_BASE;
-  while (used.has(port)) port++;
-  return port;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    if (!used.has(port) && await isPortFree(port)) return port;
+    port++;
+  }
 }
 
 // Track child processes in dev mode (keyed by slug)

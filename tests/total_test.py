@@ -1665,6 +1665,36 @@ def test_pc6_portal_ready_verifies_slug_identity():
         fail(name, str(e))
 
 
+def test_pc7_assign_next_port_verifies_os_level_availability():
+    name = "PC7 (static): assignNextPort confirms a port is actually free at the OS level, not just absent from bookkeeping"
+    try:
+        src = read_file("backend/portal/process.ts")
+        if "function isPortFree" not in src:
+            fail(name, "isPortFree helper not found — port assignment still trusts JSON bookkeeping alone"); return
+        if "export async function assignNextPort" not in src:
+            fail(name, "assignNextPort is not async — cannot be doing a real availability probe"); return
+        if "await isPortFree(port)" not in src:
+            fail(name, "assignNextPort does not call isPortFree before handing out a port"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_pc8_subdomains_routes_awaits_assign_next_port():
+    name = "PC8 (static): subdomains.routes.ts awaits assignNextPort at every call site"
+    try:
+        src = read_file("backend/routes/subdomains.routes.ts")
+        calls = [line for line in src.splitlines() if "assignNextPort(db.portAssignments)" in line]
+        if len(calls) < 3:
+            fail(name, f"expected 3 call sites (create, create-dummy, toggle), found {len(calls)}"); return
+        unawaited = [line.strip() for line in calls if "await assignNextPort" not in line]
+        if unawaited:
+            fail(name, f"call site(s) not awaited: {unawaited}"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 # ── run all tests ─────────────────────────────────────────────────────────────
 
 TESTS = [
@@ -1790,6 +1820,8 @@ TESTS = [
     test_pc4_portal_server_handles_listen_error,
     test_pc5_deploy_reload_verifies_slug_identity,
     test_pc6_portal_ready_verifies_slug_identity,
+    test_pc7_assign_next_port_verifies_os_level_availability,
+    test_pc8_subdomains_routes_awaits_assign_next_port,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]
