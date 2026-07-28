@@ -35,6 +35,7 @@ export interface Solution {
   enabled?: boolean;
   customerName?: string; // Associated customer subdomain portal name
   customerNames?: string[]; // Multiple target subdomains
+  createdBy?: string; // email of the admin who created this solution; used for portal isolation
 }
 
 export interface Collateral {
@@ -51,6 +52,7 @@ export interface Collateral {
   googleDriveUrl?: string; // Primary Google Drive link URL
   tag?: "case study" | "solution doc" | "sample" | "demo video" | string;
   fileType?: "google slide" | "google video" | "google doc" | "google sheet" | string;
+  createdBy?: string; // email of the admin who created this collateral; used for portal isolation
 }
 
 export interface UserLog {
@@ -97,6 +99,7 @@ export interface CurrentProject {
   createdAt: string;
   hiddenSections?: string[]; // list of hidden sections/charts, e.g. ['deliveryVolumeChart', 'qualitySLAChart']
   metricGroups?: MetricGroup[];
+  createdBy?: string; // email of the admin who created this project; used for portal isolation
 }
 
 export interface UpcomingProject {
@@ -114,6 +117,7 @@ export interface UpcomingProject {
   enabled?: boolean;
   createdAt: string;
   hiddenSections?: string[];
+  createdBy?: string; // email of the admin who created this project; used for portal isolation
 }
 
 export interface CarouselItem {

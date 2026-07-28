@@ -14,7 +14,18 @@ export function buildPortalSnapshot(
   db: DatabaseSchema,
   subdomainInfo: any
 ): object {
-  const matchesSlug = (names: string[]) => names.includes(slug) || names.includes("all");
+  const portalOwner: string | undefined = subdomainInfo?.createdBy;
+
+  // An item's owner and the portal's owner must agree before the item can appear on
+  // that portal — this holds even for a "map to all portals" selection, so "all" only
+  // ever broadcasts within the creator's own portals, never into another admin's.
+  // Items or portals with no owner (pre-isolation legacy data) stay visible to everyone,
+  // matching the existing backward-compat behavior for legacy portals.
+  const isOwnedByPortalCreator = (item: any) =>
+    !item.createdBy || !portalOwner || item.createdBy === portalOwner;
+
+  const matchesSlug = (item: any, names: string[]) =>
+    (names.includes(slug) || names.includes("all")) && isOwnedByPortalCreator(item);
 
   return {
     slug,
@@ -26,16 +37,16 @@ export function buildPortalSnapshot(
       !c.customerName || c.customerName === slug || c.customerName === "all"
     ),
     solutions: (db.solutions || []).filter((s: any) =>
-      matchesSlug(s.customerNames || (s.customerName ? [s.customerName] : ["all"]))
+      matchesSlug(s, s.customerNames || (s.customerName ? [s.customerName] : ["all"]))
     ),
     collaterals: (db.collaterals || []).filter((c: any) =>
-      matchesSlug(c.customerNames || (c.customerName ? [c.customerName] : ["all"]))
+      matchesSlug(c, c.customerNames || (c.customerName ? [c.customerName] : ["all"]))
     ),
     currentProjects: (db.currentProjects || []).filter((p: any) =>
-      matchesSlug(p.customerNames || [p.customerName])
+      matchesSlug(p, p.customerNames || [p.customerName])
     ),
     upcomingProjects: (db.upcomingProjects || []).filter((p: any) =>
-      matchesSlug(p.customerNames || [p.customerName])
+      matchesSlug(p, p.customerNames || [p.customerName])
     ),
     subdomainInfo,
     subdomains: [],

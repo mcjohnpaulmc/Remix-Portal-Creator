@@ -199,8 +199,11 @@ export default function App() {
   const [updatingSubdomain, setUpdatingSubdomain] = useState(false);
   const [simulatedLaunchStatus, setSimulatedLaunchStatus] = useState<"idle" | "launching" | "ready">("idle");
 
-  // Fetch initial portal configuration from the database endpoints
-  const fetchPortalData = async () => {
+  // Fetch initial portal configuration from the database endpoints.
+  // Retries a couple of times on failure — right after a hard refresh the auth
+  // cookie or a PM2-restarted backend can be momentarily unready, and previously
+  // that left subdomainsList permanently empty until the user clicked "Refresh DNS".
+  const fetchPortalData = async (attempt = 0): Promise<void> => {
     try {
       // Detect hub vs customer portal
       const infoRes = await fetch("/api/portal-info").then(r => r.json()).catch(() => ({ isHub: true }));
@@ -214,7 +217,8 @@ export default function App() {
         setViewMode("admin");
       }
 
-      const res = await fetch("/api/database", { cache: "no-store" });
+      const res = await fetch("/api/database", { cache: "no-store", credentials: "include" });
+      if (!res.ok) throw new Error(`/api/database returned ${res.status}`);
       const data = await res.json();
       setSolutions(data.solutions || []);
       setCollaterals(data.collaterals || []);
@@ -230,10 +234,14 @@ export default function App() {
       setPortalUsers(data.users || []);
       setAdminHeroPrompt(data.heroPrompt || "");
       setAdminSubdomainInput(data.subdomain || "");
-    } catch (err) {
-      console.error("Failed to load initial portal data:", err);
-    } finally {
       setLoading(false);
+    } catch (err) {
+      console.error(`Failed to load initial portal data (attempt ${attempt + 1}):`, err);
+      if (attempt < 2) {
+        setTimeout(() => fetchPortalData(attempt + 1), 700 * (attempt + 1));
+      } else {
+        setLoading(false);
+      }
     }
   };
 
@@ -1440,7 +1448,10 @@ export default function App() {
 
              {/* Central console body */}
             <div className="flex-1 flex flex-col overflow-hidden bg-slate-50/40">
-              {/* Horizontal Subdomain Switcher tabs bar — kept outside the scroll area so it never scrolls off-screen */}
+              {/* Horizontal Subdomain Switcher tabs bar — kept outside the scroll area so it never scrolls off-screen.
+                  Hidden on the Portal Domains tab itself: "Step 2" below already lists every portal,
+                  so showing the same list twice was redundant there. */}
+              {adminActiveTab !== "subdomain" && (
               <div className="px-6 md:px-8 pt-6 md:pt-8 shrink-0">
               <div className="mb-6 bg-white p-4 rounded-2xl border border-slate-200 shadow-3xs text-left animate-fade-in relative overflow-hidden">
                 <div className="absolute top-0 right-0 h-12 w-12 bg-orange-50/50 rounded-full blur-xl pointer-events-none" />
@@ -1482,7 +1493,8 @@ export default function App() {
                   ))}
                 </div>
               </div>
-              </div>{/* end non-scrolling header */}
+              </div>
+              )}{/* end non-scrolling header */}
 
               <div className="flex-1 px-6 md:px-8 pb-6 md:pb-8 overflow-y-auto custom-scroll">
               <AnimatePresence mode="wait">

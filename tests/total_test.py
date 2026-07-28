@@ -1433,6 +1433,154 @@ def test_ms6_log_has_entry_cap():
         fail(name, str(e))
 
 
+# ── Bug fixes — PI: per-user portal isolation ──────────────────────────────────
+# A user must never see/manage a portal created by another user, and content
+# mapped to "all portals" must only broadcast within the creator's own portals.
+
+def test_pi1_content_types_have_created_by():
+    name = "PI1 (static): shared/types.ts tracks createdBy on Solution/Collateral/CurrentProject/UpcomingProject"
+    try:
+        src = read_file("shared/types.ts")
+        for iface in ["Solution", "Collateral", "CurrentProject", "UpcomingProject"]:
+            start = src.index(f"interface {iface} ")
+            # Interface bodies contain nested inline object-type braces, so find the end
+            # of the block by the next top-level "export interface" (or EOF) instead of
+            # the first "}", which would match a nested type literal too early.
+            next_iface = src.find("\nexport interface", start + 1)
+            end = next_iface if next_iface != -1 else len(src)
+            if "createdBy" not in src[start:end]:
+                fail(name, f"{iface} interface has no createdBy field"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_pi2_content_routes_stamps_created_by_on_create():
+    name = "PI2 (static): content.routes.ts stamps createdBy on solution/collateral/project create"
+    try:
+        src = read_file("backend/routes/content.routes.ts")
+        if src.count("createdBy: adminEmail || undefined") < 4:
+            fail(name, "expected createdBy to be stamped on create for all four content types"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_pi3_content_routes_enforces_ownership_on_write():
+    name = "PI3 (static): content.routes.ts rejects update/delete of another admin's content"
+    try:
+        src = read_file("backend/routes/content.routes.ts")
+        if src.count("You do not have permission to modify") < 3:
+            fail(name, "expected an ownership check on update for solutions/collaterals/projects"); return
+        if src.count("You do not have permission to delete") < 3:
+            fail(name, "expected an ownership check on delete for solutions/collaterals/projects"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_pi4_snapshot_all_broadcast_respects_ownership():
+    name = "PI4 (static): portal/snapshot.ts scopes 'map to all portals' to the item's own creator"
+    try:
+        src = read_file("backend/portal/snapshot.ts")
+        if "isOwnedByPortalCreator" not in src:
+            fail(name, "buildPortalSnapshot no longer resolves 'all' with an ownership check"); return
+        if "portalOwner" not in src:
+            fail(name, "buildPortalSnapshot does not derive the target portal's owner"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_pi5_admin_responses_use_safe_db_view():
+    name = "PI5 (static): admin routes stop echoing the raw, unfiltered database back to the client"
+    try:
+        content_src = read_file("backend/routes/content.routes.ts")
+        subdomains_src = read_file("backend/routes/subdomains.routes.ts")
+        if "buildAdminSafeDbView" not in content_src:
+            fail(name, "content.routes.ts does not use buildAdminSafeDbView"); return
+        if "database: db }" in content_src or "database: db," in content_src:
+            fail(name, "content.routes.ts still returns the raw db object somewhere"); return
+        if "buildAdminSafeDbView" not in subdomains_src:
+            fail(name, "subdomains.routes.ts does not use buildAdminSafeDbView"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_pi6_refresh_dns_filters_by_ownership():
+    name = "PI6 (static): POST /refresh-dns only returns/re-checks the requesting admin's own portals"
+    try:
+        src = read_file("backend/routes/subdomains.routes.ts")
+        start = src.index('router.post("/refresh-dns"')
+        body = src[start:start + 1500]
+        if "createdBy" not in body:
+            fail(name, "refresh-dns handler no longer filters pendingPortals/response by createdBy"); return
+        if "safeView" not in body:
+            fail(name, "refresh-dns response is not built from a filtered safe view"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_pi7_db_view_helper_filters_legacy_safely():
+    name = "PI7 (static): buildAdminSafeDbView strips secrets and filters subdomains by createdBy"
+    try:
+        src = read_file("backend/utils/dbView.ts")
+        if "passwordHash" not in src:
+            fail(name, "buildAdminSafeDbView does not strip passwordHash"); return
+        if "portAssignments" not in src:
+            fail(name, "buildAdminSafeDbView does not strip portAssignments"); return
+        if "s.createdBy === adminEmail" not in src:
+            fail(name, "buildAdminSafeDbView does not filter subdomains by createdBy === adminEmail"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+# ── Bug fixes — UI1: Portal Domains page load ───────────────────────────────────
+# The "ACTIVE TENANT PORTAL CONTEXT FILTER" section and Step 2 must show the
+# portal list on first render, not only after clicking "Refresh DNS".
+
+def test_ui1_domains_tab_hides_duplicate_filter_section():
+    name = "UI1a (static): App.tsx hides the tenant filter chips on the Portal Domains tab"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        idx = src.index("ACTIVE TENANT PORTAL CONTEXT FILTER")
+        preceding = src[max(0, idx - 800):idx]
+        if 'adminActiveTab !== "subdomain"' not in preceding:
+            fail(name, "filter section is not guarded to skip the subdomain tab"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_ui1_fetch_portal_data_checks_response_ok():
+    name = "UI1b (static): App.tsx fetchPortalData checks res.ok before consuming /api/database"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        idx = src.index("fetchPortalData = async")
+        body = src[idx:idx + 2000]
+        if "res.ok" not in body:
+            fail(name, "fetchPortalData does not check res.ok"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_ui1_fetch_portal_data_retries_on_failure():
+    name = "UI1c (static): App.tsx retries the initial portal-data load instead of failing silently"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        idx = src.index("fetchPortalData = async")
+        body = src[idx:idx + 2000]
+        if "fetchPortalData(attempt + 1)" not in body:
+            fail(name, "fetchPortalData has no retry path on failure"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 # ── run all tests ─────────────────────────────────────────────────────────────
 
 TESTS = [
@@ -1539,6 +1687,18 @@ TESTS = [
     test_ms6_log_rate_limited,
     test_ms6_log_fields_validated,
     test_ms6_log_has_entry_cap,
+    # Bug fixes — PI: per-user portal isolation
+    test_pi1_content_types_have_created_by,
+    test_pi2_content_routes_stamps_created_by_on_create,
+    test_pi3_content_routes_enforces_ownership_on_write,
+    test_pi4_snapshot_all_broadcast_respects_ownership,
+    test_pi5_admin_responses_use_safe_db_view,
+    test_pi6_refresh_dns_filters_by_ownership,
+    test_pi7_db_view_helper_filters_legacy_safely,
+    # Bug fixes — UI1: Portal Domains page loads without a manual "Refresh DNS" click
+    test_ui1_domains_tab_hides_duplicate_filter_section,
+    test_ui1_fetch_portal_data_checks_response_ok,
+    test_ui1_fetch_portal_data_retries_on_failure,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

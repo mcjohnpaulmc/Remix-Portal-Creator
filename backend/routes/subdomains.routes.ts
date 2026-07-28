@@ -15,6 +15,7 @@ import { deployPortalInProcess, buildDefaultPortalJson } from "../portal/deploy"
 import { ensureDnsRecord, deleteDnsRecord, checkDnsRecord } from "../dns/cloudflare";
 import { ensureIisSite, removeIisSite } from "../iis/site";
 import { logger } from "../logger";
+import { buildAdminSafeDbView } from "../utils/dbView";
 
 const router = Router();
 
@@ -38,7 +39,7 @@ router.post("/subdomain", (req, res) => {
   });
 
   writeDatabase(db);
-  res.json({ success: true, subdomain: cleanSub, database: db });
+  res.json({ success: true, subdomain: cleanSub, database: buildAdminSafeDbView(db, (req as any).adminEmail) });
 });
 
 // POST /subdomains — list management (create / create-dummy / update / toggle / delete)
@@ -46,13 +47,13 @@ router.post("/subdomains", async (req, res) => {
   const { action, name, subdomain, displayName, id } = req.body;
   const resolvedName = name || subdomain;
   const db = readDatabase();
+  const adminEmail = (req as any).adminEmail;
   if (!db.subdomains) db.subdomains = [...DEFAULT_SUBDOMAINS];
 
   if (action === "update") {
     const targetId = id || resolvedName;
     const portal = (db.subdomains || []).find(s => s.id === targetId);
     if (!portal) return res.status(404).json({ error: "Portal not found." });
-    const adminEmail = (req as any).adminEmail;
     if (portal.createdBy && portal.createdBy !== adminEmail) {
       return res.status(403).json({ error: "You do not have permission to modify this portal." });
     }
@@ -65,7 +66,8 @@ router.post("/subdomains", async (req, res) => {
       date: new Date().toISOString(),
     });
     writeDatabase(db);
-    return res.json({ success: true, subdomains: db.subdomains, database: db });
+    const safeView = buildAdminSafeDbView(db, adminEmail);
+    return res.json({ success: true, subdomains: safeView.subdomains, database: safeView });
 
   } else if (action === "create") {
     if (!resolvedName || !displayName) {
@@ -293,14 +295,18 @@ router.post("/subdomains", async (req, res) => {
   }
 
   writeDatabase(db);
-  res.json({ success: true, subdomain: db.subdomain, subdomains: db.subdomains, database: db });
+  const safeView = buildAdminSafeDbView(db, adminEmail);
+  res.json({ success: true, subdomain: db.subdomain, subdomains: safeView.subdomains, database: safeView });
 });
 
 // POST /refresh-dns — re-check and update DNS status for all pending portals
 router.post("/refresh-dns", async (req, res) => {
   const db = readDatabase();
+  const adminEmail = (req as any).adminEmail;
+  // Only re-check DNS for the requesting admin's own pending portals — matches the
+  // ownership scope every other portal-list response applies (see buildAdminSafeDbView).
   const pendingPortals = (db.subdomains || []).filter(
-    s => !s.isDummy && s.domain && s.dnsStatus === "pending"
+    s => !s.isDummy && s.domain && s.dnsStatus === "pending" && (!s.createdBy || s.createdBy === adminEmail)
   );
 
   let updated = 0;
@@ -316,12 +322,13 @@ router.post("/refresh-dns", async (req, res) => {
 
   if (updated > 0) writeDatabase(db);
 
+  const safeView = buildAdminSafeDbView(db, adminEmail);
   res.json({
     success: true,
     checked: pendingPortals.length,
     activated: updated,
-    subdomains: db.subdomains,
-    database: db,
+    subdomains: safeView.subdomains,
+    database: safeView,
   });
 });
 

@@ -7,6 +7,7 @@ import { Router } from "express";
 import { Solution, Collateral, CurrentProject, UpcomingProject } from "../../shared/types";
 import { readDatabase, writeDatabase } from "../storage/db";
 import { autoDeployLivePortals } from "../portal/deploy";
+import { buildAdminSafeDbView } from "../utils/dbView";
 
 const router = Router();
 
@@ -14,35 +15,45 @@ const router = Router();
 router.post("/solutions", async (req, res) => {
   const { action, solution } = req.body;
   const db = readDatabase();
+  const adminEmail = (req as any).adminEmail;
 
   if (action === "create") {
     const newSol: Solution = {
       ...solution,
       id: `sol-${Date.now()}`,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      createdBy: adminEmail || undefined,
     };
     db.solutions.unshift(newSol);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
+      email: adminEmail || "admin@mobiusservices.co.in",
       action: "Solution Created",
       details: `Solution "${newSol.title}" onboarded successfully.`,
       date: new Date().toISOString()
     });
   } else if (action === "update") {
-    db.solutions = db.solutions.map(s => s.id === solution.id ? { ...s, ...solution } : s);
+    const target = db.solutions.find(s => s.id === solution.id);
+    if (target?.createdBy && target.createdBy !== adminEmail) {
+      return res.status(403).json({ error: "You do not have permission to modify this solution." });
+    }
+    db.solutions = db.solutions.map(s => s.id === solution.id ? { ...s, ...solution, createdBy: s.createdBy } : s);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
+      email: adminEmail || "admin@mobiusservices.co.in",
       action: "Solution Updated",
       details: `Solution "${solution.title}" details was edited.`,
       date: new Date().toISOString()
     });
   } else if (action === "delete") {
+    const target = db.solutions.find(s => s.id === solution.id);
+    if (target?.createdBy && target.createdBy !== adminEmail) {
+      return res.status(403).json({ error: "You do not have permission to delete this solution." });
+    }
     db.solutions = db.solutions.filter(s => s.id !== solution.id);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
+      email: adminEmail || "admin@mobiusservices.co.in",
       action: "Solution Deleted",
       details: `Solution with ID "${solution.id}" was soft deleted.`,
       date: new Date().toISOString()
@@ -51,42 +62,52 @@ router.post("/solutions", async (req, res) => {
 
   writeDatabase(db);
   await autoDeployLivePortals(db);
-  res.json({ success: true, database: db });
+  res.json({ success: true, database: buildAdminSafeDbView(db, adminEmail) });
 });
 
 // POST /collaterals — mounted at /api/admin
 router.post("/collaterals", async (req, res) => {
   const { action, collateral } = req.body;
   const db = readDatabase();
+  const adminEmail = (req as any).adminEmail;
 
   if (action === "create") {
     const newCol: Collateral = {
       ...collateral,
       id: `col-${Date.now()}`,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      createdBy: adminEmail || undefined,
     };
     db.collaterals.unshift(newCol);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
+      email: adminEmail || "admin@mobiusservices.co.in",
       action: "Collateral Added",
       details: `Collateral study "${newCol.title}" created.`,
       date: new Date().toISOString()
     });
   } else if (action === "update") {
-    db.collaterals = db.collaterals.map(c => c.id === collateral.id ? { ...c, ...collateral } : c);
+    const target = db.collaterals.find(c => c.id === collateral.id);
+    if (target?.createdBy && target.createdBy !== adminEmail) {
+      return res.status(403).json({ error: "You do not have permission to modify this collateral." });
+    }
+    db.collaterals = db.collaterals.map(c => c.id === collateral.id ? { ...c, ...collateral, createdBy: c.createdBy } : c);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
+      email: adminEmail || "admin@mobiusservices.co.in",
       action: "Collateral Updated",
       details: `Collateral study "${collateral.title}" updated.`,
       date: new Date().toISOString()
     });
   } else if (action === "delete") {
+    const target = db.collaterals.find(c => c.id === collateral.id);
+    if (target?.createdBy && target.createdBy !== adminEmail) {
+      return res.status(403).json({ error: "You do not have permission to delete this collateral." });
+    }
     db.collaterals = db.collaterals.filter(c => c.id !== collateral.id);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
+      email: adminEmail || "admin@mobiusservices.co.in",
       action: "Collateral Deleted",
       details: `Collateral with ID "${collateral.id}" removed.`,
       date: new Date().toISOString()
@@ -95,13 +116,14 @@ router.post("/collaterals", async (req, res) => {
 
   writeDatabase(db);
   await autoDeployLivePortals(db);
-  res.json({ success: true, database: db });
+  res.json({ success: true, database: buildAdminSafeDbView(db, adminEmail) });
 });
 
 // POST /projects/current — mounted at /api/admin
 router.post("/projects/current", async (req, res) => {
   const { action, project } = req.body;
   const db = readDatabase();
+  const adminEmail = (req as any).adminEmail;
 
   if (!db.currentProjects) db.currentProjects = [];
 
@@ -109,30 +131,39 @@ router.post("/projects/current", async (req, res) => {
     const newProj: CurrentProject = {
       ...project,
       id: `proj-c-${Date.now()}`,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      createdBy: adminEmail || undefined,
     };
     db.currentProjects.unshift(newProj);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
+      email: adminEmail || "admin@mobiusservices.co.in",
       action: "Current Project Created",
       details: `Project "${newProj.name}" created for customer: ${newProj.customerName}.`,
       date: new Date().toISOString()
     });
   } else if (action === "update") {
-    db.currentProjects = db.currentProjects.map(p => p.id === project.id ? { ...p, ...project } : p);
+    const target = db.currentProjects.find(p => p.id === project.id);
+    if (target?.createdBy && target.createdBy !== adminEmail) {
+      return res.status(403).json({ error: "You do not have permission to modify this project." });
+    }
+    db.currentProjects = db.currentProjects.map(p => p.id === project.id ? { ...p, ...project, createdBy: p.createdBy } : p);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
+      email: adminEmail || "admin@mobiusservices.co.in",
       action: "Current Project Updated",
       details: `Project "${project.name}" details updated.`,
       date: new Date().toISOString()
     });
   } else if (action === "delete") {
+    const target = db.currentProjects.find(p => p.id === project.id);
+    if (target?.createdBy && target.createdBy !== adminEmail) {
+      return res.status(403).json({ error: "You do not have permission to delete this project." });
+    }
     db.currentProjects = db.currentProjects.filter(p => p.id !== project.id);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
+      email: adminEmail || "admin@mobiusservices.co.in",
       action: "Current Project Deleted",
       details: `Project with ID "${project.id}" deleted.`,
       date: new Date().toISOString()
@@ -141,13 +172,14 @@ router.post("/projects/current", async (req, res) => {
 
   writeDatabase(db);
   await autoDeployLivePortals(db);
-  res.json({ success: true, database: db });
+  res.json({ success: true, database: buildAdminSafeDbView(db, adminEmail) });
 });
 
 // POST /projects/upcoming — mounted at /api/admin
 router.post("/projects/upcoming", async (req, res) => {
   const { action, project } = req.body;
   const db = readDatabase();
+  const adminEmail = (req as any).adminEmail;
 
   if (!db.upcomingProjects) db.upcomingProjects = [];
 
@@ -155,30 +187,39 @@ router.post("/projects/upcoming", async (req, res) => {
     const newProj: UpcomingProject = {
       ...project,
       id: `proj-u-${Date.now()}`,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      createdBy: adminEmail || undefined,
     };
     db.upcomingProjects.unshift(newProj);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
+      email: adminEmail || "admin@mobiusservices.co.in",
       action: "Upcoming Project Created",
       details: `Upcoming engagement "${newProj.name}" added for customer: ${newProj.customerName}.`,
       date: new Date().toISOString()
     });
   } else if (action === "update") {
-    db.upcomingProjects = db.upcomingProjects.map(p => p.id === project.id ? { ...p, ...project } : p);
+    const target = db.upcomingProjects.find(p => p.id === project.id);
+    if (target?.createdBy && target.createdBy !== adminEmail) {
+      return res.status(403).json({ error: "You do not have permission to modify this project." });
+    }
+    db.upcomingProjects = db.upcomingProjects.map(p => p.id === project.id ? { ...p, ...project, createdBy: p.createdBy } : p);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
+      email: adminEmail || "admin@mobiusservices.co.in",
       action: "Upcoming Project Updated",
       details: `Upcoming engagement "${project.name}" details revised.`,
       date: new Date().toISOString()
     });
   } else if (action === "delete") {
+    const target = db.upcomingProjects.find(p => p.id === project.id);
+    if (target?.createdBy && target.createdBy !== adminEmail) {
+      return res.status(403).json({ error: "You do not have permission to delete this project." });
+    }
     db.upcomingProjects = db.upcomingProjects.filter(p => p.id !== project.id);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
-      email: (req as any).adminEmail || "admin@mobiusservices.co.in",
+      email: adminEmail || "admin@mobiusservices.co.in",
       action: "Upcoming Project Deleted",
       details: `Upcoming engagement with ID "${project.id}" deleted.`,
       date: new Date().toISOString()
@@ -187,7 +228,7 @@ router.post("/projects/upcoming", async (req, res) => {
 
   writeDatabase(db);
   await autoDeployLivePortals(db);
-  res.json({ success: true, database: db });
+  res.json({ success: true, database: buildAdminSafeDbView(db, adminEmail) });
 });
 
 // POST /update-carousel — mounted at /api/admin
@@ -210,7 +251,7 @@ router.post("/update-carousel", async (req, res) => {
 
   writeDatabase(db);
   await autoDeployLivePortals(db);
-  res.json({ success: true, carousel: db.carousel, database: db });
+  res.json({ success: true, carousel: db.carousel, database: buildAdminSafeDbView(db, (req as any).adminEmail) });
 });
 
 export default router;
