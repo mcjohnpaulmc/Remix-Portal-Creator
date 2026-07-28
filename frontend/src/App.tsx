@@ -1439,9 +1439,9 @@ export default function App() {
             </div>
 
              {/* Central console body */}
-            <div className="flex-1 p-6 md:p-8 bg-slate-50/40 overflow-y-auto max-h-160 custom-scroll flex flex-col justify-between">
-              
-              {/* Horizontal Subdomain Switcher tabs bar (Interactive Top Bar) */}
+            <div className="flex-1 flex flex-col overflow-hidden bg-slate-50/40">
+              {/* Horizontal Subdomain Switcher tabs bar — kept outside the scroll area so it never scrolls off-screen */}
+              <div className="px-6 md:px-8 pt-6 md:pt-8 shrink-0">
               <div className="mb-6 bg-white p-4 rounded-2xl border border-slate-200 shadow-3xs text-left animate-fade-in relative overflow-hidden">
                 <div className="absolute top-0 right-0 h-12 w-12 bg-orange-50/50 rounded-full blur-xl pointer-events-none" />
                 <span className="text-[10px] font-mono font-bold tracking-wider text-slate-400 uppercase block mb-2.5">
@@ -1482,7 +1482,9 @@ export default function App() {
                   ))}
                 </div>
               </div>
+              </div>{/* end non-scrolling header */}
 
+              <div className="flex-1 px-6 md:px-8 pb-6 md:pb-8 overflow-y-auto custom-scroll">
               <AnimatePresence mode="wait">
                 <motion.div
                   key={adminActiveTab}
@@ -2117,6 +2119,7 @@ export default function App() {
                   )}
                 </motion.div>
               </AnimatePresence>
+              </div>{/* end scrollable content */}
             </div>
           </div>
         )}

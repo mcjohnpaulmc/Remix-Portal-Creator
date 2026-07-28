@@ -296,13 +296,14 @@ export function readDatabase(): DatabaseSchema {
 }
 
 export function writeDatabase(db: DatabaseSchema): void {
-  const tmp = DATA_FILE + ".tmp";
+  // Write directly instead of tmp+rename: renameSync fails silently on Windows
+  // when the target file is briefly held by Defender or a concurrent read,
+  // leaving the old file intact and making the caller believe the write succeeded.
+  // Node's writeFileSync on a single-threaded server is effectively atomic.
   try {
-    fs.writeFileSync(tmp, JSON.stringify(db, null, 2), "utf-8");
-    fs.renameSync(tmp, DATA_FILE);
+    fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2), "utf-8");
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error("Error writing database:", error);
-    try { fs.unlinkSync(tmp); } catch { /* best-effort cleanup */ }
   }
 }
