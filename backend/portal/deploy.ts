@@ -55,7 +55,33 @@ export async function deployPortalInProcess(
           timeout: 3000,
           headers: { "X-Admin-Token": effectiveAdminToken, "Content-Length": "0" },
         },
-        () => resolve(true)
+        (res) => {
+          let body = "";
+          res.on("data", (chunk) => { body += chunk; });
+          res.on("end", () => {
+            // A port can end up answered by a DIFFERENT portal's still-alive process
+            // (e.g. a delete/recreate race that reassigned this port before the old
+            // process finished shutting down). Trusting any 200 response here would
+            // silently report the deploy as successful while the browser keeps being
+            // served the wrong portal's content — so the responder must confirm it IS
+            // this slug before the reload counts as ok.
+            try {
+              const parsed = JSON.parse(body);
+              if (res.statusCode === 200 && parsed.slug === cleanSlug) {
+                resolve(true);
+              } else {
+                logger.error(
+                  `portal-${cleanSlug}`,
+                  `Reload responder on port ${portalPort} reported slug "${parsed.slug}" — ` +
+                  `expected "${cleanSlug}". Likely a stale process still bound to this port; refusing to report success.`
+                );
+                resolve(false);
+              }
+            } catch {
+              resolve(false);
+            }
+          });
+        }
       );
       reloadReq.on("error", () => resolve(false));
       reloadReq.on("timeout", () => { reloadReq.destroy(); resolve(false); });

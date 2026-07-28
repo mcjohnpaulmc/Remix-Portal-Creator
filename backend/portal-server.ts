@@ -296,7 +296,20 @@ h1{color:#fff;font-size:1.5rem;margin-bottom:.75rem}.dot{display:inline-block;wi
 
 // Boot
 loadPortalData().then(() => {
-  app.listen(PORT, "0.0.0.0", () => {
+  const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`[portal-${SLUG}] Running at http://localhost:${PORT}`);
+  });
+  // Without this handler, a bind failure (most commonly EADDRINUSE — a previous
+  // portal's process still bound to this port during a delete/recreate race) throws
+  // an unhandled 'error' event with an opaque stack trace, and PM2 crash-loops the
+  // process silently while the OLD process keeps answering traffic for THIS slug's
+  // subdomain. Failing loudly here makes that condition visible in `pm2 logs`.
+  server.on("error", (err: any) => {
+    if (err?.code === "EADDRINUSE") {
+      console.error(`[portal-${SLUG}] FATAL: port ${PORT} is already in use by another process — refusing to start.`);
+    } else {
+      console.error(`[portal-${SLUG}] FATAL: failed to bind port ${PORT}:`, err?.message || err);
+    }
+    process.exit(1);
   });
 });

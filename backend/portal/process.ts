@@ -69,7 +69,13 @@ export function pm2SpawnPortal(slug: string, port: number): void {
   }
 }
 
-export function pm2StopPortal(slug: string): void {
+// Returns a promise that resolves once the process is confirmed torn down (or the
+// teardown attempt has finished, even on failure) — callers that free a port
+// assignment or reuse a slug MUST await this first, otherwise a new portal can be
+// assigned the same port while the old process is still mid-shutdown and bound to it,
+// causing the new portal's process to crash on EADDRINUSE while traffic for its
+// subdomain keeps landing on the old (wrong) process.
+export function pm2StopPortal(slug: string): Promise<void> {
   const isDev = process.env.NODE_ENV !== "production";
 
   if (isDev) {
@@ -78,10 +84,14 @@ export function pm2StopPortal(slug: string): void {
       portalProcesses.delete(slug);
       logger.info(`portal-${slug}`, "Stopped");
     }
-  } else {
+    return Promise.resolve();
+  }
+
+  return new Promise<void>((resolve) => {
     exec(`"${PM2_BIN}" delete portal-${slug}`, { env: pm2Env() }, (err) => {
       if (err) logger.warn("PM2", `Could not delete portal-${slug}: ${err?.message}`);
       else logger.info("PM2", `Stopped portal-${slug}`);
+      resolve();
     });
-  }
+  });
 }

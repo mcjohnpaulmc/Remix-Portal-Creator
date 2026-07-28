@@ -1581,6 +1581,90 @@ def test_ui1_fetch_portal_data_retries_on_failure():
         fail(name, str(e))
 
 
+# ── Bug fixes — PC: port-reuse race lets one portal serve another's content ────
+# Deleting a portal freed its port assignment before the old PM2 process/IIS site
+# were confirmed torn down, so a portal created moments later could be handed the
+# same port while the old process was still alive on it — the new subdomain would
+# then silently be served by the OLD portal's process (wrong displayName, wrong/
+# stale/deleted solutions), because nothing verified process identity by slug.
+
+def test_pc1_pm2_stop_portal_is_awaitable():
+    name = "PC1 (static): pm2StopPortal returns a Promise so callers can await teardown"
+    try:
+        src = read_file("backend/portal/process.ts")
+        if "pm2StopPortal(slug: string): Promise<void>" not in src:
+            fail(name, "pm2StopPortal no longer declared to return Promise<void>"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_pc2_delete_awaits_teardown_before_freeing_port():
+    name = "PC2 (static): subdomains.routes.ts delete awaits pm2StopPortal/removeIisSite before freeing the port"
+    try:
+        src = read_file("backend/routes/subdomains.routes.ts")
+        delete_start = src.index('action === "delete"')
+        free_port_idx = src.index("Free the port assignment", delete_start)
+        segment = src[delete_start:free_port_idx]
+        if "await pm2StopPortal(targetId)" not in segment:
+            fail(name, "delete handler does not await pm2StopPortal before freeing the port"); return
+        if "await removeIisSite(targetId)" not in segment:
+            fail(name, "delete handler does not await removeIisSite before freeing the port"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_pc3_toggle_sleep_awaits_teardown():
+    name = "PC3 (static): subdomains.routes.ts toggle-to-sleep awaits pm2StopPortal"
+    try:
+        src = read_file("backend/routes/subdomains.routes.ts")
+        if "await pm2StopPortal(targetId);" not in src:
+            fail(name, "toggle handler does not await pm2StopPortal"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_pc4_portal_server_handles_listen_error():
+    name = "PC4 (static): portal-server.ts fails loudly (not silently) on a port bind/EADDRINUSE error"
+    try:
+        src = read_file("backend/portal-server.ts")
+        if 'server.on("error"' not in src:
+            fail(name, "app.listen() has no error handler"); return
+        if "EADDRINUSE" not in src:
+            fail(name, "listen error handler does not special-case EADDRINUSE"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_pc5_deploy_reload_verifies_slug_identity():
+    name = "PC5 (static): portal/deploy.ts rejects a reload response from the wrong slug instead of trusting any 200"
+    try:
+        src = read_file("backend/portal/deploy.ts")
+        idx = src.index('path: "/api/reload"')
+        body = src[idx:idx + 1200]
+        if "parsed.slug === cleanSlug" not in body:
+            fail(name, "reload handler does not verify the responder's slug matches the deploy target"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_pc6_portal_ready_verifies_slug_identity():
+    name = "PC6 (static): /portal-ready/:id verifies the responder's slug before reporting ready"
+    try:
+        src = read_file("backend/routes/subdomains.routes.ts")
+        idx = src.index('"/portal-ready/:id"')
+        body = src[idx:idx + 1200]
+        if "parsed.slug === id" not in body:
+            fail(name, "portal-ready probe does not verify the responder's slug matches the requested id"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 # ── run all tests ─────────────────────────────────────────────────────────────
 
 TESTS = [
@@ -1699,6 +1783,13 @@ TESTS = [
     test_ui1_domains_tab_hides_duplicate_filter_section,
     test_ui1_fetch_portal_data_checks_response_ok,
     test_ui1_fetch_portal_data_retries_on_failure,
+    # Bug fixes — PC: port-reuse race lets one portal serve another's content
+    test_pc1_pm2_stop_portal_is_awaitable,
+    test_pc2_delete_awaits_teardown_before_freeing_port,
+    test_pc3_toggle_sleep_awaits_teardown,
+    test_pc4_portal_server_handles_listen_error,
+    test_pc5_deploy_reload_verifies_slug_identity,
+    test_pc6_portal_ready_verifies_slug_identity,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

@@ -217,9 +217,11 @@ router.post("/subdomains", async (req, res) => {
         ensureIisSite(targetId, `${targetId}.${portal.domain}`, portal.port).catch(() => {});
       }
     } else {
-      pm2StopPortal(targetId);
+      // Awaited — a rapid live→sleep→live re-toggle must not respawn on a port
+      // that the previous process instance hasn't actually released yet.
+      await pm2StopPortal(targetId);
       if (!portal.isDummy) {
-        removeIisSite(targetId).catch(() => {});
+        await removeIisSite(targetId).catch(() => {});
       }
     }
 
@@ -260,13 +262,18 @@ router.post("/subdomains", async (req, res) => {
     db.currentProjects = stripSlug(db.currentProjects || []);
     db.upcomingProjects = stripSlug(db.upcomingProjects || []);
 
-    // Stop PM2 portal process, remove DNS record and IIS site
-    pm2StopPortal(targetId);
+    // Stop the PM2 process and remove the IIS site BEFORE freeing the port assignment
+    // below — otherwise a new portal created moments later can be handed this exact
+    // port while the old process is still mid-shutdown and bound to it, causing the
+    // new portal's process to crash (EADDRINUSE) while its subdomain keeps silently
+    // serving the old (deleted) portal's content from the still-alive process.
+    await pm2StopPortal(targetId);
+    if (deletedPortal && !deletedPortal.isDummy) {
+      await removeIisSite(targetId).catch(() => {});
+    }
+    // DNS cleanup doesn't affect local port reuse — safe to leave fire-and-forget.
     if (deletedPortal && !deletedPortal.isDummy && deletedPortal.domain) {
       deleteDnsRecord(targetId, deletedPortal.domain).catch(() => {});
-    }
-    if (deletedPortal && !deletedPortal.isDummy) {
-      removeIisSite(targetId).catch(() => {});
     }
 
     // Free the port assignment
@@ -344,7 +351,23 @@ router.get("/portal-ready/:id", (req, res) => {
 
   const probeReq = require("http").request(
     { hostname: "127.0.0.1", port, path: "/api/portal-info", method: "GET", timeout: 2000 },
-    (probeRes: any) => { res.json({ ready: probeRes.statusCode === 200 }); }
+    (probeRes: any) => {
+      let body = "";
+      probeRes.on("data", (chunk: any) => { body += chunk; });
+      probeRes.on("end", () => {
+        // A live port can be answered by a DIFFERENT portal's process if a
+        // delete/recreate reused the port before the old process fully shut down —
+        // confirm the responder actually reports itself as THIS slug before
+        // declaring the portal ready, otherwise the hub would send visitors to
+        // (and report success for) the wrong portal's content.
+        try {
+          const parsed = JSON.parse(body);
+          res.json({ ready: probeRes.statusCode === 200 && parsed.slug === id });
+        } catch {
+          res.json({ ready: false });
+        }
+      });
+    }
   );
   probeReq.on("error", () => res.json({ ready: false }));
   probeReq.on("timeout", () => { probeReq.destroy(); res.json({ ready: false }); });
