@@ -119,49 +119,54 @@ export function AdminSolutions({
     }
   };
 
+  // Import runs server-side (POST /api/admin/external-portals/import) rather than
+  // creating solutions one-by-one from the client: the hub server is the only party
+  // that can actually reach the source portal's internal address to (a) pull each
+  // solution's linked collaterals and (b) download + re-host thumbnail images so
+  // they render for any browser, regardless of what scheme/host the source used.
   const handleBulkImport = async () => {
     if (!portalSolutions) return;
-    const toImport: ExternalSolution[] = [];
-    for (const id of selectedMobius) {
-      const sol = portalSolutions.mobius.find(s => s.id === id);
-      if (sol) toImport.push(sol);
-    }
-    for (const id of selectedTechmobius) {
-      const sol = portalSolutions.techmobius.find(s => s.id === id);
-      if (sol) toImport.push(sol);
-    }
-
-    const existingTitles = new Set(solutions.map(s => s.title.toLowerCase().trim()));
-    const fresh = toImport.filter(sol => !existingTitles.has(sol.title.toLowerCase().trim()));
-    const skippedCount = toImport.length - fresh.length;
-
-    if (fresh.length === 0) {
-      alert(`All selected solution(s) already exist in the hub.`);
-      return;
-    }
+    const jobs: { portal: "mobius" | "techmobius"; solutionIds: string[] }[] = [];
+    if (selectedMobius.size > 0) jobs.push({ portal: "mobius", solutionIds: Array.from(selectedMobius) });
+    if (selectedTechmobius.size > 0) jobs.push({ portal: "techmobius", solutionIds: Array.from(selectedTechmobius) });
+    if (jobs.length === 0) return;
 
     setImporting(true);
     try {
-      for (const sol of fresh) {
-        const tags: string[] = [];
-        if (sol.practice) tags.push(sol.practice);
-        if (sol.solutionType) tags.push(sol.solutionType);
-        await onRefresh("create", {
-          title: sol.title,
-          url: sol.targetUrl,
-          thumbnail: sol.thumbnailUrl?.startsWith("https://") ? sol.thumbnailUrl : "",
-          credentialsDescription: sol.credentialsNote || "",
-          usernamePrefill: sol.defaultUsername || "",
-          passwordPrefill: "",
-          tags,
-          customerName: "all",
-          customerNames: ["all"],
-          googleDriveUrl: "",
-          uploadedFiles: [],
-          enabled: true,
-        });
+      let totalSolutions = 0;
+      let totalCollaterals = 0;
+      let totalSkipped = 0;
+      const errors: string[] = [];
+
+      for (const job of jobs) {
+        try {
+          const res = await fetch("/api/admin/external-portals/import", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ portal: job.portal, solutionIds: job.solutionIds, customerNames }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            errors.push(data.error || `Import from ${job.portal} failed.`);
+            continue;
+          }
+          totalSolutions += data.importedSolutions || 0;
+          totalCollaterals += data.importedCollaterals || 0;
+          totalSkipped += data.skippedSolutions || 0;
+        } catch {
+          errors.push(`Import from ${job.portal} failed — server unreachable.`);
+        }
       }
-      alert(`Imported ${fresh.length} solution(s).${skippedCount > 0 ? ` Skipped ${skippedCount} duplicate(s).` : ""}`);
+
+      // Both solutions and collaterals changed — refetch the full database rather
+      // than patching local state, since this component only owns solutions state.
+      await onReload?.();
+
+      const summary = `Imported ${totalSolutions} solution(s) and ${totalCollaterals} linked collateral(s).` +
+        (totalSkipped > 0 ? ` Skipped ${totalSkipped} duplicate(s).` : "");
+      alert(errors.length > 0 ? `${summary}\n\n${errors.join("\n")}` : summary);
+
       setSelectedMobius(new Set());
       setSelectedTechmobius(new Set());
       setMobiusOpen(false);

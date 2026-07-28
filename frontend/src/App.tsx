@@ -1097,9 +1097,6 @@ export default function App() {
                             <h3 className="font-bold text-slate-800 text-sm tracking-tight leading-snug group-hover:text-orange-600 transition-colors">
                               {sol.title}
                             </h3>
-                            <p className="text-[10px] text-slate-450 font-mono truncate leading-none">
-                              {sol.url ? `Target: ${sol.url}` : "No URL configured"}
-                            </p>
                             <p className="text-xs text-slate-500 leading-relaxed line-clamp-2">
                               {sol.credentialsDescription || "Gated enterprise intelligence hub."}
                             </p>

@@ -1695,6 +1695,64 @@ def test_pc8_subdomains_routes_awaits_assign_next_port():
         fail(name, str(e))
 
 
+# ── Bug fixes — IMP: external-portal import drops collaterals/thumbnails; URL leak ─
+
+def test_imp1_solution_card_hides_target_url():
+    name = "IMP1 (static): App.tsx solution cards no longer render the raw target URL"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        if "Target: ${sol.url}" in src or "No URL configured" in src:
+            fail(name, "solution card still renders 'Target: <url>' / 'No URL configured' text"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_imp2_import_endpoint_creates_linked_collaterals():
+    name = "IMP2 (static): external-portals import endpoint creates Collateral records linked to the imported solution"
+    try:
+        src = read_file("backend/routes/external-portals.routes.ts")
+        if '"/external-portals/import"' not in src:
+            fail(name, "POST /external-portals/import endpoint not found"); return
+        if "linked_solution_id" not in src:
+            fail(name, "import handler does not filter collaterals by linked_solution_id"); return
+        if "db.collaterals.unshift" not in src:
+            fail(name, "import handler does not push imported collaterals into db.collaterals"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_imp3_import_rehosts_thumbnails_instead_of_https_only_filter():
+    name = "IMP3 (static): thumbnail import re-hosts images server-side instead of dropping non-https URLs"
+    try:
+        src = read_file("backend/routes/external-portals.routes.ts")
+        if 'startsWith("https://")' in src:
+            fail(name, "https-only thumbnail filter still present — would drop http/relative source URLs"); return
+        if "function rehostImage" not in src:
+            fail(name, "rehostImage helper not found"); return
+        if "s3PutUpload" not in src:
+            fail(name, "rehosted thumbnails are not persisted via s3PutUpload"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_imp4_frontend_import_calls_server_endpoint_and_reloads():
+    name = "IMP4 (static): AdminSolutions.tsx bulk import calls the server import endpoint and reloads full DB state"
+    try:
+        src = read_file("frontend/src/components/AdminSolutions.tsx")
+        idx = src.index("handleBulkImport = async")
+        body = src[idx:idx + 2500]
+        if "/api/admin/external-portals/import" not in body:
+            fail(name, "handleBulkImport no longer calls the server-side import endpoint"); return
+        if "onReload?.()" not in body:
+            fail(name, "handleBulkImport does not reload full database state after import (collaterals changed too)"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 # ── run all tests ─────────────────────────────────────────────────────────────
 
 TESTS = [
@@ -1822,6 +1880,11 @@ TESTS = [
     test_pc6_portal_ready_verifies_slug_identity,
     test_pc7_assign_next_port_verifies_os_level_availability,
     test_pc8_subdomains_routes_awaits_assign_next_port,
+    # Bug fixes — IMP: external-portal import drops collaterals/thumbnails; URL leak
+    test_imp1_solution_card_hides_target_url,
+    test_imp2_import_endpoint_creates_linked_collaterals,
+    test_imp3_import_rehosts_thumbnails_instead_of_https_only_filter,
+    test_imp4_frontend_import_calls_server_endpoint_and_reloads,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]
