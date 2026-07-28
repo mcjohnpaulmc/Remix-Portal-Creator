@@ -1501,6 +1501,7 @@ export default function App() {
                       subdomains={subdomainsList}
                       prefilledSubdomain={selectedAdminSubdomain === "all" ? null : selectedAdminSubdomain}
                       onRefresh={async (action, data) => handleAdminDatabaseUpdate("solutions", action, data)}
+                      onReload={fetchPortalData}
                       adminUserEmail={userEmail || ""}
                     />
                   )}

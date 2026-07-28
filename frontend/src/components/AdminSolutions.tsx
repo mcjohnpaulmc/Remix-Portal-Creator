@@ -4,12 +4,13 @@
  */
 
 import React, { useState } from "react";
-import { Plus, Edit2, Check, X, Shield, Globe, Image, Tag, Key, Eye, EyeOff, FolderOpen, Link2, Download, AlertCircle, Upload, Trash2 } from "lucide-react";
+import { Plus, Edit2, Check, X, Shield, Globe, Image, Tag, Key, Eye, EyeOff, FolderOpen, Link2, Download, AlertCircle, Upload, Trash2, RefreshCw } from "lucide-react";
 import { Solution } from "../../../shared/types";
 
 interface AdminSolutionsProps {
   solutions: Solution[];
   onRefresh: (action: string, solutionData: any) => Promise<void>;
+  onReload?: () => Promise<void>;
   subdomains?: { id: string; name: string; displayName: string }[];
   prefilledSubdomain?: string | null;
   adminUserEmail?: string;
@@ -26,6 +27,7 @@ const VISUAL_PRESETS = [
 export function AdminSolutions({
   solutions,
   onRefresh,
+  onReload,
   subdomains = [],
   prefilledSubdomain,
   adminUserEmail = "",
@@ -33,6 +35,7 @@ export function AdminSolutions({
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Form states
   const [customerNames, setCustomerNames] = useState<string[]>(["all"]);
@@ -196,16 +199,32 @@ export function AdminSolutions({
         </div>
 
         {!isEditing && (
-          <button
-            onClick={() => {
-              resetForm();
-              setIsEditing(true);
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            Onboard New Solution
-          </button>
+          <div className="flex items-center gap-2">
+            {onReload && (
+              <button
+                onClick={async () => {
+                  setRefreshing(true);
+                  try { await onReload(); } finally { setRefreshing(false); }
+                }}
+                disabled={refreshing}
+                className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-600 text-xs font-semibold rounded-lg transition-colors disabled:opacity-50"
+                title="Reload solutions from server"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+                {refreshing ? "Refreshing…" : "Refresh"}
+              </button>
+            )}
+            <button
+              onClick={() => {
+                resetForm();
+                setIsEditing(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              Onboard New Solution
+            </button>
+          </div>
         )}
       </div>
 
