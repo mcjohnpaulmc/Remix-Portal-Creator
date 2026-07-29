@@ -2334,6 +2334,21 @@ def test_casc3_remapping_solution_syncs_linked_collaterals():
         fail(name, str(e))
 
 
+def test_sandbox1_interactive_asset_sandbox_removed():
+    name = "SANDBOX1 (static): CollateralDetailModal no longer renders the Interactive Asset Sandbox preview section"
+    try:
+        src = read_file("frontend/src/components/CollateralDetailModal.tsx")
+        if "Interactive Asset Sandbox" in src:
+            fail(name, "Interactive Asset Sandbox label still present"); return
+        if "Google Drive Document Embed" in src:
+            fail(name, "the sandbox iframe embed block is still present"); return
+        if "Simulated Document Preview" in src:
+            fail(name, "the simulated document preview mockup is still present"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 # ── run all tests ─────────────────────────────────────────────────────────────
 
 TESTS = [
@@ -2514,6 +2529,7 @@ TESTS = [
     test_casc2_content_routes_uses_shared_cascade_helper,
     test_casc2_portal_delete_removes_orphaned_solutions,
     test_casc3_remapping_solution_syncs_linked_collaterals,
+    test_sandbox1_interactive_asset_sandbox_removed,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

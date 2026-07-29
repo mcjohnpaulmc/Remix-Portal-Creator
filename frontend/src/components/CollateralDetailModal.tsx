@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from "react";
-import { X, Download, FileText, LayoutTemplate, Film, CheckCircle2, AlertOctagon, TrendingUp, Cpu, Play, ExternalLink, RefreshCw, FileSpreadsheet, Eye } from "lucide-react";
+import { X, Download, FileText, LayoutTemplate, Film, CheckCircle2, AlertOctagon, TrendingUp, Cpu, Play, RefreshCw, Eye } from "lucide-react";
 import { Collateral } from "../../../shared/types";
 import { motion } from "motion/react";
 
@@ -259,112 +259,6 @@ export function CollateralDetailModal({ collateral, onClose }: CollateralDetailM
 
         {/* Modal Scroll Body */}
         <div className="p-6 md:p-8 space-y-8 flex-1">
-          {/* Header interactive preview window */}
-          <div className="bg-slate-900 rounded-2xl overflow-hidden shadow-xl border border-slate-850 flex flex-col">
-            {/* Window bar */}
-            <div className="px-4 py-3 bg-slate-950 border-b border-slate-850 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                <span className="text-[10px] uppercase font-mono tracking-widest text-slate-400 font-bold ml-2">
-                  Interactive Asset Sandbox: {collateral.fileType || "doc"}
-                </span>
-              </div>
-              {collateral.googleDriveUrl && (
-                <a
-                  href={collateral.googleDriveUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 text-[10px] font-bold text-orange-400 hover:text-orange-300 font-sans tracking-tight"
-                >
-                  <ExternalLink className="h-3 w-3" /> Open in Workspace
-                </a>
-              )}
-            </div>
-
-            {/* Embedded Iframe/Player Area */}
-            <div className="relative aspect-video w-full bg-slate-950 flex flex-col items-center justify-center">
-              {collateral.googleDriveUrl ? (
-                (() => {
-                  const embedUrl = (() => {
-                    const clean = collateral.googleDriveUrl.trim();
-                    if (clean.includes("drive.google.com/file/d/")) {
-                      const match = clean.match(/\/file\/d\/([a-zA-Z0-9-_]+)/);
-                      return match ? `https://drive.google.com/file/d/${match[1]}/preview` : clean;
-                    }
-                    if (clean.includes("docs.google.com/presentation/d/")) {
-                      const match = clean.match(/\/presentation\/d\/([a-zA-Z0-9-_]+)/);
-                      return match ? `https://docs.google.com/presentation/d/${match[1]}/embed` : clean;
-                    }
-                    if (clean.includes("docs.google.com/document/d/")) {
-                      const match = clean.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
-                      return match ? `https://docs.google.com/document/d/${match[1]}/preview` : clean;
-                    }
-                    if (clean.includes("docs.google.com/spreadsheets/d/")) {
-                      const match = clean.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-                      return match ? `https://docs.google.com/spreadsheets/d/${match[1]}/htmlembed` : clean;
-                    }
-                    return clean;
-                  })();
-
-                  return (
-                    <iframe
-                      src={embedUrl}
-                      className="w-full h-full border-none"
-                      allow="autoplay"
-                      title="Google Drive Document Embed"
-                    />
-                  );
-                })()
-              ) : (
-                // Super realistic Simulated Document Preview layout for assets that only have prompt inputs
-                <div className="absolute inset-0 p-6 flex flex-col justify-between text-left select-none text-slate-300 bg-linear-to-b from-slate-900 to-slate-950 border border-slate-800">
-                  <div className="flex justify-between items-start">
-                    <div className="space-y-1.5">
-                      <span className="text-[10px] font-mono bg-orange-500/10 text-orange-400 border border-orange-500/25 px-2.5 py-0.5 rounded-sm uppercase tracking-wider font-semibold">
-                        {collateral.fileType || "doc"} preview
-                      </span>
-                      <h4 className="text-sm font-bold text-white tracking-tight font-display mt-2">
-                        {collateral.title}
-                      </h4>
-                      <p className="text-[11px] text-slate-400 leading-normal max-w-sm font-sans">
-                        Dynamic layout generated via Gemini AI. Interactive view is active. Use references or open standard briefs below to download materials.
-                      </p>
-                    </div>
-                    {collateral.fileType === "google video" || collateral.fileType?.includes("video") ? (
-                      <Film className="h-10 w-10 text-orange-500" />
-                    ) : collateral.fileType === "google slide" || collateral.fileType?.includes("slide") || collateral.fileType?.includes("deck") ? (
-                      <LayoutTemplate className="h-10 w-10 text-amber-500" />
-                    ) : collateral.fileType === "google sheet" || collateral.fileType?.includes("sheet") ? (
-                      <FileSpreadsheet className="h-10 w-10 text-emerald-500" />
-                    ) : (
-                      <FileText className="h-10 w-10 text-sky-500" />
-                    )}
-                  </div>
-
-                  {/* Aesthetic mock visualizer graphs or structures */}
-                  <div className="w-full py-4 px-4 bg-slate-950/60 border border-slate-850 rounded-xl flex flex-col gap-2.5">
-                    <div className="flex items-center justify-between text-[10px] font-mono text-orange-400 font-bold border-b border-slate-850 pb-1.5">
-                      <span>📄 TEMPLATE SUMMARY PATH</span>
-                      <span>100% SECURE PREVIEW</span>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="h-2 w-3/4 bg-slate-800 rounded-sm" />
-                      <div className="h-2 w-1/2 bg-slate-800 rounded-sm" />
-                      <div className="h-2 w-5/6 bg-slate-800 rounded-sm" />
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between text-[11px] font-mono text-slate-500">
-                    <span>MOBIUS KNOWLEDGE ENGINE v3.4</span>
-                    <span>ACTIVE METRIC TRACKER: AUTO</span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
           {/* Render Styled Content Sections */}
           <div className="space-y-6">
             {renderStyledCaseStudy(collateral.generatedContent)}
