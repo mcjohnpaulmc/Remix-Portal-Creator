@@ -36,6 +36,12 @@ export interface Solution {
   customerName?: string; // Associated customer subdomain portal name
   customerNames?: string[]; // Multiple target subdomains
   createdBy?: string; // email of the admin who created this solution; used for portal isolation
+  // Set when this solution is a standalone HTML app deployed via "Deploy Solution":
+  // deployedSlug/deployedDomain identify the dedicated subdomain hosting the
+  // uploaded index.html — url is set to that subdomain's address. Used to clean up
+  // the DNS record, IIS site, and stored file when the solution is deleted.
+  deployedSlug?: string;
+  deployedDomain?: string;
 }
 
 export interface Collateral {

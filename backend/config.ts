@@ -13,6 +13,7 @@ export const PORTAL_PORT_BASE = 5000;
 export const DATA_DIR = path.join(process.cwd(), "data");
 export const DATA_FILE = path.join(DATA_DIR, "data-store.json");
 export const PORTALS_DIR = path.join(DATA_DIR, "portals");
+export const DEPLOYED_SOLUTIONS_DIR = path.join(DATA_DIR, "deployed-solutions");
 export const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "";
 export const JWT_SECRET = process.env.JWT_SECRET || "";
 export const SYSTEM_ADMIN_EMAIL = "eswar@xtract.io";

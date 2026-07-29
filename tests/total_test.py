@@ -2029,6 +2029,103 @@ def test_super8_system_admin_seeded_as_superadmin():
         fail(name, str(e))
 
 
+# ── Feature — DEPLOY: standalone HTML app deploy-to-subdomain ──────────────────
+
+def test_deploy1_solution_type_has_deployed_fields():
+    name = "DEPLOY1 (static): Solution type tracks deployedSlug/deployedDomain"
+    try:
+        src = read_file("shared/types.ts")
+        if "deployedSlug?: string" not in src or "deployedDomain?: string" not in src:
+            fail(name, "Solution interface missing deployedSlug/deployedDomain"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_deploy2_config_defines_deployed_solutions_dir():
+    name = "DEPLOY2 (static): config.ts defines DEPLOYED_SOLUTIONS_DIR"
+    try:
+        src = read_file("backend/config.ts")
+        if "DEPLOYED_SOLUTIONS_DIR" not in src:
+            fail(name, "DEPLOYED_SOLUTIONS_DIR not defined"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_deploy3_static_iis_site_helpers_exist():
+    name = "DEPLOY3 (static): iis/site.ts exports ensureStaticHtmlIisSite/removeStaticHtmlIisSite"
+    try:
+        src = read_file("backend/iis/site.ts")
+        if "export async function ensureStaticHtmlIisSite" not in src:
+            fail(name, "ensureStaticHtmlIisSite not found"); return
+        if "export async function removeStaticHtmlIisSite" not in src:
+            fail(name, "removeStaticHtmlIisSite not found"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_deploy4_route_exists_and_allows_html_upload():
+    name = "DEPLOY4 (static): POST /deploy-solution exists, accepts .html, provisions DNS+IIS, creates a Solution"
+    try:
+        src = read_file("backend/routes/deploy-solution.routes.ts")
+        if '"/deploy-solution"' not in src:
+            fail(name, "route path not found"); return
+        if 'ext !== ".html" && ext !== ".htm"' not in src:
+            fail(name, "upload filter does not explicitly allow .html/.htm"); return
+        if "ensureDnsRecord" not in src or "ensureStaticHtmlIisSite" not in src:
+            fail(name, "handler does not provision DNS + static IIS site"); return
+        if "deployedSlug: cleanSlug" not in src:
+            fail(name, "created Solution does not record deployedSlug"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_deploy5_route_mounted_in_server():
+    name = "DEPLOY5 (static): server.ts mounts deploy-solution router under /api/admin"
+    try:
+        src = read_file("backend/server.ts")
+        if "deploySolutionRouter" not in src or 'app.use("/api/admin", deploySolutionRouter)' not in src:
+            fail(name, "deploy-solution router not mounted at /api/admin"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_deploy6_delete_cascades_dns_iis_and_file_cleanup():
+    name = "DEPLOY6 (static): deleting a deployed solution cleans up its DNS record, IIS site, and stored file"
+    try:
+        src = read_file("backend/routes/content.routes.ts")
+        idx = src.index("target?.deployedSlug")
+        body = src[idx:idx + 700]
+        if "deleteDnsRecord" not in body:
+            fail(name, "delete handler does not remove the DNS record"); return
+        if "removeStaticHtmlIisSite" not in body:
+            fail(name, "delete handler does not remove the static IIS site"); return
+        if "fs.rmSync(solutionDir" not in body:
+            fail(name, "delete handler does not remove the stored HTML file"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_deploy7_frontend_deploy_button_and_panel_exist():
+    name = "DEPLOY7 (static): AdminSolutions.tsx has a Deploy Solution button and upload panel"
+    try:
+        src = read_file("frontend/src/components/AdminSolutions.tsx")
+        if "Deploy Solution" not in src:
+            fail(name, "Deploy Solution button not found"); return
+        if "/api/admin/deploy-solution" not in src:
+            fail(name, "frontend does not call the deploy-solution endpoint"); return
+        if 'accept=".html,.htm,text/html"' not in src:
+            fail(name, "file input does not restrict to .html/.htm"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 # ── run all tests ─────────────────────────────────────────────────────────────
 
 TESTS = [
@@ -2184,6 +2281,14 @@ TESTS = [
     test_super6_frontend_admits_superadmin_to_console,
     test_super7_admin_users_ui_restricts_superadmin_grant,
     test_super8_system_admin_seeded_as_superadmin,
+    # Feature — DEPLOY: standalone HTML app deploy-to-subdomain
+    test_deploy1_solution_type_has_deployed_fields,
+    test_deploy2_config_defines_deployed_solutions_dir,
+    test_deploy3_static_iis_site_helpers_exist,
+    test_deploy4_route_exists_and_allows_html_upload,
+    test_deploy5_route_mounted_in_server,
+    test_deploy6_delete_cascades_dns_iis_and_file_cleanup,
+    test_deploy7_frontend_deploy_button_and_panel_exist,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

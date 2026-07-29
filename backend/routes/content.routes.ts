@@ -3,12 +3,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import fs from "fs";
+import path from "path";
 import { Router } from "express";
 import { Solution, Collateral, CurrentProject, UpcomingProject } from "../../shared/types";
 import { readDatabase, writeDatabase } from "../storage/db";
 import { autoDeployLivePortals } from "../portal/deploy";
 import { buildAdminSafeDbView } from "../utils/dbView";
 import { isSuperAdminRole } from "../auth";
+import { DEPLOYED_SOLUTIONS_DIR } from "../config";
+import { deleteDnsRecord } from "../dns/cloudflare";
+import { removeStaticHtmlIisSite } from "../iis/site";
+import { logger } from "../logger";
 
 const router = Router();
 
@@ -58,6 +64,24 @@ router.post("/solutions", async (req, res) => {
     // leaving it to surface under "General Collaterals" in the catalogue.
     const linkedCollateralCount = (db.collaterals || []).filter(c => c.linkedSolutionId === solution.id).length;
     db.collaterals = (db.collaterals || []).filter(c => c.linkedSolutionId !== solution.id);
+
+    // Cascade: a deployed standalone HTML app owns a DNS record, an IIS site, and
+    // a stored file on disk — none of that is cleaned up just by removing the
+    // Solution row, so tear it down explicitly.
+    if (target?.deployedSlug) {
+      const deployedDomain = target.deployedDomain || "mobiusservices.io";
+      await deleteDnsRecord(target.deployedSlug, deployedDomain).catch(() => {});
+      await removeStaticHtmlIisSite(target.deployedSlug).catch(() => {});
+      const solutionDir = path.join(DEPLOYED_SOLUTIONS_DIR, target.deployedSlug);
+      if (fs.existsSync(solutionDir)) {
+        try {
+          fs.rmSync(solutionDir, { recursive: true, force: true });
+        } catch (err: any) {
+          logger.warn(`deploy-solution-${target.deployedSlug}`, `Could not delete stored file: ${err?.message}`);
+        }
+      }
+    }
+
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
       email: adminEmail || "admin@mobiusservices.co.in",

@@ -21,6 +21,7 @@ import subdomainsRouter from "./routes/subdomains.routes";
 import aiRouter from "./routes/ai.routes";
 import uploadRouter from "./routes/upload.routes";
 import deployRouter from "./routes/deploy.routes";
+import deploySolutionRouter from "./routes/deploy-solution.routes";
 import externalPortalsRouter from "./routes/external-portals.routes";
 import publicRouter from "./routes/public.routes";
 import { subdomainProxyMiddleware } from "./middleware/subdomain-proxy";
@@ -51,6 +52,7 @@ app.use("/api/admin", contentRouter);
 app.use("/api/admin", subdomainsRouter);
 app.use("/api/admin", aiRouter);
 app.use("/api/admin", deployRouter);
+app.use("/api/admin", deploySolutionRouter);
 app.use("/api/admin", externalPortalsRouter);
 
 // ── Public routes (/api/database, /api/portal-info, /api/log) ─────────────────
