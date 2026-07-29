@@ -17,6 +17,7 @@ import { ensureIisSite, removeIisSite } from "../iis/site";
 import { logger } from "../logger";
 import { buildAdminSafeDbView } from "../utils/dbView";
 import { isSuperAdminRole } from "../auth";
+import { deleteSolutionCascade } from "../utils/solutionCascade";
 
 const router = Router();
 
@@ -263,7 +264,25 @@ router.post("/subdomains", async (req, res) => {
       customerNames: (item.customerNames || []).filter((n: string) => n !== targetId),
       customerName: item.customerName === targetId ? "" : item.customerName,
     }));
+
+    // A solution that was mapped ONLY to this portal is left with an empty
+    // customerNames/customerName after the strip above — previously that
+    // orphaned state was misread as "mapped to all portals" by the
+    // `customerName || "all"` display fallback used elsewhere, instead of
+    // disappearing as intended. Delete those solutions outright (cascading to
+    // their own linked collaterals and any deployed HTML app) rather than
+    // leaving them behind with nowhere to be shown. A solution still mapped to
+    // at least one other portal just loses this slug, same as before.
     db.solutions = stripSlug(db.solutions || []);
+    const orphanedSolutionIds = db.solutions
+      .filter(s => (!s.customerNames || s.customerNames.length === 0) && !s.customerName)
+      .map(s => s.id);
+    let cascadedSolutionCollaterals = 0;
+    for (const orphanId of orphanedSolutionIds) {
+      const { linkedCollateralCount } = await deleteSolutionCascade(db, orphanId);
+      cascadedSolutionCollaterals += linkedCollateralCount;
+    }
+
     db.collaterals = stripSlug(db.collaterals || []);
     db.currentProjects = stripSlug(db.currentProjects || []);
     db.upcomingProjects = stripSlug(db.upcomingProjects || []);
@@ -302,7 +321,11 @@ router.post("/subdomains", async (req, res) => {
       id: `log-${Date.now()}`,
       email: (req as any).adminEmail || "admin@mobiusservices.co.in",
       action: "Customer Subdomain Portal Deleted",
-      details: `Deleted portal "${targetId}", removed its slug from all content mappings.`,
+      details: `Deleted portal "${targetId}", removed its slug from all content mappings` +
+        (orphanedSolutionIds.length > 0
+          ? `, and deleted ${orphanedSolutionIds.length} solution(s) left with no remaining portal` +
+            (cascadedSolutionCollaterals > 0 ? ` (along with ${cascadedSolutionCollaterals} linked collateral(s))` : "") + "."
+          : "."),
       date: new Date().toISOString()
     });
   }

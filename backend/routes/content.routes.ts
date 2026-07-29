@@ -3,18 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import fs from "fs";
-import path from "path";
 import { Router } from "express";
 import { Solution, Collateral, CurrentProject, UpcomingProject } from "../../shared/types";
 import { readDatabase, writeDatabase } from "../storage/db";
 import { autoDeployLivePortals } from "../portal/deploy";
 import { buildAdminSafeDbView } from "../utils/dbView";
 import { isSuperAdminRole } from "../auth";
-import { DEPLOYED_SOLUTIONS_DIR } from "../config";
-import { deleteDnsRecord } from "../dns/cloudflare";
-import { removeStaticHtmlIisSite } from "../iis/site";
-import { logger } from "../logger";
+import { deleteSolutionCascade } from "../utils/solutionCascade";
 
 const router = Router();
 
@@ -46,6 +41,20 @@ router.post("/solutions", async (req, res) => {
       return res.status(403).json({ error: "You do not have permission to modify this solution." });
     }
     db.solutions = db.solutions.map(s => s.id === solution.id ? { ...s, ...solution, createdBy: s.createdBy } : s);
+
+    // Keep linked collaterals in sync with their solution's portal mapping — if
+    // a solution is remapped from one portal to another, a collateral that was
+    // imported/created alongside it should move with it, not stay stranded on
+    // the portal the solution no longer belongs to.
+    if (solution.customerNames !== undefined) {
+      const syncedNames: string[] = solution.customerNames || [];
+      db.collaterals = (db.collaterals || []).map(c =>
+        c.linkedSolutionId === solution.id
+          ? { ...c, customerNames: syncedNames, customerName: syncedNames[0] ?? c.customerName }
+          : c
+      );
+    }
+
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
       email: adminEmail || "admin@mobiusservices.co.in",
@@ -58,30 +67,7 @@ router.post("/solutions", async (req, res) => {
     if (target?.createdBy && target.createdBy !== adminEmail && !isSuperAdmin) {
       return res.status(403).json({ error: "You do not have permission to delete this solution." });
     }
-    db.solutions = db.solutions.filter(s => s.id !== solution.id);
-    // Cascade: a collateral with no solution left to belong to is orphaned data,
-    // not a standalone asset — remove it along with its solution rather than
-    // leaving it to surface under "General Collaterals" in the catalogue.
-    const linkedCollateralCount = (db.collaterals || []).filter(c => c.linkedSolutionId === solution.id).length;
-    db.collaterals = (db.collaterals || []).filter(c => c.linkedSolutionId !== solution.id);
-
-    // Cascade: a deployed standalone HTML app owns a DNS record, an IIS site, and
-    // a stored file on disk — none of that is cleaned up just by removing the
-    // Solution row, so tear it down explicitly.
-    if (target?.deployedSlug) {
-      const deployedDomain = target.deployedDomain || "mobiusservices.io";
-      await deleteDnsRecord(target.deployedSlug, deployedDomain).catch(() => {});
-      await removeStaticHtmlIisSite(target.deployedSlug).catch(() => {});
-      const solutionDir = path.join(DEPLOYED_SOLUTIONS_DIR, target.deployedSlug);
-      if (fs.existsSync(solutionDir)) {
-        try {
-          fs.rmSync(solutionDir, { recursive: true, force: true });
-        } catch (err: any) {
-          logger.warn(`deploy-solution-${target.deployedSlug}`, `Could not delete stored file: ${err?.message}`);
-        }
-      }
-    }
-
+    const { linkedCollateralCount } = await deleteSolutionCascade(db, solution.id);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
       email: adminEmail || "admin@mobiusservices.co.in",

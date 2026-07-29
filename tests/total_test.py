@@ -1844,11 +1844,15 @@ def test_imp9_collaterals_catalogue_grouped_by_solution_with_horizontal_scroll()
 def test_casc1_deleting_solution_cascades_to_linked_collaterals():
     name = "CASC1 (static): deleting a solution also removes its linked collaterals"
     try:
-        src = read_file("backend/routes/content.routes.ts")
-        idx = src.index('action === "delete"')
-        body = src[idx:idx + 900]
-        if "c.linkedSolutionId !== solution.id" not in body:
-            fail(name, "solution delete handler does not filter out collaterals by linkedSolutionId"); return
+        # This cascade logic was later extracted into backend/utils/solutionCascade.ts
+        # (shared with portal-delete cascading) — see CASC2a for the helper itself and
+        # CASC2b for content.routes.ts calling it.
+        src = read_file("backend/utils/solutionCascade.ts")
+        if "c.linkedSolutionId !== solutionId" not in src:
+            fail(name, "solutionCascade helper does not filter out collaterals by linkedSolutionId"); return
+        content_src = read_file("backend/routes/content.routes.ts")
+        if "await deleteSolutionCascade(db, solution.id)" not in content_src:
+            fail(name, "solution delete handler does not call deleteSolutionCascade"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -2097,15 +2101,16 @@ def test_deploy5_route_mounted_in_server():
 def test_deploy6_delete_cascades_dns_iis_and_file_cleanup():
     name = "DEPLOY6 (static): deleting a deployed solution cleans up its DNS record, IIS site, and stored file"
     try:
-        src = read_file("backend/routes/content.routes.ts")
+        # Extracted into backend/utils/solutionCascade.ts — see CASC2a/CASC2b.
+        src = read_file("backend/utils/solutionCascade.ts")
         idx = src.index("target?.deployedSlug")
         body = src[idx:idx + 700]
         if "deleteDnsRecord" not in body:
-            fail(name, "delete handler does not remove the DNS record"); return
+            fail(name, "cascade helper does not remove the DNS record"); return
         if "removeStaticHtmlIisSite" not in body:
-            fail(name, "delete handler does not remove the static IIS site"); return
+            fail(name, "cascade helper does not remove the static IIS site"); return
         if "fs.rmSync(solutionDir" not in body:
-            fail(name, "delete handler does not remove the stored HTML file"); return
+            fail(name, "cascade helper does not remove the stored HTML file"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -2265,6 +2270,65 @@ def test_cfilter5_admin_collaterals_list_uses_safe_image():
             fail(name, "collateral list thumbnail still uses a raw <img> instead of SafeImage"); return
         if "shrink-0 relative" not in body:
             fail(name, "thumbnail wrapper is missing 'relative' (PatternThumbnail fallback would break out of its box)"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+# ── Bug fixes — CASC2: portal delete orphans solutions instead of deleting them;
+#    collaterals don't follow a remapped solution to its new portal ────────────
+
+def test_casc2_solution_cascade_helper_exists():
+    name = "CASC2a (static): backend/utils/solutionCascade.ts exports deleteSolutionCascade"
+    try:
+        src = read_file("backend/utils/solutionCascade.ts")
+        if "export async function deleteSolutionCascade" not in src:
+            fail(name, "deleteSolutionCascade not exported"); return
+        if "linkedSolutionId === solutionId" not in src:
+            fail(name, "helper does not remove collaterals linked to the deleted solution"); return
+        if "deployedSlug" not in src:
+            fail(name, "helper does not clean up a deployed HTML app's DNS/IIS site/file"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_casc2_content_routes_uses_shared_cascade_helper():
+    name = "CASC2b (static): content.routes.ts solution delete uses the shared deleteSolutionCascade helper"
+    try:
+        src = read_file("backend/routes/content.routes.ts")
+        if "await deleteSolutionCascade(db, solution.id)" not in src:
+            fail(name, "solutions delete action does not call the shared cascade helper"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_casc2_portal_delete_removes_orphaned_solutions():
+    name = "CASC2c (static): deleting a portal deletes solutions left with no remaining portal mapping, instead of leaving them to read as 'mapped to all'"
+    try:
+        src = read_file("backend/routes/subdomains.routes.ts")
+        idx = src.index("Remove the deleted portal's slug from all content mappings")
+        body = src[idx:idx + 1500]
+        if "orphanedSolutionIds" not in body:
+            fail(name, "no orphaned-solution detection found after stripping the deleted portal's slug"); return
+        if "deleteSolutionCascade(db, orphanId)" not in body:
+            fail(name, "orphaned solutions are not cascade-deleted"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_casc3_remapping_solution_syncs_linked_collaterals():
+    name = "CASC3 (static): updating a solution's customerNames re-maps its linked collaterals to match"
+    try:
+        src = read_file("backend/routes/content.routes.ts")
+        idx = src.index('action === "update"')
+        body = src[idx:idx + 900]
+        if "solution.customerNames !== undefined" not in body:
+            fail(name, "solution update does not check for a customerNames remap"); return
+        if "c.linkedSolutionId === solution.id" not in body:
+            fail(name, "solution update does not sync linked collaterals' customerNames"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -2445,6 +2509,11 @@ TESTS = [
     test_cfilter3_filter_applied_before_grouping_rows,
     test_cfilter4_admin_solutions_list_uses_safe_image,
     test_cfilter5_admin_collaterals_list_uses_safe_image,
+    # Bug fixes — CASC2/CASC3: portal-delete solution orphaning; solution remap sync
+    test_casc2_solution_cascade_helper_exists,
+    test_casc2_content_routes_uses_shared_cascade_helper,
+    test_casc2_portal_delete_removes_orphaned_solutions,
+    test_casc3_remapping_solution_syncs_linked_collaterals,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]
