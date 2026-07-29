@@ -8,6 +8,7 @@ import { Solution, Collateral, CurrentProject, UpcomingProject } from "../../sha
 import { readDatabase, writeDatabase } from "../storage/db";
 import { autoDeployLivePortals } from "../portal/deploy";
 import { buildAdminSafeDbView } from "../utils/dbView";
+import { isSuperAdminRole } from "../auth";
 
 const router = Router();
 
@@ -16,6 +17,7 @@ router.post("/solutions", async (req, res) => {
   const { action, solution } = req.body;
   const db = readDatabase();
   const adminEmail = (req as any).adminEmail;
+  const isSuperAdmin = isSuperAdminRole((req as any).userRole);
 
   if (action === "create") {
     const newSol: Solution = {
@@ -34,7 +36,7 @@ router.post("/solutions", async (req, res) => {
     });
   } else if (action === "update") {
     const target = db.solutions.find(s => s.id === solution.id);
-    if (target?.createdBy && target.createdBy !== adminEmail) {
+    if (target?.createdBy && target.createdBy !== adminEmail && !isSuperAdmin) {
       return res.status(403).json({ error: "You do not have permission to modify this solution." });
     }
     db.solutions = db.solutions.map(s => s.id === solution.id ? { ...s, ...solution, createdBy: s.createdBy } : s);
@@ -47,7 +49,7 @@ router.post("/solutions", async (req, res) => {
     });
   } else if (action === "delete") {
     const target = db.solutions.find(s => s.id === solution.id);
-    if (target?.createdBy && target.createdBy !== adminEmail) {
+    if (target?.createdBy && target.createdBy !== adminEmail && !isSuperAdmin) {
       return res.status(403).json({ error: "You do not have permission to delete this solution." });
     }
     db.solutions = db.solutions.filter(s => s.id !== solution.id);
@@ -68,7 +70,7 @@ router.post("/solutions", async (req, res) => {
 
   writeDatabase(db);
   await autoDeployLivePortals(db);
-  res.json({ success: true, database: buildAdminSafeDbView(db, adminEmail) });
+  res.json({ success: true, database: buildAdminSafeDbView(db, adminEmail, isSuperAdmin) });
 });
 
 // POST /collaterals — mounted at /api/admin
@@ -76,6 +78,7 @@ router.post("/collaterals", async (req, res) => {
   const { action, collateral } = req.body;
   const db = readDatabase();
   const adminEmail = (req as any).adminEmail;
+  const isSuperAdmin = isSuperAdminRole((req as any).userRole);
 
   if (action === "create") {
     const newCol: Collateral = {
@@ -94,7 +97,7 @@ router.post("/collaterals", async (req, res) => {
     });
   } else if (action === "update") {
     const target = db.collaterals.find(c => c.id === collateral.id);
-    if (target?.createdBy && target.createdBy !== adminEmail) {
+    if (target?.createdBy && target.createdBy !== adminEmail && !isSuperAdmin) {
       return res.status(403).json({ error: "You do not have permission to modify this collateral." });
     }
     db.collaterals = db.collaterals.map(c => c.id === collateral.id ? { ...c, ...collateral, createdBy: c.createdBy } : c);
@@ -107,7 +110,7 @@ router.post("/collaterals", async (req, res) => {
     });
   } else if (action === "delete") {
     const target = db.collaterals.find(c => c.id === collateral.id);
-    if (target?.createdBy && target.createdBy !== adminEmail) {
+    if (target?.createdBy && target.createdBy !== adminEmail && !isSuperAdmin) {
       return res.status(403).json({ error: "You do not have permission to delete this collateral." });
     }
     db.collaterals = db.collaterals.filter(c => c.id !== collateral.id);
@@ -122,7 +125,7 @@ router.post("/collaterals", async (req, res) => {
 
   writeDatabase(db);
   await autoDeployLivePortals(db);
-  res.json({ success: true, database: buildAdminSafeDbView(db, adminEmail) });
+  res.json({ success: true, database: buildAdminSafeDbView(db, adminEmail, isSuperAdmin) });
 });
 
 // POST /projects/current — mounted at /api/admin
@@ -130,6 +133,7 @@ router.post("/projects/current", async (req, res) => {
   const { action, project } = req.body;
   const db = readDatabase();
   const adminEmail = (req as any).adminEmail;
+  const isSuperAdmin = isSuperAdminRole((req as any).userRole);
 
   if (!db.currentProjects) db.currentProjects = [];
 
@@ -150,7 +154,7 @@ router.post("/projects/current", async (req, res) => {
     });
   } else if (action === "update") {
     const target = db.currentProjects.find(p => p.id === project.id);
-    if (target?.createdBy && target.createdBy !== adminEmail) {
+    if (target?.createdBy && target.createdBy !== adminEmail && !isSuperAdmin) {
       return res.status(403).json({ error: "You do not have permission to modify this project." });
     }
     db.currentProjects = db.currentProjects.map(p => p.id === project.id ? { ...p, ...project, createdBy: p.createdBy } : p);
@@ -163,7 +167,7 @@ router.post("/projects/current", async (req, res) => {
     });
   } else if (action === "delete") {
     const target = db.currentProjects.find(p => p.id === project.id);
-    if (target?.createdBy && target.createdBy !== adminEmail) {
+    if (target?.createdBy && target.createdBy !== adminEmail && !isSuperAdmin) {
       return res.status(403).json({ error: "You do not have permission to delete this project." });
     }
     db.currentProjects = db.currentProjects.filter(p => p.id !== project.id);
@@ -178,7 +182,7 @@ router.post("/projects/current", async (req, res) => {
 
   writeDatabase(db);
   await autoDeployLivePortals(db);
-  res.json({ success: true, database: buildAdminSafeDbView(db, adminEmail) });
+  res.json({ success: true, database: buildAdminSafeDbView(db, adminEmail, isSuperAdmin) });
 });
 
 // POST /projects/upcoming — mounted at /api/admin
@@ -186,6 +190,7 @@ router.post("/projects/upcoming", async (req, res) => {
   const { action, project } = req.body;
   const db = readDatabase();
   const adminEmail = (req as any).adminEmail;
+  const isSuperAdmin = isSuperAdminRole((req as any).userRole);
 
   if (!db.upcomingProjects) db.upcomingProjects = [];
 
@@ -206,7 +211,7 @@ router.post("/projects/upcoming", async (req, res) => {
     });
   } else if (action === "update") {
     const target = db.upcomingProjects.find(p => p.id === project.id);
-    if (target?.createdBy && target.createdBy !== adminEmail) {
+    if (target?.createdBy && target.createdBy !== adminEmail && !isSuperAdmin) {
       return res.status(403).json({ error: "You do not have permission to modify this project." });
     }
     db.upcomingProjects = db.upcomingProjects.map(p => p.id === project.id ? { ...p, ...project, createdBy: p.createdBy } : p);
@@ -219,7 +224,7 @@ router.post("/projects/upcoming", async (req, res) => {
     });
   } else if (action === "delete") {
     const target = db.upcomingProjects.find(p => p.id === project.id);
-    if (target?.createdBy && target.createdBy !== adminEmail) {
+    if (target?.createdBy && target.createdBy !== adminEmail && !isSuperAdmin) {
       return res.status(403).json({ error: "You do not have permission to delete this project." });
     }
     db.upcomingProjects = db.upcomingProjects.filter(p => p.id !== project.id);
@@ -234,7 +239,7 @@ router.post("/projects/upcoming", async (req, res) => {
 
   writeDatabase(db);
   await autoDeployLivePortals(db);
-  res.json({ success: true, database: buildAdminSafeDbView(db, adminEmail) });
+  res.json({ success: true, database: buildAdminSafeDbView(db, adminEmail, isSuperAdmin) });
 });
 
 // POST /update-carousel — mounted at /api/admin
@@ -257,7 +262,11 @@ router.post("/update-carousel", async (req, res) => {
 
   writeDatabase(db);
   await autoDeployLivePortals(db);
-  res.json({ success: true, carousel: db.carousel, database: buildAdminSafeDbView(db, (req as any).adminEmail) });
+  res.json({
+    success: true,
+    carousel: db.carousel,
+    database: buildAdminSafeDbView(db, (req as any).adminEmail, isSuperAdminRole((req as any).userRole)),
+  });
 });
 
 export default router;

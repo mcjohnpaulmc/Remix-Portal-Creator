@@ -115,6 +115,19 @@ function extractJwtFromRequest(req: express.Request): string | null {
   return null;
 }
 
+// ── Role helpers ───────────────────────────────────────────────────────────────
+// "superadmin" is a superset of "admin": it passes every admin gate below, plus
+// bypasses the createdBy ownership checks that otherwise scope a regular admin to
+// only the portals/solutions/collaterals they personally created.
+
+export function isAdminRole(role: string | undefined): boolean {
+  return role === "admin" || role === "superadmin";
+}
+
+export function isSuperAdminRole(role: string | undefined): boolean {
+  return role === "superadmin";
+}
+
 // ── Admin auth middleware ──────────────────────────────────────────────────────
 
 export function requireAdminAuth(
@@ -134,14 +147,15 @@ export function requireAdminAuth(
   if (jwtRaw) {
     try {
       const payload = jwt.verify(jwtRaw, effectiveJwtSecret) as { email: string; role: string };
-      if (payload.role === "admin") {
+      if (isAdminRole(payload.role)) {
         // Confirm user is still enabled in the live user list
         const users: InternalUser[] = usersCache ?? (readDatabase().users || []);
         const user = users.find(
-          u => u.email === payload.email && u.role === "admin" && u.enabled !== false
+          u => u.email === payload.email && isAdminRole(u.role) && u.enabled !== false
         );
         if (user) {
           (req as any).adminEmail = payload.email;
+          (req as any).userRole = payload.role;
           next();
           return;
         }
@@ -170,7 +184,7 @@ export function requireAnyAuth(
       // Expose identity for downstream handlers (e.g. portal ownership filtering)
       (req as any).userEmail = payload.email;
       (req as any).userRole = payload.role;
-      if (payload.role === "admin") {
+      if (isAdminRole(payload.role)) {
         (req as any).adminEmail = payload.email;
       }
       next();

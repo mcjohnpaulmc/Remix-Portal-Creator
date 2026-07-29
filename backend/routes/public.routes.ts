@@ -7,7 +7,7 @@ import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { PortalUser, UserLog } from "../../shared/types";
 import { readDatabase, writeDatabase } from "../storage/db";
-import { requireAnyAuth } from "../auth";
+import { requireAnyAuth, isSuperAdminRole } from "../auth";
 
 const router = Router();
 
@@ -26,6 +26,7 @@ const logLimiter = rateLimit({
 // GET /api/database — requires any valid session; strips passwordHash and portAssignments.
 // Portals are filtered by ownership: admins only see portals they created.
 // Legacy portals without a createdBy are visible to all admins for backward compatibility.
+// Superadmins see every portal, regardless of who created it.
 router.get("/api/database", requireAnyAuth, (req, res) => {
   const db = readDatabase();
   const { portAssignments: _pa, ...safeDb } = db as any;
@@ -34,11 +35,14 @@ router.get("/api/database", requireAnyAuth, (req, res) => {
   const userEmail: string | undefined = (req as any).userEmail;
   const userRole: string | undefined = (req as any).userRole;
 
-  // Admins see only their own portals (plus legacy portals with no createdBy).
-  // Viewers never need portal management data, so they receive an empty list.
-  const filteredSubdomains = userRole === "admin"
-    ? (safeDb.subdomains || []).filter((s: any) => !s.createdBy || s.createdBy === userEmail)
-    : [];
+  // Superadmins see every portal. Admins see only their own portals (plus legacy
+  // portals with no createdBy). Viewers never need portal management data, so
+  // they receive an empty list.
+  const filteredSubdomains = isSuperAdminRole(userRole)
+    ? (safeDb.subdomains || [])
+    : userRole === "admin"
+      ? (safeDb.subdomains || []).filter((s: any) => !s.createdBy || s.createdBy === userEmail)
+      : [];
 
   res.json({ ...safeDb, users: safeUsers, subdomains: filteredSubdomains });
 });

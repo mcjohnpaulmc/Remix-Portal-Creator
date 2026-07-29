@@ -5,17 +5,21 @@
 
 import { Router } from "express";
 import { PortalUser } from "../../shared/types";
-import { hashPassword, setUsersCache } from "../auth";
+import { hashPassword, setUsersCache, isSuperAdminRole } from "../auth";
 import { readDatabase, writeDatabase, InternalUser } from "../storage/db";
 import { s3SyncUsers } from "../storage/s3";
 
 const router = Router();
+
+const VALID_ROLES = new Set(["admin", "viewer", "superadmin"]);
 
 // POST /users — mounted at /api/admin, so full path is /api/admin/users
 router.post("/users", (req, res) => {
   const { action, user } = req.body;
   const db = readDatabase();
   if (!db.users) db.users = [];
+
+  const requesterIsSuperAdmin = isSuperAdminRole((req as any).userRole);
 
   if (action === "create") {
     if (!user.email || !user.name || !user.password) {
@@ -24,12 +28,21 @@ router.post("/users", (req, res) => {
     if (db.users.some(u => u.email === user.email.trim().toLowerCase())) {
       return res.status(400).json({ error: "A user with this email already exists." });
     }
+    const requestedRole = user.role || "viewer";
+    if (!VALID_ROLES.has(requestedRole)) {
+      return res.status(400).json({ error: `Invalid role "${requestedRole}".` });
+    }
+    // Only an existing superadmin can grant the superadmin role — otherwise any
+    // admin could self-escalate (or escalate someone else) to full cross-account access.
+    if (requestedRole === "superadmin" && !requesterIsSuperAdmin) {
+      return res.status(403).json({ error: "Only a Super Admin can grant the Super Admin role." });
+    }
     const newUser: InternalUser = {
       id: `user-${Date.now()}`,
       email: user.email.trim().toLowerCase(),
       name: user.name.trim(),
       passwordHash: hashPassword(user.password),
-      role: user.role || "viewer",
+      role: requestedRole,
       enabled: true,
       createdAt: new Date().toISOString(),
     };
@@ -45,6 +58,15 @@ router.post("/users", (req, res) => {
     const target = db.users.find(u => u.id === user.id);
     if (target?.isSystem) {
       return res.status(403).json({ error: "System accounts cannot be modified." });
+    }
+    if (user.role !== undefined) {
+      if (!VALID_ROLES.has(user.role)) {
+        return res.status(400).json({ error: `Invalid role "${user.role}".` });
+      }
+      const grantingSuperAdmin = user.role === "superadmin" && target?.role !== "superadmin";
+      if (grantingSuperAdmin && !requesterIsSuperAdmin) {
+        return res.status(403).json({ error: "Only a Super Admin can grant the Super Admin role." });
+      }
     }
     db.users = db.users.map(u => {
       if (u.id !== user.id) return u;

@@ -16,6 +16,7 @@ import { ensureDnsRecord, deleteDnsRecord, checkDnsRecord } from "../dns/cloudfl
 import { ensureIisSite, removeIisSite } from "../iis/site";
 import { logger } from "../logger";
 import { buildAdminSafeDbView } from "../utils/dbView";
+import { isSuperAdminRole } from "../auth";
 
 const router = Router();
 
@@ -39,7 +40,11 @@ router.post("/subdomain", (req, res) => {
   });
 
   writeDatabase(db);
-  res.json({ success: true, subdomain: cleanSub, database: buildAdminSafeDbView(db, (req as any).adminEmail) });
+  res.json({
+    success: true,
+    subdomain: cleanSub,
+    database: buildAdminSafeDbView(db, (req as any).adminEmail, isSuperAdminRole((req as any).userRole)),
+  });
 });
 
 // POST /subdomains — list management (create / create-dummy / update / toggle / delete)
@@ -48,13 +53,14 @@ router.post("/subdomains", async (req, res) => {
   const resolvedName = name || subdomain;
   const db = readDatabase();
   const adminEmail = (req as any).adminEmail;
+  const isSuperAdmin = isSuperAdminRole((req as any).userRole);
   if (!db.subdomains) db.subdomains = [...DEFAULT_SUBDOMAINS];
 
   if (action === "update") {
     const targetId = id || resolvedName;
     const portal = (db.subdomains || []).find(s => s.id === targetId);
     if (!portal) return res.status(404).json({ error: "Portal not found." });
-    if (portal.createdBy && portal.createdBy !== adminEmail) {
+    if (portal.createdBy && portal.createdBy !== adminEmail && !isSuperAdmin) {
       return res.status(403).json({ error: "You do not have permission to modify this portal." });
     }
     if (req.body.displayName !== undefined) portal.displayName = req.body.displayName.trim();
@@ -66,7 +72,7 @@ router.post("/subdomains", async (req, res) => {
       date: new Date().toISOString(),
     });
     writeDatabase(db);
-    const safeView = buildAdminSafeDbView(db, adminEmail);
+    const safeView = buildAdminSafeDbView(db, adminEmail, isSuperAdmin);
     return res.json({ success: true, subdomains: safeView.subdomains, database: safeView });
 
   } else if (action === "create") {
@@ -191,7 +197,7 @@ router.post("/subdomains", async (req, res) => {
     if (!portal) {
       return res.status(404).json({ error: `Portal "${targetId}" not found.` });
     }
-    if (portal.createdBy && portal.createdBy !== (req as any).adminEmail) {
+    if (portal.createdBy && portal.createdBy !== (req as any).adminEmail && !isSuperAdmin) {
       return res.status(403).json({ error: "You do not have permission to modify this portal." });
     }
 
@@ -241,7 +247,7 @@ router.post("/subdomains", async (req, res) => {
     }
     // Capture portal info BEFORE removing from list (needed for DNS cleanup and ownership check)
     const deletedPortal = (db.subdomains || []).find(s => s.id === targetId || s.name === targetId);
-    if (deletedPortal?.createdBy && deletedPortal.createdBy !== (req as any).adminEmail) {
+    if (deletedPortal?.createdBy && deletedPortal.createdBy !== (req as any).adminEmail && !isSuperAdmin) {
       return res.status(403).json({ error: "You do not have permission to delete this portal." });
     }
 
@@ -302,7 +308,7 @@ router.post("/subdomains", async (req, res) => {
   }
 
   writeDatabase(db);
-  const safeView = buildAdminSafeDbView(db, adminEmail);
+  const safeView = buildAdminSafeDbView(db, adminEmail, isSuperAdmin);
   res.json({ success: true, subdomain: db.subdomain, subdomains: safeView.subdomains, database: safeView });
 });
 
@@ -310,10 +316,12 @@ router.post("/subdomains", async (req, res) => {
 router.post("/refresh-dns", async (req, res) => {
   const db = readDatabase();
   const adminEmail = (req as any).adminEmail;
-  // Only re-check DNS for the requesting admin's own pending portals — matches the
-  // ownership scope every other portal-list response applies (see buildAdminSafeDbView).
+  const isSuperAdmin = isSuperAdminRole((req as any).userRole);
+  // Superadmins re-check every pending portal; regular admins only their own —
+  // matches the ownership scope every other portal-list response applies
+  // (see buildAdminSafeDbView).
   const pendingPortals = (db.subdomains || []).filter(
-    s => !s.isDummy && s.domain && s.dnsStatus === "pending" && (!s.createdBy || s.createdBy === adminEmail)
+    s => !s.isDummy && s.domain && s.dnsStatus === "pending" && (isSuperAdmin || !s.createdBy || s.createdBy === adminEmail)
   );
 
   let updated = 0;
@@ -329,7 +337,7 @@ router.post("/refresh-dns", async (req, res) => {
 
   if (updated > 0) writeDatabase(db);
 
-  const safeView = buildAdminSafeDbView(db, adminEmail);
+  const safeView = buildAdminSafeDbView(db, adminEmail, isSuperAdmin);
   res.json({
     success: true,
     checked: pendingPortals.length,

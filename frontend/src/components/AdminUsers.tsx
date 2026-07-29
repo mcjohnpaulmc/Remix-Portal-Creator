@@ -7,17 +7,25 @@ interface AdminUsersProps {
   users: PortalUser[];
   adminFetch: (url: string, init?: RequestInit) => Promise<Response>;
   onRefresh: () => void | Promise<void>;
+  currentUserRole?: string | null;
 }
 
-const ROLES = ["viewer", "admin"] as const;
+type UserRole = "viewer" | "admin" | "superadmin";
 
 const ROLE_BADGE: Record<string, string> = {
   admin: "bg-orange-100 text-orange-700 border-orange-200",
   viewer: "bg-slate-100 text-slate-600 border-slate-200",
+  superadmin: "bg-purple-100 text-purple-700 border-purple-200",
 };
 
-export function AdminUsers({ users, adminFetch, onRefresh }: AdminUsersProps) {
-  const [form, setForm] = useState({ email: "", name: "", password: "", role: "viewer" as "viewer" | "admin" });
+export function AdminUsers({ users, adminFetch, onRefresh, currentUserRole }: AdminUsersProps) {
+  // Only a Super Admin can grant the Super Admin role — regular admins don't even
+  // see it as an option (the backend also enforces this, so this is UX only).
+  const availableRoles: UserRole[] = currentUserRole === "superadmin"
+    ? ["viewer", "admin", "superadmin"]
+    : ["viewer", "admin"];
+
+  const [form, setForm] = useState({ email: "", name: "", password: "", role: "viewer" as UserRole });
   const [showFormPw, setShowFormPw] = useState(false);
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState("");
@@ -26,7 +34,7 @@ export function AdminUsers({ users, adminFetch, onRefresh }: AdminUsersProps) {
 
   // Edit state
   const [editId, setEditId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", role: "viewer" as "viewer" | "admin", password: "" });
+  const [editForm, setEditForm] = useState({ name: "", role: "viewer" as UserRole, password: "" });
   const [showEditPw, setShowEditPw] = useState(false);
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -168,10 +176,10 @@ export function AdminUsers({ users, adminFetch, onRefresh }: AdminUsersProps) {
             <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Role</label>
             <select
               value={form.role}
-              onChange={e => setForm(f => ({ ...f, role: e.target.value as "viewer" | "admin" }))}
+              onChange={e => setForm(f => ({ ...f, role: e.target.value as UserRole }))}
               className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white"
             >
-              {ROLES.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
+              {availableRoles.map(r => <option key={r} value={r}>{r === "superadmin" ? "Super Admin" : r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
             </select>
           </div>
 
@@ -232,10 +240,13 @@ export function AdminUsers({ users, adminFetch, onRefresh }: AdminUsersProps) {
                       />
                       <select
                         value={editForm.role}
-                        onChange={e => setEditForm(f => ({ ...f, role: e.target.value as "viewer" | "admin" }))}
+                        onChange={e => setEditForm(f => ({ ...f, role: e.target.value as UserRole }))}
                         className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-orange-500"
                       >
-                        {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                        {(editForm.role === "superadmin" && !availableRoles.includes("superadmin")
+                          ? [...availableRoles, "superadmin" as UserRole]
+                          : availableRoles
+                        ).map(r => <option key={r} value={r}>{r === "superadmin" ? "Super Admin" : r}</option>)}
                       </select>
                       <div className="relative">
                         <input
@@ -321,7 +332,7 @@ export function AdminUsers({ users, adminFetch, onRefresh }: AdminUsersProps) {
 
       <div className="text-[10px] text-slate-400 leading-relaxed p-3 bg-slate-50 rounded-xl border border-slate-100">
         <Shield className="h-3 w-3 inline mr-1 text-orange-400" />
-        <strong>Permissions:</strong> Viewer users can log in and view solutions/collaterals. Admin users have full read access and can be granted additional privileges. Passwords are stored as SHA-256 hashes. After creating or updating users, use <strong>Deploy</strong> on the Portal Domains page so that portal instances pick up the new credentials.
+        <strong>Permissions:</strong> Viewer users can log in and view solutions/collaterals. Admin users can create and manage their own portals, solutions, and collaterals. Super Admins can additionally view and edit every admin's portals, solutions, and collaterals — only an existing Super Admin can grant that role. Passwords are stored as SHA-256 hashes. After creating or updating users, use <strong>Deploy</strong> on the Portal Domains page so that portal instances pick up the new credentials.
       </div>
     </div>
   );

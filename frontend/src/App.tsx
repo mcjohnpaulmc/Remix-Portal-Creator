@@ -1344,7 +1344,7 @@ export default function App() {
               />
             </div>
           </div>
-        ) : userRole !== "admin" ? (
+        ) : userRole !== "admin" && userRole !== "superadmin" ? (
           // ============================== NOT AN ADMIN ==============================
           <div className="flex-1 flex items-center justify-center p-8">
             <div className="bg-white rounded-2xl shadow-md border border-slate-200 p-8 max-w-sm w-full text-center space-y-4">
@@ -2111,6 +2111,7 @@ export default function App() {
                       users={portalUsers}
                       adminFetch={adminFetch}
                       onRefresh={fetchPortalData}
+                      currentUserRole={userRole}
                     />
                   )}
                   {adminActiveTab === "logs" && (
@@ -2283,7 +2284,7 @@ export default function App() {
       </AnimatePresence>
 
       {/* Visual Footer — only shown to logged-in admin users */}
-      {userEmail && userRole === "admin" && isHub && <footer className="w-full h-12 bg-slate-900 flex items-center justify-between px-8 text-slate-400 shrink-0 font-mono text-[10px] border-t border-slate-850 relative z-30 mt-auto select-none">
+      {userEmail && (userRole === "admin" || userRole === "superadmin") && isHub && <footer className="w-full h-12 bg-slate-900 flex items-center justify-between px-8 text-slate-400 shrink-0 font-mono text-[10px] border-t border-slate-850 relative z-30 mt-auto select-none">
         <div className="flex items-center space-x-6">
           <span className="text-[10px] font-medium tracking-widest uppercase text-slate-450 leading-none">
             Host instance: {subdomain}.mobiusservices.io

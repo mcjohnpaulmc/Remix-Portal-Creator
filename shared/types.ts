@@ -136,7 +136,9 @@ export interface PortalUser {
   id: string;
   email: string;
   name: string;
-  role: "admin" | "viewer";
+  // "superadmin" bypasses per-admin portal/solution/collateral ownership isolation —
+  // can view and edit every admin's portals, solutions, and collaterals, not just its own.
+  role: "admin" | "viewer" | "superadmin";
   createdAt: string;
   enabled?: boolean;
   isSystem?: boolean; // true = cannot be deleted, edited, or disabled

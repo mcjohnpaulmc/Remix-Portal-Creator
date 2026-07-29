@@ -9,6 +9,7 @@ import { readDatabase, writeDatabase } from "../storage/db";
 import { s3PutUpload } from "../storage/s3";
 import { autoDeployLivePortals } from "../portal/deploy";
 import { buildAdminSafeDbView } from "../utils/dbView";
+import { isSuperAdminRole } from "../auth";
 import { logger } from "../logger";
 
 const router = Router();
@@ -184,6 +185,7 @@ router.post("/external-portals/import", async (req, res) => {
   }
 
   const adminEmail = (req as any).adminEmail;
+  const isSuperAdmin = isSuperAdminRole((req as any).userRole);
   const targetCustomerNames = Array.isArray(customerNames) && customerNames.length > 0 ? customerNames : ["all"];
   const base = PORTALS[portal];
 
@@ -299,7 +301,7 @@ router.post("/external-portals/import", async (req, res) => {
     importedCollaterals,
     skippedSolutions,
     skippedCollaterals,
-    database: buildAdminSafeDbView(db, adminEmail),
+    database: buildAdminSafeDbView(db, adminEmail, isSuperAdmin),
   });
 });
 

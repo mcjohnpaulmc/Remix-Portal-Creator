@@ -1920,6 +1920,102 @@ def test_refresh5_admin_logs_has_refresh_button():
         fail(name, str(e))
 
 
+# ── Feature — SUPER: Super Admin role bypasses per-admin ownership isolation ───
+
+def test_super1_role_type_includes_superadmin():
+    name = "SUPER1 (static): PortalUser.role type includes superadmin"
+    try:
+        src = read_file("shared/types.ts")
+        if '"admin" | "viewer" | "superadmin"' not in src:
+            fail(name, "PortalUser.role union does not include superadmin"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_super2_auth_middleware_recognizes_superadmin():
+    name = "SUPER2 (static): requireAdminAuth/requireAnyAuth admit superadmin and expose userRole"
+    try:
+        src = read_file("backend/auth/index.ts")
+        if "export function isAdminRole" not in src or "export function isSuperAdminRole" not in src:
+            fail(name, "isAdminRole/isSuperAdminRole helpers not found"); return
+        admin_auth_start = src.index("export function requireAdminAuth")
+        admin_auth_body = src[admin_auth_start:admin_auth_start + 1400]
+        if "isAdminRole(payload.role)" not in admin_auth_body:
+            fail(name, "requireAdminAuth still hardcodes role === 'admin'"); return
+        if "(req as any).userRole = payload.role" not in admin_auth_body:
+            fail(name, "requireAdminAuth does not expose userRole for downstream ownership-bypass checks"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_super3_ownership_checks_bypass_for_superadmin():
+    name = "SUPER3 (static): all createdBy ownership 403 checks bypass for superadmin"
+    try:
+        subs_src = read_file("backend/routes/subdomains.routes.ts")
+        content_src = read_file("backend/routes/content.routes.ts")
+        combined = subs_src + content_src
+        total_checks = combined.count("createdBy !== adminEmail")
+        bypassed_checks = combined.count("createdBy !== adminEmail && !isSuperAdmin")
+        if total_checks == 0:
+            fail(name, "no ownership checks found — test may be stale"); return
+        if total_checks != bypassed_checks:
+            fail(name, f"{total_checks - bypassed_checks} ownership check(s) do not bypass for superadmin"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_super4_db_view_and_public_database_bypass_for_superadmin():
+    name = "SUPER4 (static): buildAdminSafeDbView and GET /api/database return every portal for superadmin"
+    try:
+        dbview_src = read_file("backend/utils/dbView.ts")
+        if "isSuperAdmin: boolean" not in dbview_src:
+            fail(name, "buildAdminSafeDbView has no isSuperAdmin parameter"); return
+        public_src = read_file("backend/routes/public.routes.ts")
+        if "isSuperAdminRole(userRole)" not in public_src:
+            fail(name, "GET /api/database does not bypass ownership filtering for superadmin"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_super5_only_superadmin_can_grant_superadmin_role():
+    name = "SUPER5 (static): users.routes.ts blocks a non-superadmin from granting the superadmin role"
+    try:
+        src = read_file("backend/routes/users.routes.ts")
+        if "Only a Super Admin can grant the Super Admin role" not in src:
+            fail(name, "no server-side restriction on granting superadmin found"); return
+        if "VALID_ROLES" not in src:
+            fail(name, "no server-side role validation allow-list found"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_super6_frontend_admits_superadmin_to_console():
+    name = "SUPER6 (static): App.tsx admits superadmin (not just admin) into the admin console"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        if 'userRole !== "admin" && userRole !== "superadmin"' not in src:
+            fail(name, "admin-console gate does not admit superadmin"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_super7_admin_users_ui_restricts_superadmin_grant():
+    name = "SUPER7 (static): AdminUsers.tsx only offers the Super Admin role option to an existing superadmin"
+    try:
+        src = read_file("frontend/src/components/AdminUsers.tsx")
+        if 'currentUserRole === "superadmin"' not in src:
+            fail(name, "role dropdown does not gate the superadmin option on currentUserRole"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 # ── run all tests ─────────────────────────────────────────────────────────────
 
 TESTS = [
@@ -2066,6 +2162,14 @@ TESTS = [
     test_refresh3_hero_section_has_refresh_button,
     test_refresh4_admin_users_has_refresh_button,
     test_refresh5_admin_logs_has_refresh_button,
+    # Feature — SUPER: Super Admin role bypasses per-admin ownership isolation
+    test_super1_role_type_includes_superadmin,
+    test_super2_auth_middleware_recognizes_superadmin,
+    test_super3_ownership_checks_bypass_for_superadmin,
+    test_super4_db_view_and_public_database_bypass_for_superadmin,
+    test_super5_only_superadmin_can_grant_superadmin_role,
+    test_super6_frontend_admits_superadmin_to_console,
+    test_super7_admin_users_ui_restricts_superadmin_grant,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]
