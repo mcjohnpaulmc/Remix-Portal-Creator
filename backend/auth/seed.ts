@@ -31,7 +31,12 @@ export async function seedDefaultAdmin(): Promise<void> {
     logger.info("Auth", `Merged ${s3Users.length} S3 users into local DB`);
   }
 
-  // Ensure system admin exists and is always correct regardless of prior UI actions
+  // Ensure system admin exists and is always correct regardless of prior UI actions.
+  // The system account is seeded as superadmin — it's the one account that must
+  // always be able to view/edit every other admin's portals, solutions, and
+  // collaterals, and it's also the only way to bootstrap the very first
+  // superadmin (the /api/admin/users route requires an existing superadmin to
+  // grant that role to anyone else, so someone has to start out holding it).
   const idx = db.users.findIndex(u => u.email === SYSTEM_ADMIN_EMAIL);
   if (idx === -1) {
     if (!adminPassword) {
@@ -44,8 +49,8 @@ export async function seedDefaultAdmin(): Promise<void> {
     db.users.unshift({
       id: "system-admin-eswar",
       email: SYSTEM_ADMIN_EMAIL,
-      name: "Eswar (Admin)",
-      role: "admin",
+      name: "Eswar (Super Admin)",
+      role: "superadmin",
       passwordHash: hashPassword(adminPassword),
       createdAt: new Date().toISOString(),
       enabled: true,
@@ -56,7 +61,7 @@ export async function seedDefaultAdmin(): Promise<void> {
     db.users[idx] = {
       ...db.users[idx],
       ...(adminPassword ? { passwordHash: hashPassword(adminPassword) } : {}),
-      role: "admin",
+      role: "superadmin",
       enabled: true,
       isSystem: true,
     };

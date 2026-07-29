@@ -2016,6 +2016,19 @@ def test_super7_admin_users_ui_restricts_superadmin_grant():
         fail(name, str(e))
 
 
+def test_super8_system_admin_seeded_as_superadmin():
+    name = "SUPER8 (static): seedDefaultAdmin() enforces the system admin (eswar@xtract.io) as superadmin"
+    try:
+        src = read_file("backend/auth/seed.ts")
+        if src.count('role: "superadmin"') < 2:
+            fail(name, "system admin is not seeded/enforced with role: superadmin on both create and update paths"); return
+        if 'role: "admin"' in src:
+            fail(name, "seed.ts still hardcodes role: admin somewhere for the system account"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 # ── run all tests ─────────────────────────────────────────────────────────────
 
 TESTS = [
@@ -2170,6 +2183,7 @@ TESTS = [
     test_super5_only_superadmin_can_grant_superadmin_role,
     test_super6_frontend_admits_superadmin_to_console,
     test_super7_admin_users_ui_restricts_superadmin_grant,
+    test_super8_system_admin_seeded_as_superadmin,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]
