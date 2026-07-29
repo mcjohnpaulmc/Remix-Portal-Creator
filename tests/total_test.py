@@ -1753,6 +1753,20 @@ def test_imp4_frontend_import_calls_server_endpoint_and_reloads():
         fail(name, str(e))
 
 
+def test_map1_solutions_reset_form_respects_prefilled_subdomain():
+    name = "MAP1 (static): AdminSolutions.tsx resetForm() seeds customerNames from prefilledSubdomain instead of hardcoding 'all'"
+    try:
+        src = read_file("frontend/src/components/AdminSolutions.tsx")
+        idx = src.index("const resetForm = ()")
+        body = src[idx:idx + 700]
+        if 'setCustomerNames(prefilledSubdomain ? [prefilledSubdomain] : ["all"])' not in body:
+            fail(name, "resetForm no longer respects prefilledSubdomain — opening the create form after "
+                       "'Onboard Assets for this Portal' would silently reset the mapping to every portal"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 # ── run all tests ─────────────────────────────────────────────────────────────
 
 TESTS = [
@@ -1885,6 +1899,7 @@ TESTS = [
     test_imp2_import_endpoint_creates_linked_collaterals,
     test_imp3_import_rehosts_thumbnails_instead_of_https_only_filter,
     test_imp4_frontend_import_calls_server_endpoint_and_reloads,
+    test_map1_solutions_reset_form_respects_prefilled_subdomain,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

@@ -89,8 +89,13 @@ export function AdminSolutions({
   const resetForm = () => {
     setIsEditing(false);
     setEditingId(null);
-    setCustomerNames(["all"]);
-    setCustomerName("all");
+    // Re-seed from prefilledSubdomain (e.g. "Onboard Assets for this Portal") rather
+    // than hardcoding "all" — otherwise opening the form after arriving scoped to a
+    // specific portal silently discarded that scope, and a single click of "Onboard
+    // New Solution" would default the mapping to every portal (including future
+    // ones) instead of just the portal the admin was actually working in.
+    setCustomerNames(prefilledSubdomain ? [prefilledSubdomain] : ["all"]);
+    setCustomerName(prefilledSubdomain || "all");
     setTitle("");
     setThumbnail("");
     setAppUrl("");
