@@ -8,6 +8,7 @@ import { Router } from "express";
 import multer from "multer";
 import { requireAdminAuth } from "../auth";
 import { s3PutUpload, s3GetUpload } from "../storage/s3";
+import { HUB_ORIGIN } from "../config";
 
 const router = Router();
 
@@ -51,7 +52,12 @@ router.post("/api/upload", requireAdminAuth, (req: any, res: any, next: any) => 
     return res.status(500).json({ error: "Upload to S3 failed." });
   }
 
-  const url = `/api/download/${encodeURIComponent(portalSlug)}/${encodeURIComponent(filename)}`;
+  // Absolute, not relative: this URL is embedded in solution/collateral thumbnails
+  // that render on customer-portal subdomains, which are served by an entirely
+  // separate portal-server.ts process with no /api/download route of its own — a
+  // relative path would resolve against that portal's own origin and 404 there,
+  // even though it works fine when viewed from the hub's own admin console.
+  const url = `${HUB_ORIGIN}/api/download/${encodeURIComponent(portalSlug)}/${encodeURIComponent(filename)}`;
   res.json({
     url,
     filename,

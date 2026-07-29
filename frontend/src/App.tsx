@@ -1243,7 +1243,7 @@ export default function App() {
                               {/* Row header */}
                               <div className="border-b border-slate-105 pb-3 mb-4 flex items-center justify-between gap-3">
                                 <div className="flex items-center gap-3 min-w-0">
-                                  <div className="h-9 w-9 rounded-xl overflow-hidden border border-slate-150 shrink-0 bg-white">
+                                  <div className="h-9 w-9 rounded-xl overflow-hidden border border-slate-150 shrink-0 bg-white relative">
                                     <SafeImage
                                       src={row.thumbnail}
                                       alt={row.title}

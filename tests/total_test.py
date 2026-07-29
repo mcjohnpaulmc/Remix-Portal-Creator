@@ -2126,6 +2126,70 @@ def test_deploy7_frontend_deploy_button_and_panel_exist():
         fail(name, str(e))
 
 
+# ── Bug fixes — THUMB: broken thumbnails/downloads on customer portal subdomains ─
+
+def test_thumb1_upload_url_is_absolute():
+    name = "THUMB1 (static): /api/upload returns an absolute (HUB_ORIGIN) URL, not a relative one"
+    try:
+        src = read_file("backend/routes/upload.routes.ts")
+        if "HUB_ORIGIN" not in src:
+            fail(name, "upload.routes.ts does not import/use HUB_ORIGIN"); return
+        if 'const url = `${HUB_ORIGIN}/api/download/' not in src:
+            fail(name, "/api/upload still returns a relative /api/download URL"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_thumb2_rehosted_thumbnail_url_is_absolute():
+    name = "THUMB2 (static): external-portals rehostImage returns an absolute (HUB_ORIGIN) URL"
+    try:
+        src = read_file("backend/routes/external-portals.routes.ts")
+        if "HUB_ORIGIN" not in src:
+            fail(name, "external-portals.routes.ts does not import/use HUB_ORIGIN"); return
+        if 'return `${HUB_ORIGIN}/api/download/imports/' not in src:
+            fail(name, "rehostImage still returns a relative /api/download URL"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_thumb3_reason_relative_urls_break_on_portal_subdomains():
+    name = "THUMB3 (static): portal-server.ts genuinely has no /api/download route (confirms why relative URLs 404 there)"
+    try:
+        src = read_file("backend/portal-server.ts")
+        if '"/api/download' in src or "'/api/download" in src:
+            fail(name, "portal-server.ts unexpectedly defines /api/download — relative-URL assumption may be wrong now"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_thumb4_collaterals_catalogue_row_icon_is_positioned():
+    name = "THUMB4 (static): Collaterals Catalogue row-header thumbnail wrapper has 'relative' (contains PatternThumbnail's absolute SVG)"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        if 'className="h-9 w-9 rounded-xl overflow-hidden border border-slate-150 shrink-0 bg-white relative"' not in src:
+            fail(name, "row-header thumbnail wrapper is missing 'relative' — PatternThumbnail's absolutely-positioned "
+                       "SVG fallback would break out and fill the nearest positioned ancestor instead of this small icon box"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_thumb5_collateral_attachment_download_uses_stored_url():
+    name = "THUMB5 (static): CollateralDetailModal downloads via the stored file.url, not a malformed reconstructed path"
+    try:
+        src = read_file("frontend/src/components/CollateralDetailModal.tsx")
+        if "href={`/api/download/${file.name}`}" in src:
+            fail(name, "still uses the malformed /api/download/<name> path (route requires /api/download/:slug/:filename)"); return
+        if "href={file.url" not in src:
+            fail(name, "download link does not use the stored file.url"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 # ── run all tests ─────────────────────────────────────────────────────────────
 
 TESTS = [
@@ -2289,6 +2353,12 @@ TESTS = [
     test_deploy5_route_mounted_in_server,
     test_deploy6_delete_cascades_dns_iis_and_file_cleanup,
     test_deploy7_frontend_deploy_button_and_panel_exist,
+    # Bug fixes — THUMB: broken thumbnails/downloads on customer portal subdomains
+    test_thumb1_upload_url_is_absolute,
+    test_thumb2_rehosted_thumbnail_url_is_absolute,
+    test_thumb3_reason_relative_urls_break_on_portal_subdomains,
+    test_thumb4_collaterals_catalogue_row_icon_is_positioned,
+    test_thumb5_collateral_attachment_download_uses_stored_url,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

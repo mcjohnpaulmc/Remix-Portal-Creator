@@ -10,6 +10,7 @@ import { s3PutUpload } from "../storage/s3";
 import { autoDeployLivePortals } from "../portal/deploy";
 import { buildAdminSafeDbView } from "../utils/dbView";
 import { isSuperAdminRole } from "../auth";
+import { HUB_ORIGIN } from "../config";
 import { logger } from "../logger";
 
 const router = Router();
@@ -147,7 +148,10 @@ async function rehostImage(absoluteUrl: string): Promise<string> {
     const ext = contentType.split("/")[1] || "png";
     const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
     await s3PutUpload("imports", filename, buf, contentType);
-    return `/api/download/imports/${encodeURIComponent(filename)}`;
+    // Absolute, not relative — this renders on customer-portal subdomains too,
+    // which are served by a separate process with no /api/download route of
+    // their own (see upload.routes.ts for the same fix and full rationale).
+    return `${HUB_ORIGIN}/api/download/imports/${encodeURIComponent(filename)}`;
   } catch (err: any) {
     logger.warn("external-portals", `Thumbnail re-host failed for ${absoluteUrl}: ${err?.message}`);
     return "";

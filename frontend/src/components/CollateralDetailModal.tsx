@@ -408,7 +408,7 @@ export function CollateralDetailModal({ collateral, onClose }: CollateralDetailM
                     </div>
 
                     <a
-                      href={`/api/download/${file.name}`}
+                      href={file.url || "#"}
                       download
                       className="p-1.5 bg-slate-50 hover:bg-slate-900 hover:text-white rounded-lg border border-slate-150 transition-all shrink-0"
                       title="Download Brief"
