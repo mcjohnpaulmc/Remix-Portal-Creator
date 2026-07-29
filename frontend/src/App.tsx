@@ -59,6 +59,26 @@ import { UpcomingProjectsDashboard } from "./components/UpcomingProjectsDashboar
 import { HeroCarousel } from "./components/HeroCarousel";
 import { AdminUsers } from "./components/AdminUsers";
 
+// Collaterals Catalogue type filter — buckets every collateral's free-form
+// fileType/tag string into one of these four kinds (matches the "video, doc,
+// pptx, web sources/articles" taxonomy collaterals are actually imported as).
+type CollateralFilterType = "document" | "deck" | "video" | "webpage";
+
+const COLLATERAL_FILTER_OPTIONS: { value: CollateralFilterType; label: string }[] = [
+  { value: "document", label: "Document" },
+  { value: "deck", label: "Deck" },
+  { value: "video", label: "Video" },
+  { value: "webpage", label: "Web page" },
+];
+
+function classifyCollateralType(col: Collateral): CollateralFilterType {
+  const hay = `${col.fileType || ""} ${col.tag || ""}`.toLowerCase();
+  if (hay.includes("video") || hay.includes("demo")) return "video";
+  if (hay.includes("deck") || hay.includes("slide") || hay.includes("ppt") || hay.includes("presentation")) return "deck";
+  if (hay.includes("web") || hay.includes("article") || hay.includes("link") || hay.includes("source")) return "webpage";
+  return "document";
+}
+
 export default function App() {
   // Global API states
   const [solutions, setSolutions] = useState<Solution[]>([]);
@@ -140,6 +160,21 @@ export default function App() {
   // Selection modal items
   const [selectedSolution, setSelectedSolution] = useState<Solution | null>(null);
   const [selectedCollateral, setSelectedCollateral] = useState<Collateral | null>(null);
+
+  // Collaterals Catalogue type filter — empty set means "All" (the default)
+  const [collateralTypeFilter, setCollateralTypeFilter] = useState<Set<CollateralFilterType>>(new Set());
+  const [collateralFilterOpen, setCollateralFilterOpen] = useState(false);
+  const collateralFilterRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (collateralFilterRef.current && !collateralFilterRef.current.contains(e.target as Node)) {
+        setCollateralFilterOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   // Filter lists down to those enabled for standard user views
   const visibleSolutions = solutions.filter((sol) => sol.enabled !== false);
@@ -1218,6 +1253,10 @@ export default function App() {
                         );
                       }
 
+                      const filteredCollaterals = collateralTypeFilter.size === 0
+                        ? visibleCollaterals
+                        : visibleCollaterals.filter((col) => collateralTypeFilter.has(classifyCollateralType(col)));
+
                       const linkedSolutionIds = new Set(visibleSolutions.map((s) => s.id));
                       const rows: { key: string; title: string; thumbnail: string; items: typeof visibleCollaterals }[] =
                         visibleSolutions
@@ -1225,19 +1264,89 @@ export default function App() {
                             key: sol.id,
                             title: sol.title,
                             thumbnail: sol.thumbnail,
-                            items: visibleCollaterals.filter((col) => col.linkedSolutionId === sol.id),
+                            items: filteredCollaterals.filter((col) => col.linkedSolutionId === sol.id),
                           }))
                           .filter((row) => row.items.length > 0);
 
-                      const unlinked = visibleCollaterals.filter(
+                      const unlinked = filteredCollaterals.filter(
                         (col) => !col.linkedSolutionId || !linkedSolutionIds.has(col.linkedSolutionId)
                       );
                       if (unlinked.length > 0) {
                         rows.push({ key: "general", title: "General Collaterals", thumbnail: "", items: unlinked });
                       }
 
+                      const toggleCollateralType = (t: CollateralFilterType) => {
+                        setCollateralTypeFilter((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(t)) next.delete(t); else next.add(t);
+                          return next;
+                        });
+                      };
+
                       return (
                         <>
+                          {/* Toolbar: type filter (left) + filtered collaterals count (right) */}
+                          <div className="flex items-center justify-between gap-3">
+                            <div ref={collateralFilterRef} className="relative">
+                              <button
+                                type="button"
+                                onClick={() => setCollateralFilterOpen((v) => !v)}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 bg-white border rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                                  collateralTypeFilter.size > 0
+                                    ? "border-orange-300 text-orange-700"
+                                    : "border-slate-200 text-slate-600 hover:border-slate-300"
+                                }`}
+                              >
+                                <SlidersHorizontal className="h-3.5 w-3.5" />
+                                {collateralTypeFilter.size === 0
+                                  ? "All"
+                                  : COLLATERAL_FILTER_OPTIONS.filter((o) => collateralTypeFilter.has(o.value)).map((o) => o.label).join(", ")}
+                                <ChevronDown className="h-3 w-3" />
+                              </button>
+
+                              {collateralFilterOpen && (
+                                <div className="absolute top-full left-0 z-20 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg p-1.5 min-w-40">
+                                  <button
+                                    type="button"
+                                    onClick={() => setCollateralTypeFilter(new Set())}
+                                    className={`w-full text-left px-2.5 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer ${
+                                      collateralTypeFilter.size === 0 ? "bg-orange-50 text-orange-600" : "text-slate-700 hover:bg-slate-50"
+                                    }`}
+                                  >
+                                    All
+                                  </button>
+                                  <div className="my-1 border-t border-slate-100" />
+                                  {COLLATERAL_FILTER_OPTIONS.map((opt) => (
+                                    <label
+                                      key={opt.value}
+                                      className="flex items-center gap-2 text-xs px-2.5 py-1.5 cursor-pointer hover:bg-slate-50 rounded-md select-none"
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={collateralTypeFilter.has(opt.value)}
+                                        onChange={() => toggleCollateralType(opt.value)}
+                                        className="h-3 w-3 accent-orange-500"
+                                      />
+                                      <span className="text-slate-700">{opt.label}</span>
+                                    </label>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            <span className="text-[10px] font-mono font-bold bg-white border border-slate-205 text-orange-700 px-2 py-0.5 rounded-md select-none shrink-0 shadow-3xs">
+                              {filteredCollaterals.length} collateral{filteredCollaterals.length !== 1 ? "s" : ""}
+                            </span>
+                          </div>
+
+                          {rows.length === 0 && (
+                            <div className="text-center p-12 bg-white rounded-xl border border-dashed border-slate-350 shadow-2xs w-full">
+                              <Compass className="h-10 w-10 text-slate-300 mx-auto mb-3" />
+                              <h4 className="font-bold text-slate-700 text-sm">No collaterals match this filter</h4>
+                              <p className="text-slate-400 text-xs mt-1">Try a different type, or clear the filter to see everything.</p>
+                            </div>
+                          )}
+
                           {rows.map((row) => (
                             <div key={row.key} className="bg-slate-50/50 p-4.5 rounded-2xl border border-slate-200">
                               {/* Row header */}

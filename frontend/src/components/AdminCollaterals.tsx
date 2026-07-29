@@ -6,6 +6,7 @@
 import React, { useState } from "react";
 import { Plus, Edit2, X, Eye, EyeOff, Link, Tag, CheckCircle, Trash2, FolderOpen, Link2, Image, Upload, RefreshCw } from "lucide-react";
 import { Collateral } from "../../../shared/types";
+import { SafeImage } from "./SafeImage";
 
 interface AdminCollateralsProps {
   collaterals: Collateral[];
@@ -594,12 +595,12 @@ export function AdminCollaterals({
                   coll.enabled === false ? "border-slate-200 bg-slate-50/50 opacity-80" : "border-slate-100 hover:border-slate-200 hover:shadow-2xs bg-white"
                 }`}
               >
-                <div className="h-20 w-32 rounded-xl bg-slate-100 border border-slate-150 overflow-hidden shrink-0">
-                  <img
+                <div className="h-20 w-32 rounded-xl bg-slate-100 border border-slate-150 overflow-hidden shrink-0 relative">
+                  <SafeImage
                     src={coll.thumbnail}
                     alt={coll.title}
+                    title={coll.title}
                     className="w-full h-full object-cover"
-                    referrerPolicy="no-referrer"
                   />
                 </div>
 

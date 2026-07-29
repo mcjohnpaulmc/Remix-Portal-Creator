@@ -1827,7 +1827,7 @@ def test_imp9_collaterals_catalogue_grouped_by_solution_with_horizontal_scroll()
     try:
         src = read_file("frontend/src/App.tsx")
         idx = src.index('currentTab === "collaterals" ? (')
-        body = src[idx:idx + 6000]
+        body = src[idx:idx + 10000]
         if "col.linkedSolutionId === sol.id" not in body:
             fail(name, "collaterals are not grouped by linkedSolutionId against visibleSolutions"); return
         if "overflow-x-auto" not in body:
@@ -2190,6 +2190,86 @@ def test_thumb5_collateral_attachment_download_uses_stored_url():
         fail(name, str(e))
 
 
+# ── Feature — CFILTER: Collaterals Catalogue type filter; admin thumbnail fallback ─
+
+def test_cfilter1_type_filter_options_and_classifier_exist():
+    name = "CFILTER1 (static): App.tsx defines the All/Document/Deck/Video/Web page filter with a classifier"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        if "COLLATERAL_FILTER_OPTIONS" not in src:
+            fail(name, "COLLATERAL_FILTER_OPTIONS not found"); return
+        for label in ['"Document"', '"Deck"', '"Video"', '"Web page"']:
+            if label not in src:
+                fail(name, f"filter option {label} not found"); return
+        if "function classifyCollateralType" not in src:
+            fail(name, "classifyCollateralType helper not found"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_cfilter2_all_defaults_and_is_not_a_checkbox():
+    name = "CFILTER2 (static): 'All' is the default (empty filter set) and is a plain button, not a checkbox"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        if "useState<Set<CollateralFilterType>>(new Set())" not in src:
+            fail(name, "collateralTypeFilter does not default to an empty Set (i.e. 'All')"); return
+        idx = src.index("setCollateralTypeFilter(new Set())")
+        body = src[max(0, idx - 300):idx + 50]
+        if 'type="checkbox"' in body:
+            fail(name, "the 'All' option appears to be rendered as a checkbox"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_cfilter3_filter_applied_before_grouping_rows():
+    name = "CFILTER3 (static): rows are built from the type-filtered collaterals list, and a filtered count is shown"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        if "filteredCollaterals.filter((col) => col.linkedSolutionId === sol.id)" not in src:
+            fail(name, "row items are not derived from filteredCollaterals"); return
+        if "{filteredCollaterals.length} collateral" not in src:
+            fail(name, "filtered collaterals count is not displayed"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_cfilter4_admin_solutions_list_uses_safe_image():
+    name = "CFILTER4 (static): AdminSolutions.tsx list view uses SafeImage (not a raw <img>) for solution thumbnails"
+    try:
+        src = read_file("frontend/src/components/AdminSolutions.tsx")
+        if "import { SafeImage }" not in src:
+            fail(name, "SafeImage not imported"); return
+        idx = src.index("Visual preview")
+        body = src[idx:idx + 500]
+        if "<SafeImage" not in body:
+            fail(name, "solution list thumbnail still uses a raw <img> instead of SafeImage"); return
+        if "shrink-0 relative" not in body:
+            fail(name, "thumbnail wrapper is missing 'relative' (PatternThumbnail fallback would break out of its box)"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_cfilter5_admin_collaterals_list_uses_safe_image():
+    name = "CFILTER5 (static): AdminCollaterals.tsx list view uses SafeImage (not a raw <img>) for collateral thumbnails"
+    try:
+        src = read_file("frontend/src/components/AdminCollaterals.tsx")
+        if "import { SafeImage }" not in src:
+            fail(name, "SafeImage not imported"); return
+        idx = src.index('h-20 w-32 rounded-xl bg-slate-100')
+        body = src[idx:idx + 400]
+        if "<SafeImage" not in body:
+            fail(name, "collateral list thumbnail still uses a raw <img> instead of SafeImage"); return
+        if "shrink-0 relative" not in body:
+            fail(name, "thumbnail wrapper is missing 'relative' (PatternThumbnail fallback would break out of its box)"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 # ── run all tests ─────────────────────────────────────────────────────────────
 
 TESTS = [
@@ -2359,6 +2439,12 @@ TESTS = [
     test_thumb3_reason_relative_urls_break_on_portal_subdomains,
     test_thumb4_collaterals_catalogue_row_icon_is_positioned,
     test_thumb5_collateral_attachment_download_uses_stored_url,
+    # Feature — CFILTER: Collaterals Catalogue type filter; admin thumbnail fallback
+    test_cfilter1_type_filter_options_and_classifier_exist,
+    test_cfilter2_all_defaults_and_is_not_a_checkbox,
+    test_cfilter3_filter_applied_before_grouping_rows,
+    test_cfilter4_admin_solutions_list_uses_safe_image,
+    test_cfilter5_admin_collaterals_list_uses_safe_image,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

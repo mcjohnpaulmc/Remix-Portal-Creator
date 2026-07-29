@@ -6,6 +6,7 @@
 import React, { useState } from "react";
 import { Plus, Edit2, Check, X, Shield, Globe, Image, Tag, Key, Eye, EyeOff, FolderOpen, Link2, Download, AlertCircle, Upload, Trash2, RefreshCw, ChevronDown, ChevronRight, Rocket, FileCode } from "lucide-react";
 import { Solution } from "../../../shared/types";
+import { SafeImage } from "./SafeImage";
 
 interface ExternalSolution {
   id: string;
@@ -1029,13 +1030,15 @@ export function AdminSolutions({
               !isEnabled ? "border-slate-200 bg-slate-50/50 opacity-80" : "border-slate-100 hover:border-slate-200 hover:shadow-2xs"
             }`}
           >
-            {/* Visual preview */}
-            <div className="h-20 w-28 rounded-xl overflow-hidden bg-slate-50 border border-slate-100 shrink-0">
-              <img
+            {/* Visual preview — same SafeImage/PatternThumbnail fallback used on the
+                live portal, so this list shows exactly what visitors see instead of
+                a broken-image icon whenever a thumbnail URL is missing or fails. */}
+            <div className="h-20 w-28 rounded-xl overflow-hidden bg-slate-50 border border-slate-100 shrink-0 relative">
+              <SafeImage
                 src={sol.thumbnail}
                 alt={sol.title}
+                title={sol.title}
                 className="w-full h-full object-cover"
-                referrerPolicy="no-referrer"
               />
             </div>
 
