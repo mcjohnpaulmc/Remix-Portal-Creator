@@ -5,16 +5,18 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { UserLog } from "../../../shared/types";
-import { Search, Download, ChevronDown } from "lucide-react";
+import { Search, Download, ChevronDown, RefreshCw } from "lucide-react";
 
 interface AdminLogsProps {
   logs: UserLog[];
+  onReload?: () => Promise<void>;
 }
 
-export function AdminLogs({ logs }: AdminLogsProps) {
+export function AdminLogs({ logs, onReload }: AdminLogsProps) {
   const [search, setSearch] = useState("");
   const [subdomainFilter, setSubdomainFilter] = useState<string[]>([]);
   const [showSubdomainDropdown, setShowSubdomainDropdown] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on outside click
@@ -134,6 +136,20 @@ export function AdminLogs({ logs }: AdminLogsProps) {
             className="text-[11px] text-slate-500 hover:text-slate-800 font-semibold px-2"
           >
             Reset filter
+          </button>
+        )}
+        {onReload && (
+          <button
+            onClick={async () => {
+              setRefreshing(true);
+              try { await onReload(); } finally { setRefreshing(false); }
+            }}
+            disabled={refreshing}
+            className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-600 rounded-lg text-[11px] font-semibold transition-colors disabled:opacity-50 shrink-0"
+            title="Reload visitor telemetry from server"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "Refreshing…" : "Refresh"}
           </button>
         )}
         <button

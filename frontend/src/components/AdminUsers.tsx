@@ -1,12 +1,12 @@
 import React, { useState } from "react";
-import { Users, Plus, Trash2, Eye, EyeOff, Shield, User, Check, X, Edit2, ToggleLeft, ToggleRight } from "lucide-react";
+import { Users, Plus, Trash2, Eye, EyeOff, Shield, User, Check, X, Edit2, ToggleLeft, ToggleRight, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { PortalUser } from "../../../shared/types";
 
 interface AdminUsersProps {
   users: PortalUser[];
   adminFetch: (url: string, init?: RequestInit) => Promise<Response>;
-  onRefresh: () => void;
+  onRefresh: () => void | Promise<void>;
 }
 
 const ROLES = ["viewer", "admin"] as const;
@@ -22,6 +22,7 @@ export function AdminUsers({ users, adminFetch, onRefresh }: AdminUsersProps) {
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState("");
   const [formSuccess, setFormSuccess] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
   // Edit state
   const [editId, setEditId] = useState<string | null>(null);
@@ -94,14 +95,29 @@ export function AdminUsers({ users, adminFetch, onRefresh }: AdminUsersProps) {
 
   return (
     <div className="space-y-6 animate-fade-in text-left">
-      <div>
-        <h3 className="font-display text-base font-bold text-slate-950 flex items-center gap-2">
-          <Users className="h-4.5 w-4.5 text-orange-500" />
-          User Management
-        </h3>
-        <p className="text-xs text-slate-500 mt-1">
-          Onboard portal users who can log in to view solutions and collaterals. Roles: <strong>viewer</strong> (read-only access) · <strong>admin</strong> (full access).
-        </p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h3 className="font-display text-base font-bold text-slate-950 flex items-center gap-2">
+            <Users className="h-4.5 w-4.5 text-orange-500" />
+            User Management
+          </h3>
+          <p className="text-xs text-slate-500 mt-1">
+            Onboard portal users who can log in to view solutions and collaterals. Roles: <strong>viewer</strong> (read-only access) · <strong>admin</strong> (full access).
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={async () => {
+            setRefreshing(true);
+            try { await onRefresh(); } finally { setRefreshing(false); }
+          }}
+          disabled={refreshing}
+          className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-600 text-xs font-semibold rounded-lg transition-colors disabled:opacity-50 shrink-0"
+          title="Reload users from server"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+          {refreshing ? "Refreshing…" : "Refresh"}
+        </button>
       </div>
 
       {/* Add User Form */}

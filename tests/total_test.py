@@ -1839,6 +1839,87 @@ def test_imp9_collaterals_catalogue_grouped_by_solution_with_horizontal_scroll()
         fail(name, str(e))
 
 
+# ── Bug fixes — CASC: solution delete cascades to collaterals; refresh buttons ─────
+
+def test_casc1_deleting_solution_cascades_to_linked_collaterals():
+    name = "CASC1 (static): deleting a solution also removes its linked collaterals"
+    try:
+        src = read_file("backend/routes/content.routes.ts")
+        idx = src.index('action === "delete"')
+        body = src[idx:idx + 900]
+        if "c.linkedSolutionId !== solution.id" not in body:
+            fail(name, "solution delete handler does not filter out collaterals by linkedSolutionId"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_refresh1_admin_collaterals_has_refresh_button():
+    name = "REFRESH1 (static): AdminCollaterals.tsx has a refresh button wired to onReload"
+    try:
+        src = read_file("frontend/src/components/AdminCollaterals.tsx")
+        if "onReload?: () => Promise<void>" not in src:
+            fail(name, "AdminCollateralsProps has no onReload prop"); return
+        if "Reload collaterals from server" not in src:
+            fail(name, "no refresh button found"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_refresh2_admin_projects_has_refresh_button():
+    name = "REFRESH2 (static): AdminProjects.tsx has a refresh button wired to onReload"
+    try:
+        src = read_file("frontend/src/components/AdminProjects.tsx")
+        if "onReload?: () => Promise<void>" not in src:
+            fail(name, "AdminProjectsProps has no onReload prop"); return
+        if "Reload projects & portals from server" not in src:
+            fail(name, "no refresh button found"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_refresh3_hero_section_has_refresh_button():
+    name = "REFRESH3 (static): App.tsx Hero section (branding tab) has a refresh button"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        idx = src.index('adminActiveTab === "branding"')
+        body = src[idx:idx + 1600]
+        if "Reload hero section from server" not in body:
+            fail(name, "no refresh button found in the Hero section header"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_refresh4_admin_users_has_refresh_button():
+    name = "REFRESH4 (static): AdminUsers.tsx has a refresh button"
+    try:
+        src = read_file("frontend/src/components/AdminUsers.tsx")
+        if "Reload users from server" not in src:
+            fail(name, "no refresh button found"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_refresh5_admin_logs_has_refresh_button():
+    name = "REFRESH5 (static): AdminLogs.tsx has a refresh button wired to onReload, and App.tsx passes it"
+    try:
+        src = read_file("frontend/src/components/AdminLogs.tsx")
+        if "onReload?: () => Promise<void>" not in src:
+            fail(name, "AdminLogsProps has no onReload prop"); return
+        if "Reload visitor telemetry from server" not in src:
+            fail(name, "no refresh button found"); return
+        app_src = read_file("frontend/src/App.tsx")
+        if "<AdminLogs logs={logs} onReload={fetchPortalData} />" not in app_src:
+            fail(name, "App.tsx does not pass onReload to AdminLogs"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 # ── run all tests ─────────────────────────────────────────────────────────────
 
 TESTS = [
@@ -1978,6 +2059,13 @@ TESTS = [
     test_imp7_collateral_import_captures_resource_file_not_just_metadata,
     test_imp8_collateral_import_sets_linked_solution_id,
     test_imp9_collaterals_catalogue_grouped_by_solution_with_horizontal_scroll,
+    # Bug fixes — CASC: solution delete cascades to collaterals; refresh buttons
+    test_casc1_deleting_solution_cascades_to_linked_collaterals,
+    test_refresh1_admin_collaterals_has_refresh_button,
+    test_refresh2_admin_projects_has_refresh_button,
+    test_refresh3_hero_section_has_refresh_button,
+    test_refresh4_admin_users_has_refresh_button,
+    test_refresh5_admin_logs_has_refresh_button,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

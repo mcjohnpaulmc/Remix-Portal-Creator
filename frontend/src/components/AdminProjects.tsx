@@ -44,6 +44,7 @@ interface AdminProjectsProps {
   upcomingProjects: UpcomingProject[];
   onRefreshCurrent: (action: string, project: any) => Promise<void>;
   onRefreshUpcoming: (action: string, project: any) => Promise<void>;
+  onReload?: () => Promise<void>;
   subdomains?: { id: string; name: string; displayName: string }[];
   prefilledSubdomain?: string | null;
   adminUserEmail?: string;
@@ -54,6 +55,7 @@ export function AdminProjects({
   upcomingProjects,
   onRefreshCurrent,
   onRefreshUpcoming,
+  onReload,
   subdomains = [],
   prefilledSubdomain,
   adminUserEmail = ""
@@ -61,6 +63,7 @@ export function AdminProjects({
   const [activeSubTab, setActiveSubTab] = useState<"current" | "upcoming">("current");
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   // AI Generation state
   const [aiLoading, setAiLoading] = useState(false);
@@ -547,16 +550,33 @@ export function AdminProjects({
             Publish client-specific delivery timelines, SLA volume metrics, audit clarifications, and upcoming pilot scopes.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            resetForm();
-            setIsEditing(true);
-          }}
-          className="flex items-center gap-1.5 px-4 py-2.5 bg-black hover:bg-slate-800 text-white font-bold text-xs rounded-xl tracking-wide transition-all shadow-sm cursor-pointer shrink-0 font-sans"
-        >
-          ➕ Publish Project Card
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {onReload && (
+            <button
+              type="button"
+              onClick={async () => {
+                setRefreshing(true);
+                try { await onReload(); } finally { setRefreshing(false); }
+              }}
+              disabled={refreshing}
+              className="flex items-center gap-1.5 px-3 py-2.5 border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-600 text-xs font-semibold rounded-xl transition-colors disabled:opacity-50"
+              title="Reload projects & portals from server"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+              {refreshing ? "Refreshing…" : "Refresh"}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              resetForm();
+              setIsEditing(true);
+            }}
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-black hover:bg-slate-800 text-white font-bold text-xs rounded-xl tracking-wide transition-all shadow-sm cursor-pointer font-sans"
+          >
+            ➕ Publish Project Card
+          </button>
+        </div>
       </div>
 
       {/* EDIT / CREATE WORKSPACE */}

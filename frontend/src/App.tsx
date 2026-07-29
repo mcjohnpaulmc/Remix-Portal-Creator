@@ -706,6 +706,7 @@ export default function App() {
   // Deploy portal — writes config snapshot to data/portals/<slug>/portal.json and pings reload
   const [deployingPortals, setDeployingPortals] = useState<Set<string>>(new Set());
   const [heroPublishDone, setHeroPublishDone] = useState(false);
+  const [heroRefreshing, setHeroRefreshing] = useState(false);
 
   // Portal Settings modal
   const [portalSettingsTarget, setPortalSettingsTarget] = useState<SubdomainPortal | null>(null);
@@ -1499,6 +1500,7 @@ export default function App() {
                       subdomains={subdomainsList}
                       prefilledSubdomain={selectedAdminSubdomain === "all" ? null : selectedAdminSubdomain}
                       onRefresh={async (action, data) => handleAdminDatabaseUpdate("collaterals", action, data)}
+                      onReload={fetchPortalData}
                       adminUserEmail={userEmail || ""}
                     />
                   )}
@@ -1518,6 +1520,7 @@ export default function App() {
                       prefilledSubdomain={selectedAdminSubdomain === "all" ? null : selectedAdminSubdomain}
                       onRefreshCurrent={handleAdminCurrentProjectUpdate}
                       onRefreshUpcoming={handleAdminUpcomingProjectUpdate}
+                      onReload={fetchPortalData}
                       adminUserEmail={userEmail || ""}
                     />
                   )}
@@ -1816,13 +1819,28 @@ export default function App() {
                   {/* Case 4.5: Custom Branding Suite */}
                   {adminActiveTab === "branding" && (
                     <div className="space-y-6 animate-fade-in text-left">
-                      <div>
-                        <h3 className="font-display text-base font-bold text-slate-950 flex items-center gap-1.5">
-                          👑 Hero Spotlight Slides Configuration
-                        </h3>
-                        <p className="text-xs text-slate-500">
-                          Configure three interactive spotlight slides for the hero section to guide clients directly to active deliverables, grounding studies, or newly launched solutions.
-                        </p>
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                          <h3 className="font-display text-base font-bold text-slate-950 flex items-center gap-1.5">
+                            👑 Hero Spotlight Slides Configuration
+                          </h3>
+                          <p className="text-xs text-slate-500">
+                            Configure three interactive spotlight slides for the hero section to guide clients directly to active deliverables, grounding studies, or newly launched solutions.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setHeroRefreshing(true);
+                            try { await fetchPortalData(); } finally { setHeroRefreshing(false); }
+                          }}
+                          disabled={heroRefreshing}
+                          className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-600 text-xs font-semibold rounded-lg transition-colors disabled:opacity-50 shrink-0"
+                          title="Reload hero section from server"
+                        >
+                          <RefreshCw className={`h-3.5 w-3.5 ${heroRefreshing ? "animate-spin" : ""}`} />
+                          {heroRefreshing ? "Refreshing…" : "Refresh"}
+                        </button>
                       </div>
 
                       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -2096,7 +2114,7 @@ export default function App() {
                     />
                   )}
                   {adminActiveTab === "logs" && (
-                    <AdminLogs logs={logs} />
+                    <AdminLogs logs={logs} onReload={fetchPortalData} />
                   )}
                 </motion.div>
               </AnimatePresence>

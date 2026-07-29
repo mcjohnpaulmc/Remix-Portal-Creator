@@ -4,12 +4,13 @@
  */
 
 import React, { useState } from "react";
-import { Plus, Edit2, X, Eye, EyeOff, Link, Tag, CheckCircle, Trash2, FolderOpen, Link2, Image, Upload } from "lucide-react";
+import { Plus, Edit2, X, Eye, EyeOff, Link, Tag, CheckCircle, Trash2, FolderOpen, Link2, Image, Upload, RefreshCw } from "lucide-react";
 import { Collateral } from "../../../shared/types";
 
 interface AdminCollateralsProps {
   collaterals: Collateral[];
   onRefresh: (action: string, collateralData: any) => Promise<void>;
+  onReload?: () => Promise<void>;
   subdomains?: { id: string; name: string; displayName: string }[];
   prefilledSubdomain?: string | null;
   adminUserEmail?: string;
@@ -25,12 +26,14 @@ const COLLATERAL_PRESETS = [
 export function AdminCollaterals({
   collaterals,
   onRefresh,
+  onReload,
   subdomains = [],
   prefilledSubdomain,
   adminUserEmail = "",
 }: AdminCollateralsProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Form states
   const [customerNames, setCustomerNames] = useState<string[]>(["all"]);
@@ -248,16 +251,32 @@ export function AdminCollaterals({
         </div>
 
         {!isEditing && (
-          <button
-            onClick={() => {
-              resetForm();
-              setIsEditing(true);
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-          >
-            <Plus className="h-4 w-4" />
-            Add Collateral Asset
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {onReload && (
+              <button
+                onClick={async () => {
+                  setRefreshing(true);
+                  try { await onReload(); } finally { setRefreshing(false); }
+                }}
+                disabled={refreshing}
+                className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-600 text-xs font-semibold rounded-lg transition-colors disabled:opacity-50"
+                title="Reload collaterals from server"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+                {refreshing ? "Refreshing…" : "Refresh"}
+              </button>
+            )}
+            <button
+              onClick={() => {
+                resetForm();
+                setIsEditing(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+            >
+              <Plus className="h-4 w-4" />
+              Add Collateral Asset
+            </button>
+          </div>
         )}
       </div>
 

@@ -51,11 +51,17 @@ router.post("/solutions", async (req, res) => {
       return res.status(403).json({ error: "You do not have permission to delete this solution." });
     }
     db.solutions = db.solutions.filter(s => s.id !== solution.id);
+    // Cascade: a collateral with no solution left to belong to is orphaned data,
+    // not a standalone asset — remove it along with its solution rather than
+    // leaving it to surface under "General Collaterals" in the catalogue.
+    const linkedCollateralCount = (db.collaterals || []).filter(c => c.linkedSolutionId === solution.id).length;
+    db.collaterals = (db.collaterals || []).filter(c => c.linkedSolutionId !== solution.id);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
       email: adminEmail || "admin@mobiusservices.co.in",
       action: "Solution Deleted",
-      details: `Solution with ID "${solution.id}" was soft deleted.`,
+      details: `Solution with ID "${solution.id}" was deleted` +
+        (linkedCollateralCount > 0 ? `, along with ${linkedCollateralCount} linked collateral(s).` : "."),
       date: new Date().toISOString()
     });
   }
