@@ -85,28 +85,65 @@ router.get("/external-portals/solutions", async (_req, res) => {
   res.json({ mobius, techmobius });
 });
 
-// Downloads an image from the source portal and re-hosts it in our own S3 uploads
-// bucket, returning a hub-served /api/download URL. This is deliberately NOT just
-// "use the URL as-is": thumbnail_url is frequently a relative path (e.g.
-// "/uploads/x.png") or an http:// loopback address (PORTALS above are internal
-// 127.0.0.1 addresses) that only the HUB SERVER can reach — the admin's own
-// browser cannot load either of those directly. The hub can reach the source
-// portal (it already does, to fetch /api/solutions), so it downloads the bytes
-// itself and serves them from a URL that works for any browser, on any network.
-async function rehostImage(base: string, rawUrl: string): Promise<string> {
+// Reads the first field present out of several candidate names — the exact field
+// names used by the Mobius/Techmobius APIs for collateral resource links/kind
+// aren't documented here, so several common REST naming conventions are tried
+// rather than betting the whole import on one guess.
+function pick(obj: any, keys: string[]): string {
+  for (const k of keys) {
+    const v = obj?.[k];
+    if (v !== undefined && v !== null && String(v).trim() !== "") return String(v);
+  }
+  return "";
+}
+
+function resolveUrl(base: string, rawUrl: string): string {
   if (!rawUrl) return "";
-  const absoluteUrl = /^https?:\/\//i.test(rawUrl)
+  return /^https?:\/\//i.test(rawUrl)
     ? rawUrl
     : `${base}${rawUrl.startsWith("/") ? "" : "/"}${rawUrl}`;
+}
 
+const LOOPBACK_RE = /^https?:\/\/(127\.0\.0\.1|localhost|0\.0\.0\.0|::1)/i;
+
+// Identifies an image by its magic bytes rather than trusting the source's
+// Content-Type header — many simple/internal file servers (exactly what
+// PORTALS above are: 127.0.0.1 dev-style services) omit it or send a generic
+// "application/octet-stream", which caused every thumbnail to be silently
+// rejected under a strict `contentType.startsWith("image/")` check.
+function sniffImageContentType(buf: Buffer): string | null {
+  if (buf.length >= 4 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return "image/png";
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "image/jpeg";
+  if (buf.length >= 6 && (buf.toString("ascii", 0, 6) === "GIF87a" || buf.toString("ascii", 0, 6) === "GIF89a")) return "image/gif";
+  if (buf.length >= 12 && buf.toString("ascii", 0, 4) === "RIFF" && buf.toString("ascii", 8, 12) === "WEBP") return "image/webp";
+  if (buf.length >= 2 && buf[0] === 0x42 && buf[1] === 0x4d) return "image/bmp";
+  return null;
+}
+
+// Downloads an image from the source portal and re-hosts it in our own S3 uploads
+// bucket, returning a hub-served /api/download URL — the hub can reach the source
+// portal (it already does, to fetch /api/solutions), so it downloads the bytes
+// itself rather than trusting the admin's browser to load a URL that may be a
+// relative path or an internal 127.0.0.1 address it cannot reach.
+async function rehostImage(absoluteUrl: string): Promise<string> {
   try {
-    const resp = await fetch(absoluteUrl, { signal: AbortSignal.timeout(8000) });
-    if (!resp.ok) return "";
-    const contentType = resp.headers.get("content-type") || "";
-    if (!contentType.startsWith("image/")) return "";
-
+    const resp = await fetch(absoluteUrl, { signal: AbortSignal.timeout(10000) });
+    if (!resp.ok) {
+      logger.warn("external-portals", `Thumbnail fetch ${absoluteUrl} returned HTTP ${resp.status}`);
+      return "";
+    }
     const buf = Buffer.from(await resp.arrayBuffer());
-    const ext = contentType.split("/")[1]?.split(";")[0]?.replace(/[^a-z0-9]/gi, "") || "png";
+    const declaredType = (resp.headers.get("content-type") || "").split(";")[0].trim();
+    const sniffed = sniffImageContentType(buf);
+    const contentType = sniffed || (declaredType.startsWith("image/") ? declaredType : "");
+    if (!contentType) {
+      logger.warn(
+        "external-portals",
+        `${absoluteUrl} did not look like an image (declared type "${declaredType || "none"}", ${buf.length} bytes) — skipping re-host.`
+      );
+      return "";
+    }
+    const ext = contentType.split("/")[1] || "png";
     const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
     await s3PutUpload("imports", filename, buf, contentType);
     return `/api/download/imports/${encodeURIComponent(filename)}`;
@@ -114,6 +151,19 @@ async function rehostImage(base: string, rawUrl: string): Promise<string> {
     logger.warn("external-portals", `Thumbnail re-host failed for ${absoluteUrl}: ${err?.message}`);
     return "";
   }
+}
+
+// Resolves a thumbnail URL end to end: re-host it so it's guaranteed to render for
+// any browser; if re-hosting fails for any reason (network hiccup, unusual
+// response) but the original URL is a normal public address (not a 127.0.0.1
+// loopback only the hub server can reach), fall back to using it directly rather
+// than showing no thumbnail at all.
+async function resolveThumbnail(base: string, rawUrl: string): Promise<string> {
+  if (!rawUrl) return "";
+  const absoluteUrl = resolveUrl(base, rawUrl);
+  const rehosted = await rehostImage(absoluteUrl);
+  if (rehosted) return rehosted;
+  return LOOPBACK_RE.test(absoluteUrl) ? "" : absoluteUrl;
 }
 
 // POST /external-portals/import — imports selected solutions AND every collateral
@@ -144,18 +194,20 @@ router.post("/external-portals/import", async (req, res) => {
 
   const db = readDatabase();
   if (!db.collaterals) db.collaterals = [];
-  const existingTitles = new Set((db.solutions || []).map(s => s.title.toLowerCase().trim()));
+  const existingSolutionTitles = new Set((db.solutions || []).map(s => s.title.toLowerCase().trim()));
+  const existingCollateralTitles = new Set((db.collaterals || []).map(c => c.title.toLowerCase().trim()));
 
   let importedSolutions = 0;
   let importedCollaterals = 0;
   let skippedSolutions = 0;
+  let skippedCollaterals = 0;
 
   for (const extId of solutionIds) {
     const s = rawSolutions.find((x: any) => x.id === extId);
     if (!s) continue;
 
     const title: string = s.title || "";
-    if (!title || existingTitles.has(title.toLowerCase().trim())) {
+    if (!title || existingSolutionTitles.has(title.toLowerCase().trim())) {
       skippedSolutions++;
       continue;
     }
@@ -164,7 +216,7 @@ router.post("/external-portals/import", async (req, res) => {
     if (s.practice) tags.push(s.practice);
     if (s.solution_type) tags.push(s.solution_type);
 
-    const thumbnail = await rehostImage(base, s.thumbnail_url || "");
+    const thumbnail = await resolveThumbnail(base, s.thumbnail_url || "");
 
     const newSol: Solution = {
       id: `sol-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -182,29 +234,50 @@ router.post("/external-portals/import", async (req, res) => {
       createdBy: adminEmail || undefined,
     };
     db.solutions.unshift(newSol);
-    existingTitles.add(title.toLowerCase().trim());
+    existingSolutionTitles.add(title.toLowerCase().trim());
     importedSolutions++;
 
     const linkedCollaterals = rawCollaterals.filter((c: any) => c.linked_solution_id === extId);
     for (const c of linkedCollaterals) {
-      const colThumbnail = await rehostImage(base, c.thumbnail_url || "");
+      const colTitle: string = c.title || title;
+      if (existingCollateralTitles.has(colTitle.toLowerCase().trim())) {
+        skippedCollaterals++;
+        continue;
+      }
+
+      // The source distinguishes different kinds of collateral (video, doc, pptx,
+      // web article/source) — field names for the resource link and its kind
+      // aren't documented, so several likely candidates are tried in order.
+      const resourceUrl = resolveUrl(base, pick(c, [
+        "resource_url", "file_url", "content_url", "video_url", "document_url",
+        "article_url", "source_url", "link_url", "url", "link",
+      ]));
+      const kind = pick(c, ["type", "resource_type", "file_type", "kind", "category"]).toLowerCase();
+      const driveUrl = pick(c, ["google_drive_url", "drive_url", "gdrive_url"]);
+
+      const colThumbnail = await resolveThumbnail(base, c.thumbnail_url || "");
+
       const newCol: Collateral = {
         id: `col-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        title: c.title || title,
+        title: colTitle,
         thumbnail: colThumbnail,
         prompt: c.prompt || "",
         generatedContent: c.generated_content || c.content || c.description || "",
-        uploadedFiles: [],
+        uploadedFiles: resourceUrl && !driveUrl
+          ? [{ name: colTitle, size: "", type: kind || "file", url: resourceUrl }]
+          : [],
         createdAt: new Date().toISOString(),
         enabled: true,
         customerName: targetCustomerNames[0],
         customerNames: targetCustomerNames,
-        googleDriveUrl: c.google_drive_url || c.drive_url || "",
-        tag: c.tag || c.category || undefined,
-        fileType: c.file_type || undefined,
+        googleDriveUrl: driveUrl,
+        tag: c.tag || c.category || kind || undefined,
+        fileType: c.file_type || kind || undefined,
+        linkedSolutionId: newSol.id,
         createdBy: adminEmail || undefined,
       };
       db.collaterals.unshift(newCol);
+      existingCollateralTitles.add(colTitle.toLowerCase().trim());
       importedCollaterals++;
     }
 
@@ -225,6 +298,7 @@ router.post("/external-portals/import", async (req, res) => {
     importedSolutions,
     importedCollaterals,
     skippedSolutions,
+    skippedCollaterals,
     database: buildAdminSafeDbView(db, adminEmail),
   });
 });

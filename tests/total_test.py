@@ -1767,6 +1767,78 @@ def test_map1_solutions_reset_form_respects_prefilled_subdomain():
         fail(name, str(e))
 
 
+# ── Bug fixes — IMP2: thumbnail import fidelity, collateral kinds, catalogue layout ─
+
+def test_imp5_thumbnail_import_sniffs_magic_bytes_not_just_content_type_header():
+    name = "IMP5 (static): thumbnail re-host identifies images by content, not just a possibly-wrong Content-Type header"
+    try:
+        src = read_file("backend/routes/external-portals.routes.ts")
+        if "function sniffImageContentType" not in src:
+            fail(name, "sniffImageContentType helper not found — still trusting Content-Type header alone"); return
+        if "const sniffed = sniffImageContentType(buf)" not in src:
+            fail(name, "rehostImage does not use the magic-byte sniffer"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_imp6_thumbnail_import_falls_back_to_direct_url_on_rehost_failure():
+    name = "IMP6 (static): thumbnail import falls back to the direct source URL if re-hosting fails (unless it's a loopback address)"
+    try:
+        src = read_file("backend/routes/external-portals.routes.ts")
+        if "function resolveThumbnail" not in src:
+            fail(name, "resolveThumbnail helper not found"); return
+        if "LOOPBACK_RE" not in src:
+            fail(name, "no loopback-address guard — could fall back to a 127.0.0.1 URL the browser can't reach"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_imp7_collateral_import_captures_resource_file_not_just_metadata():
+    name = "IMP7 (static): collateral import captures the actual resource file (video/doc/pptx/article link), not just text metadata"
+    try:
+        src = read_file("backend/routes/external-portals.routes.ts")
+        if "uploadedFiles: resourceUrl" not in src:
+            fail(name, "collateral import still hardcodes uploadedFiles to an empty array"); return
+        if "function pick(" not in src:
+            fail(name, "no defensive multi-field lookup for the source's resource/kind fields"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_imp8_collateral_import_sets_linked_solution_id():
+    name = "IMP8 (static): imported collaterals are tagged with linkedSolutionId so they can be grouped under their solution"
+    try:
+        types_src = read_file("shared/types.ts")
+        if "linkedSolutionId" not in types_src:
+            fail(name, "Collateral type has no linkedSolutionId field"); return
+        routes_src = read_file("backend/routes/external-portals.routes.ts")
+        if "linkedSolutionId: newSol.id" not in routes_src:
+            fail(name, "import handler does not stamp linkedSolutionId on imported collaterals"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_imp9_collaterals_catalogue_grouped_by_solution_with_horizontal_scroll():
+    name = "IMP9 (static): Collaterals Catalogue renders one row per solution with a horizontally-scrollable tile strip"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        idx = src.index('currentTab === "collaterals" ? (')
+        body = src[idx:idx + 6000]
+        if "col.linkedSolutionId === sol.id" not in body:
+            fail(name, "collaterals are not grouped by linkedSolutionId against visibleSolutions"); return
+        if "overflow-x-auto" not in body:
+            fail(name, "no horizontally-scrollable container found for the tile strip"); return
+        if '"General Collaterals"' not in body:
+            fail(name, "unlinked collaterals have no fallback row"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 # ── run all tests ─────────────────────────────────────────────────────────────
 
 TESTS = [
@@ -1900,6 +1972,12 @@ TESTS = [
     test_imp3_import_rehosts_thumbnails_instead_of_https_only_filter,
     test_imp4_frontend_import_calls_server_endpoint_and_reloads,
     test_map1_solutions_reset_form_respects_prefilled_subdomain,
+    # Bug fixes — IMP2: thumbnail import fidelity, collateral kinds, catalogue layout
+    test_imp5_thumbnail_import_sniffs_magic_bytes_not_just_content_type_header,
+    test_imp6_thumbnail_import_falls_back_to_direct_url_on_rehost_failure,
+    test_imp7_collateral_import_captures_resource_file_not_just_metadata,
+    test_imp8_collateral_import_sets_linked_solution_id,
+    test_imp9_collaterals_catalogue_grouped_by_solution_with_horizontal_scroll,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

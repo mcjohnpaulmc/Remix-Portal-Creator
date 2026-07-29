@@ -1196,26 +1196,17 @@ export default function App() {
                     )}
                   </motion.div>
                 ) : currentTab === "collaterals" ? (
-                  // Collateral Research Grid grouped by dynamic document category tag/flag
+                  // Collaterals grouped into one horizontally-scrollable row per solution —
+                  // collaterals imported alongside a solution carry linkedSolutionId, so each
+                  // solution gets its own row card; anything unlinked falls into one shared row.
                   <motion.div
                     key="collaterals-grid"
                     initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -15 }}
-                    className="space-y-6 text-left"
+                    className="space-y-5 text-left"
                   >
                     {(() => {
-                      // Extract unique dynamic categories based on tag/flag of visible collaterals
-                      const categories = Array.from(
-                        new Set(visibleCollaterals.map((col) => (col.tag || "case study").toLowerCase().trim()))
-                      ) as string[];
-
-                      categories.sort((a, b) => {
-                        if (a === "case study") return -1;
-                        if (b === "case study") return 1;
-                        return a.localeCompare(b);
-                      });
-
                       if (visibleCollaterals.length === 0) {
                         return (
                           <div className="text-center p-12 bg-white rounded-xl border border-dashed border-slate-350 shadow-2xs w-full">
@@ -1226,117 +1217,98 @@ export default function App() {
                         );
                       }
 
+                      const linkedSolutionIds = new Set(visibleSolutions.map((s) => s.id));
+                      const rows: { key: string; title: string; thumbnail: string; items: typeof visibleCollaterals }[] =
+                        visibleSolutions
+                          .map((sol) => ({
+                            key: sol.id,
+                            title: sol.title,
+                            thumbnail: sol.thumbnail,
+                            items: visibleCollaterals.filter((col) => col.linkedSolutionId === sol.id),
+                          }))
+                          .filter((row) => row.items.length > 0);
+
+                      const unlinked = visibleCollaterals.filter(
+                        (col) => !col.linkedSolutionId || !linkedSolutionIds.has(col.linkedSolutionId)
+                      );
+                      if (unlinked.length > 0) {
+                        rows.push({ key: "general", title: "General Collaterals", thumbnail: "", items: unlinked });
+                      }
+
                       return (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
-                          {categories.map((cat) => {
-                            const items = visibleCollaterals.filter(
-                              (col) => (col.tag || "case study").toLowerCase().trim() === cat
-                            );
+                        <>
+                          {rows.map((row) => (
+                            <div key={row.key} className="bg-slate-50/50 p-4.5 rounded-2xl border border-slate-200">
+                              {/* Row header */}
+                              <div className="border-b border-slate-105 pb-3 mb-4 flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className="h-9 w-9 rounded-xl overflow-hidden border border-slate-150 shrink-0 bg-white">
+                                    <SafeImage
+                                      src={row.thumbnail}
+                                      alt={row.title}
+                                      title={row.title}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <h3 className="font-display font-bold text-xs text-slate-900 uppercase tracking-widest truncate">
+                                      {row.title}
+                                    </h3>
+                                    <p className="text-[10px] text-slate-400 leading-snug line-clamp-1">
+                                      {row.key === "general" ? "Not linked to a specific solution" : "Linked collaterals for this solution"}
+                                    </p>
+                                  </div>
+                                </div>
+                                <span className="text-[10px] font-mono font-bold bg-white border border-slate-205 text-orange-700 px-2 py-0.5 rounded-md select-none shrink-0 shadow-3xs">
+                                  {row.items.length}
+                                </span>
+                              </div>
 
-                            const catLabel = cat.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
-
-                            // Determine dynamic section icons based on the document category/flag
-                            let catIcon = <BookOpen className="h-5 w-5 text-orange-500" />;
-                            if (cat.includes("study")) {
-                              catIcon = <BookOpen className="h-5 w-5 text-orange-500" />;
-                            } else if (cat.includes("doc") || cat.includes("brief") || cat.includes("report") || cat.includes("paper")) {
-                              catIcon = <FileText className="h-5 w-5 text-emerald-500" />;
-                            } else if (cat.includes("video") || cat.includes("demo") || cat.includes("walkthrough") || cat.includes("play")) {
-                              catIcon = <Film className="h-5 w-5 text-amber-500" />;
-                            } else if (cat.includes("sheet") || cat.includes("xlsx") || cat.includes("model") || cat.includes("data")) {
-                              catIcon = <Database className="h-5 w-5 text-sky-500" />;
-                            } else {
-                              catIcon = <Briefcase className="h-5 w-5 text-slate-500" />;
-                            }
-
-                            // Determine dynamic descriptions for the section headers
-                            let catDesc = "Assorted customer-facing materials and structured deployment assets.";
-                            if (cat.includes("study")) {
-                              catDesc = "In-depth case evaluations, architectural patterns, and business KPIs.";
-                            } else if (cat.includes("doc")) {
-                              catDesc = "Enterprise draft briefs, scope summaries, and compliance specifications.";
-                            } else if (cat.includes("video") || cat.includes("play")) {
-                              catDesc = "Interactive screen demos, product walks, and interface guides.";
-                            } else if (cat.includes("sheet") || cat.includes("model")) {
-                              catDesc = "Calculators, telemetry history trackers, and budget sheets.";
-                            }
-
-                            return (
-                              <div key={cat} className="space-y-4 text-left bg-slate-50/50 p-4.5 rounded-2xl border border-slate-200">
-                                {/* Section Header */}
-                                <div className="border-b border-slate-105 pb-3 flex items-center justify-between">
-                                  <div className="flex items-center gap-3 min-w-0">
-                                    <div className="p-2 bg-white border border-slate-150 rounded-xl shrink-0">
-                                      {catIcon}
+                              {/* Horizontally scrollable tile strip */}
+                              <div className="flex gap-4 overflow-x-auto pb-1.5 custom-scroll">
+                                {row.items.map((col) => (
+                                  <div
+                                    key={col.id}
+                                    onClick={() => handleCollateralClick(col)}
+                                    className="group w-56 shrink-0 bg-white rounded-xl border border-slate-200 p-3.5 flex flex-col hover:border-orange-400 transition-all cursor-pointer shadow-3xs hover:shadow-md hover:-translate-y-0.5 duration-205 gap-2.5"
+                                  >
+                                    {/* Thumbnail image */}
+                                    <div className="w-full h-24 bg-slate-50 rounded-lg overflow-hidden border border-slate-150 relative shrink-0">
+                                      <SafeImage
+                                        src={col.thumbnail}
+                                        alt={col.title}
+                                        title={col.title}
+                                        className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-500"
+                                      />
+                                      <div className="absolute top-1.5 right-1.5 bg-slate-900/65 backdrop-blur-xs px-1.5 py-0.5 rounded text-[7px] text-white font-mono uppercase tracking-widest font-bold select-none">
+                                        {col.fileType || "doc"}
+                                      </div>
                                     </div>
-                                    <div className="min-w-0">
-                                      <h3 className="font-display font-bold text-xs text-slate-900 uppercase tracking-widest truncate">
-                                        {catLabel}
-                                      </h3>
-                                      <p className="text-[10px] text-slate-400 leading-snug line-clamp-1">
-                                        {catDesc}
-                                      </p>
+
+                                    {/* Title details */}
+                                    <div className="flex-1 flex flex-col justify-between min-w-0">
+                                      <div className="space-y-1">
+                                        <h4 className="font-bold text-slate-800 text-[11px] tracking-tight leading-snug group-hover:text-orange-600 transition-colors line-clamp-2">
+                                          {col.title}
+                                        </h4>
+                                        <p className="text-[10px] text-slate-500 leading-normal line-clamp-2">
+                                          {col.prompt || col.generatedContent?.replace(/[#*`_]/g, "").slice(0, 80) || "Browse custom digital files linked securely on our drive."}
+                                        </p>
+                                      </div>
+
+                                      <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
+                                        <span className="text-[7px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-sm uppercase tracking-wide">
+                                          {col.googleDriveUrl ? "Drive Link" : "Dossier"}
+                                        </span>
+                                        <ChevronRight className="h-3 w-3 text-slate-400 group-hover:text-orange-600 group-hover:translate-x-0.5 transition-transform" />
+                                      </div>
                                     </div>
                                   </div>
-                                  <span className="text-[10px] font-mono font-bold bg-white border border-slate-205 text-orange-700 px-2 py-0.5 rounded-md select-none shrink-0 shadow-3xs">
-                                    {items.length}
-                                  </span>
-                                </div>
-
-                                {/* Stack list inside this column */}
-                                <div className="space-y-4">
-                                  {items.map((col) => {
-                                    return (
-                                      <div
-                                        key={col.id}
-                                        onClick={() => handleCollateralClick(col)}
-                                        className="group bg-white rounded-xl border border-slate-200 p-4 flex flex-col hover:border-orange-400 transition-all cursor-pointer shadow-3xs hover:shadow-md hover:-translate-y-0.5 duration-205 justify-between gap-3"
-                                      >
-                                        {/* Thumbnail image */}
-                                        <div className="w-full h-28 bg-slate-50 rounded-lg overflow-hidden border border-slate-150 relative shrink-0">
-                                          <SafeImage
-                                            src={col.thumbnail}
-                                            alt={col.title}
-                                            title={col.title}
-                                            className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-500"
-                                          />
-                                          <div className="absolute top-2 right-2 bg-slate-900/65 backdrop-blur-xs px-2.5 py-0.5 rounded text-[8px] text-white font-mono uppercase tracking-widest font-bold select-none">
-                                            {col.fileType || "doc"}
-                                          </div>
-                                        </div>
-
-                                        {/* Title details */}
-                                        <div className="flex-1 flex flex-col justify-between">
-                                          <div className="space-y-1">
-                                            <span className="text-[8px] font-mono font-bold uppercase text-slate-400 tracking-wider block">
-                                              📁 {col.googleDriveUrl ? "Active Cloud Reference" : "Integrated Report Summary"}
-                                            </span>
-                                            <h4 className="font-bold text-slate-800 text-xs tracking-tight leading-snug group-hover:text-orange-600 transition-colors line-clamp-2">
-                                              {col.title}
-                                            </h4>
-                                            <p className="text-[11px] text-slate-500 leading-normal line-clamp-2 mt-0.5">
-                                              {col.prompt || col.generatedContent?.replace(/[#*`_]/g, "").slice(0, 100) || "Browse custom digital files linked securely on our drive."}
-                                            </p>
-                                          </div>
-
-                                          <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
-                                            <span className="text-[8px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-sm uppercase tracking-wide">
-                                              {col.googleDriveUrl ? "Drive Link" : "Dossier"}
-                                            </span>
-                                            <button className="text-[11px] font-bold text-slate-650 flex items-center gap-0.5 group-hover:text-orange-600 transition-colors">
-                                              {col.googleDriveUrl ? "Launch" : "Read Brief"}
-                                              <ChevronRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
-                                            </button>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
+                                ))}
                               </div>
-                            );
-                          })}
-                        </div>
+                            </div>
+                          ))}
+                        </>
                       );
                     })()}
                   </motion.div>

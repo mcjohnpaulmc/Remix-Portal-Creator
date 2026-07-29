@@ -52,6 +52,7 @@ export interface Collateral {
   googleDriveUrl?: string; // Primary Google Drive link URL
   tag?: "case study" | "solution doc" | "sample" | "demo video" | string;
   fileType?: "google slide" | "google video" | "google doc" | "google sheet" | string;
+  linkedSolutionId?: string; // id of the Solution this collateral belongs to (set on import; groups the Collaterals Catalogue by solution)
   createdBy?: string; // email of the admin who created this collateral; used for portal isolation
 }
 
