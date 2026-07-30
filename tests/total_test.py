@@ -2134,12 +2134,15 @@ def test_deploy7_frontend_deploy_button_and_panel_exist():
 # ── Bug fixes — THUMB: broken thumbnails/downloads on customer portal subdomains ─
 
 def test_thumb1_upload_url_is_absolute():
-    name = "THUMB1 (static): /api/upload returns an absolute (HUB_ORIGIN) URL, not a relative one"
+    name = "THUMB1 (static): /api/upload returns an absolute URL, not a relative one"
     try:
+        # Originally built via the raw HUB_ORIGIN constant; later replaced with
+        # resolveHubOrigin(req) (see MIXED1-MIXED3) so a misconfigured/unset
+        # HUB_ORIGIN doesn't silently emit a broken localhost URL in production.
         src = read_file("backend/routes/upload.routes.ts")
-        if "HUB_ORIGIN" not in src:
-            fail(name, "upload.routes.ts does not import/use HUB_ORIGIN"); return
-        if 'const url = `${HUB_ORIGIN}/api/download/' not in src:
+        if "resolveHubOrigin" not in src:
+            fail(name, "upload.routes.ts does not build an absolute URL via resolveHubOrigin"); return
+        if "const url = `${resolveHubOrigin(req)}/api/download/" not in src:
             fail(name, "/api/upload still returns a relative /api/download URL"); return
         ok(name)
     except Exception as e:
@@ -2147,12 +2150,14 @@ def test_thumb1_upload_url_is_absolute():
 
 
 def test_thumb2_rehosted_thumbnail_url_is_absolute():
-    name = "THUMB2 (static): external-portals rehostImage returns an absolute (HUB_ORIGIN) URL"
+    name = "THUMB2 (static): external-portals rehostImage returns an absolute URL"
     try:
+        # Originally built via the raw HUB_ORIGIN constant; later replaced with
+        # resolveHubOrigin(req) (see MIXED1-MIXED3).
         src = read_file("backend/routes/external-portals.routes.ts")
-        if "HUB_ORIGIN" not in src:
-            fail(name, "external-portals.routes.ts does not import/use HUB_ORIGIN"); return
-        if 'return `${HUB_ORIGIN}/api/download/imports/' not in src:
+        if "resolveHubOrigin" not in src:
+            fail(name, "external-portals.routes.ts does not build an absolute URL via resolveHubOrigin"); return
+        if "return `${hubOrigin}/api/download/imports/" not in src:
             fail(name, "rehostImage still returns a relative /api/download URL"); return
         ok(name)
     except Exception as e:
@@ -2349,6 +2354,50 @@ def test_sandbox1_interactive_asset_sandbox_removed():
         fail(name, str(e))
 
 
+# ── Bug fixes — MIXED: mixed-content / broken thumbnail URLs when HUB_ORIGIN is
+#    left at its http://localhost:3000 default in production ──────────────────
+
+def test_mixed1_resolve_hub_origin_helper_exists():
+    name = "MIXED1 (static): backend/utils/hubOrigin.ts exports resolveHubOrigin with a request-derived fallback"
+    try:
+        src = read_file("backend/utils/hubOrigin.ts")
+        if "export function resolveHubOrigin" not in src:
+            fail(name, "resolveHubOrigin not exported"); return
+        if "x-forwarded-proto" not in src.lower():
+            fail(name, "no X-Forwarded-Proto handling for reverse-proxy deployments"); return
+        if '"https"' not in src:
+            fail(name, "no https fallback for non-local hosts (this is what fixes the mixed-content error)"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_mixed2_upload_route_uses_resolve_hub_origin():
+    name = "MIXED2 (static): /api/upload builds its URL via resolveHubOrigin(req), not the raw HUB_ORIGIN constant"
+    try:
+        src = read_file("backend/routes/upload.routes.ts")
+        if "resolveHubOrigin(req)" not in src:
+            fail(name, "upload.routes.ts does not call resolveHubOrigin(req)"); return
+        if "${HUB_ORIGIN}" in src:
+            fail(name, "upload.routes.ts still references the raw HUB_ORIGIN constant directly"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_mixed3_external_import_uses_resolve_hub_origin():
+    name = "MIXED3 (static): external-portals rehostImage builds its URL via resolveHubOrigin(req), not the raw HUB_ORIGIN constant"
+    try:
+        src = read_file("backend/routes/external-portals.routes.ts")
+        if "resolveHubOrigin(req)" not in src:
+            fail(name, "external-portals.routes.ts does not call resolveHubOrigin(req)"); return
+        if "${HUB_ORIGIN}" in src:
+            fail(name, "external-portals.routes.ts still references the raw HUB_ORIGIN constant directly"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 # ── run all tests ─────────────────────────────────────────────────────────────
 
 TESTS = [
@@ -2530,6 +2579,10 @@ TESTS = [
     test_casc2_portal_delete_removes_orphaned_solutions,
     test_casc3_remapping_solution_syncs_linked_collaterals,
     test_sandbox1_interactive_asset_sandbox_removed,
+    # Bug fixes — MIXED: mixed-content / broken thumbnail URLs from HUB_ORIGIN default
+    test_mixed1_resolve_hub_origin_helper_exists,
+    test_mixed2_upload_route_uses_resolve_hub_origin,
+    test_mixed3_external_import_uses_resolve_hub_origin,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

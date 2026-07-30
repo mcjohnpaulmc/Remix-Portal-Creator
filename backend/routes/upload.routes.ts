@@ -8,7 +8,7 @@ import { Router } from "express";
 import multer from "multer";
 import { requireAdminAuth } from "../auth";
 import { s3PutUpload, s3GetUpload } from "../storage/s3";
-import { HUB_ORIGIN } from "../config";
+import { resolveHubOrigin } from "../utils/hubOrigin";
 
 const router = Router();
 
@@ -57,7 +57,7 @@ router.post("/api/upload", requireAdminAuth, (req: any, res: any, next: any) => 
   // separate portal-server.ts process with no /api/download route of its own — a
   // relative path would resolve against that portal's own origin and 404 there,
   // even though it works fine when viewed from the hub's own admin console.
-  const url = `${HUB_ORIGIN}/api/download/${encodeURIComponent(portalSlug)}/${encodeURIComponent(filename)}`;
+  const url = `${resolveHubOrigin(req)}/api/download/${encodeURIComponent(portalSlug)}/${encodeURIComponent(filename)}`;
   res.json({
     url,
     filename,

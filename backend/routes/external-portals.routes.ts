@@ -10,7 +10,7 @@ import { s3PutUpload } from "../storage/s3";
 import { autoDeployLivePortals } from "../portal/deploy";
 import { buildAdminSafeDbView } from "../utils/dbView";
 import { isSuperAdminRole } from "../auth";
-import { HUB_ORIGIN } from "../config";
+import { resolveHubOrigin } from "../utils/hubOrigin";
 import { logger } from "../logger";
 
 const router = Router();
@@ -127,7 +127,7 @@ function sniffImageContentType(buf: Buffer): string | null {
 // portal (it already does, to fetch /api/solutions), so it downloads the bytes
 // itself rather than trusting the admin's browser to load a URL that may be a
 // relative path or an internal 127.0.0.1 address it cannot reach.
-async function rehostImage(absoluteUrl: string): Promise<string> {
+async function rehostImage(absoluteUrl: string, hubOrigin: string): Promise<string> {
   try {
     const resp = await fetch(absoluteUrl, { signal: AbortSignal.timeout(10000) });
     if (!resp.ok) {
@@ -151,7 +151,7 @@ async function rehostImage(absoluteUrl: string): Promise<string> {
     // Absolute, not relative — this renders on customer-portal subdomains too,
     // which are served by a separate process with no /api/download route of
     // their own (see upload.routes.ts for the same fix and full rationale).
-    return `${HUB_ORIGIN}/api/download/imports/${encodeURIComponent(filename)}`;
+    return `${hubOrigin}/api/download/imports/${encodeURIComponent(filename)}`;
   } catch (err: any) {
     logger.warn("external-portals", `Thumbnail re-host failed for ${absoluteUrl}: ${err?.message}`);
     return "";
@@ -163,10 +163,10 @@ async function rehostImage(absoluteUrl: string): Promise<string> {
 // response) but the original URL is a normal public address (not a 127.0.0.1
 // loopback only the hub server can reach), fall back to using it directly rather
 // than showing no thumbnail at all.
-async function resolveThumbnail(base: string, rawUrl: string): Promise<string> {
+async function resolveThumbnail(base: string, rawUrl: string, hubOrigin: string): Promise<string> {
   if (!rawUrl) return "";
   const absoluteUrl = resolveUrl(base, rawUrl);
-  const rehosted = await rehostImage(absoluteUrl);
+  const rehosted = await rehostImage(absoluteUrl, hubOrigin);
   if (rehosted) return rehosted;
   return LOOPBACK_RE.test(absoluteUrl) ? "" : absoluteUrl;
 }
@@ -192,6 +192,7 @@ router.post("/external-portals/import", async (req, res) => {
   const isSuperAdmin = isSuperAdminRole((req as any).userRole);
   const targetCustomerNames = Array.isArray(customerNames) && customerNames.length > 0 ? customerNames : ["all"];
   const base = PORTALS[portal];
+  const hubOrigin = resolveHubOrigin(req);
 
   const { solutions: rawSolutions, collaterals: rawCollaterals } = await fetchRawPortalData(portal);
   if (rawSolutions.length === 0) {
@@ -222,7 +223,7 @@ router.post("/external-portals/import", async (req, res) => {
     if (s.practice) tags.push(s.practice);
     if (s.solution_type) tags.push(s.solution_type);
 
-    const thumbnail = await resolveThumbnail(base, s.thumbnail_url || "");
+    const thumbnail = await resolveThumbnail(base, s.thumbnail_url || "", hubOrigin);
 
     const newSol: Solution = {
       id: `sol-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -261,7 +262,7 @@ router.post("/external-portals/import", async (req, res) => {
       const kind = pick(c, ["type", "resource_type", "file_type", "kind", "category"]).toLowerCase();
       const driveUrl = pick(c, ["google_drive_url", "drive_url", "gdrive_url"]);
 
-      const colThumbnail = await resolveThumbnail(base, c.thumbnail_url || "");
+      const colThumbnail = await resolveThumbnail(base, c.thumbnail_url || "", hubOrigin);
 
       const newCol: Collateral = {
         id: `col-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
