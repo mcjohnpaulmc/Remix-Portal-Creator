@@ -2398,6 +2398,38 @@ def test_mixed3_external_import_uses_resolve_hub_origin():
         fail(name, str(e))
 
 
+# ── Feature — SOLFORM: onboarding form Back button; thumbnail made optional ────
+
+def test_solform1_onboard_form_has_back_button():
+    name = "SOLFORM1 (static): AdminSolutions.tsx onboarding form has a labeled Back button that returns to the solutions list"
+    try:
+        src = read_file("frontend/src/components/AdminSolutions.tsx")
+        idx = src.index('editingId ? "Edit Solution Resource" : "Onboard New Utility"')
+        body = src[max(0, idx - 700):idx]
+        if "Back to Solutions list" not in body:
+            fail(name, "no labeled Back button found before the onboarding form header"); return
+        if "onClick={resetForm}" not in body:
+            fail(name, "Back button is not wired to resetForm"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_solform2_thumbnail_is_optional():
+    name = "SOLFORM2 (static): solution onboarding no longer requires a thumbnail"
+    try:
+        src = read_file("frontend/src/components/AdminSolutions.tsx")
+        if "if (!title || !thumbnail)" in src:
+            fail(name, "handleSubmit still requires thumbnail alongside title"); return
+        idx = src.index("const handleSubmit = async")
+        body = src[idx:idx + 300]
+        if "if (!title)" not in body:
+            fail(name, "handleSubmit no longer validates title as required"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 # ── run all tests ─────────────────────────────────────────────────────────────
 
 TESTS = [
@@ -2583,6 +2615,9 @@ TESTS = [
     test_mixed1_resolve_hub_origin_helper_exists,
     test_mixed2_upload_route_uses_resolve_hub_origin,
     test_mixed3_external_import_uses_resolve_hub_origin,
+    # Feature — SOLFORM: onboarding form Back button; thumbnail made optional
+    test_solform1_onboard_form_has_back_button,
+    test_solform2_thumbnail_is_optional,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

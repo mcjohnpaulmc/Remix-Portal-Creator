@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from "react";
-import { Plus, Edit2, Check, X, Shield, Globe, Image, Tag, Key, Eye, EyeOff, FolderOpen, Link2, Download, AlertCircle, Upload, Trash2, RefreshCw, ChevronDown, ChevronRight, Rocket, FileCode } from "lucide-react";
+import { Plus, Edit2, Check, X, Shield, Globe, Image, Tag, Key, Eye, EyeOff, FolderOpen, Link2, Download, AlertCircle, Upload, Trash2, RefreshCw, ChevronDown, ChevronRight, Rocket, FileCode, ArrowLeft } from "lucide-react";
 import { Solution } from "../../../shared/types";
 import { SafeImage } from "./SafeImage";
 
@@ -313,8 +313,8 @@ export function AdminSolutions({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !thumbnail) {
-      alert("Please complete all primary fields (Title, Visual Thumbnail).");
+    if (!title) {
+      alert("Please enter a Solution Title.");
       return;
     }
 
@@ -530,9 +530,19 @@ export function AdminSolutions({
       {isEditing && (
         <form onSubmit={handleSubmit} className="p-6 bg-white rounded-2xl border border-slate-100 shadow-xs space-y-5">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-            <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-              {editingId ? "Edit Solution Resource" : "Onboard New Utility"}
-            </span>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={resetForm}
+                className="flex items-center gap-1 px-2 py-1 -ml-2 text-xs font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-50 rounded-lg transition-colors"
+                title="Back to Solutions list"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" /> Back
+              </button>
+              <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                {editingId ? "Edit Solution Resource" : "Onboard New Utility"}
+              </span>
+            </div>
             <button
               type="button"
               onClick={resetForm}
@@ -764,6 +774,7 @@ export function AdminSolutions({
             <div className="md:col-span-2 space-y-3">
               <label className="block text-xs font-semibold text-slate-700 flex items-center gap-1.5 uppercase tracking-wider text-[11px] font-mono">
                 <Image className="h-4 w-4 text-orange-500" /> Visual Card Thumbnail Setup
+                <span className="text-slate-400 normal-case font-sans font-normal tracking-normal">(optional)</span>
               </label>
               
               <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
