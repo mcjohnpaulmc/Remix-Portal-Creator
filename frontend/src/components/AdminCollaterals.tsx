@@ -640,8 +640,10 @@ export function AdminCollaterals({
                         coll.customerNames.map((n) => (
                           <span key={n} className="bg-orange-50 border border-orange-150 text-orange-750 font-bold px-1 py-0.5 rounded text-[8px] uppercase">{n}</span>
                         ))
+                      ) : coll.customerName ? (
+                        <span className="bg-orange-50 border border-orange-150 text-orange-755 font-bold px-1 py-0.5 rounded text-[8px] uppercase">{coll.customerName}</span>
                       ) : (
-                        <span className="bg-orange-50 border border-orange-150 text-orange-755 font-bold px-1 py-0.5 rounded text-[8px] uppercase">{coll.customerName || "all"}</span>
+                        <span className="bg-slate-100 text-slate-500 font-bold px-1 py-0.5 rounded text-[8px] uppercase" title="Not mapped to any portal">Unmapped</span>
                       )}
                     </div>
                     <div className="flex items-center gap-2">

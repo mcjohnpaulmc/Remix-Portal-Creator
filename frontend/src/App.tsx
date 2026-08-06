@@ -1591,6 +1591,8 @@ export default function App() {
                         const names = s.customerNames || (s.customerName ? [s.customerName] : ["all"]);
                         return names.includes(selectedAdminSubdomain) || names.includes("all");
                       })}
+                      hubRepositorySolutions={solutions}
+                      collaterals={collaterals}
                       subdomains={subdomainsList}
                       prefilledSubdomain={selectedAdminSubdomain === "all" ? null : selectedAdminSubdomain}
                       onRefresh={async (action, data) => handleAdminDatabaseUpdate("solutions", action, data)}

@@ -2430,6 +2430,117 @@ def test_solform2_thumbnail_is_optional():
         fail(name, str(e))
 
 
+# ── Feature — HUBREPO: Import-from-Portal below Step 1; Hub Repository source ──
+
+def test_hubrepo1_import_section_appears_after_step1():
+    name = "HUBREPO1 (static): 'Import from Portal' section renders after STEP 1 in the onboarding form"
+    try:
+        src = read_file("frontend/src/components/AdminSolutions.tsx")
+        step1_idx = src.index("STEP 1: Select Target Subdomains")
+        import_idx = src.index("Import from Portal (optional)")
+        if import_idx < step1_idx:
+            fail(name, "Import from Portal section still appears before STEP 1"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_hubrepo2_step1_has_unmapped_note():
+    name = "HUBREPO2 (static): STEP 1 has a note explaining that an empty selection onboards to the Hub Repository"
+    try:
+        src = read_file("frontend/src/components/AdminSolutions.tsx")
+        step1_idx = src.index("STEP 1: Select Target Subdomains")
+        body = src[step1_idx:step1_idx + 2500]
+        if "Hub Repository" not in body or "unchecked" not in body:
+            fail(name, "no note about leaving Step 1 unchecked found near the checkboxes"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_hubrepo3_empty_step1_selection_allowed():
+    name = "HUBREPO3 (static): unchecking every Step 1 box no longer force-reverts to ['all']"
+    try:
+        src = read_file("frontend/src/components/AdminSolutions.tsx")
+        idx = src.index("const handleSubdomainCheckboxChange")
+        body = src[idx:idx + 700]
+        if 'updated = ["all"]' in body:
+            fail(name, "handleSubdomainCheckboxChange still forces ['all'] when the selection becomes empty"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_hubrepo4_submit_no_longer_defaults_customer_name_to_all():
+    name = "HUBREPO4 (static): submitting with no Step 1 selection stores an empty customerName, not 'all'"
+    try:
+        src = read_file("frontend/src/components/AdminSolutions.tsx")
+        if 'customerName: customerNames[0] || "all"' in src:
+            fail(name, "handleSubmit payload still defaults customerName to 'all' when unmapped"); return
+        if 'customerName: customerNames[0] || ""' not in src:
+            fail(name, "handleSubmit payload does not default customerName to an empty string when unmapped"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_hubrepo5_hub_repository_card_right_of_techmobius():
+    name = "HUBREPO5 (static): Hub Repository is a third import card positioned after TechMobius Portal"
+    try:
+        src = read_file("frontend/src/components/AdminSolutions.tsx")
+        techmobius_idx = src.index("TechMobius Portal")
+        hubrepo_idx = src.index("Hub Repository", techmobius_idx)
+        if hubrepo_idx <= techmobius_idx:
+            fail(name, "Hub Repository card does not appear after TechMobius Portal"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_hubrepo6_import_sources_use_popup_not_inline_cards():
+    name = "HUBREPO6 (static): Mobius/TechMobius/Hub Repository open a shared popup modal instead of expanding inline"
+    try:
+        src = read_file("frontend/src/components/AdminSolutions.tsx")
+        if "activeImportModal" not in src:
+            fail(name, "no unified activeImportModal state found"); return
+        if "mobiusOpen" in src or "techMobiusOpen" in src:
+            fail(name, "old inline-expand booleans (mobiusOpen/techMobiusOpen) still present"); return
+        if 'className="fixed inset-0 z-50' not in src:
+            fail(name, "no fixed full-screen popup overlay found for the import source modal"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_hubrepo7_cards_show_selected_count_badge():
+    name = "HUBREPO7 (static): each import card shows a selected-count badge, blank when nothing is selected"
+    try:
+        src = read_file("frontend/src/components/AdminSolutions.tsx")
+        idx = src.index("Mobius Portal")
+        body = src[idx:idx + 3500]
+        if "selectedMobius.size > 0 &&" not in body:
+            fail(name, "Mobius card does not conditionally render a selected-count badge"); return
+        if "selectedHubRepo.size > 0 &&" not in body:
+            fail(name, "Hub Repository card does not conditionally render a selected-count badge"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_hubrepo8_map_badge_no_longer_defaults_to_all():
+    name = "HUBREPO8 (static): the 'Map:' badge in AdminSolutions/AdminCollaterals lists no longer mislabels unmapped items as 'all'"
+    try:
+        sol_src = read_file("frontend/src/components/AdminSolutions.tsx")
+        if '{sol.customerName || "all"}' in sol_src:
+            fail(name, "AdminSolutions.tsx Map: badge still falls back to displaying 'all' for unmapped solutions"); return
+        col_src = read_file("frontend/src/components/AdminCollaterals.tsx")
+        if '{coll.customerName || "all"}' in col_src:
+            fail(name, "AdminCollaterals.tsx Map: badge still falls back to displaying 'all' for unmapped collaterals"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 # ── run all tests ─────────────────────────────────────────────────────────────
 
 TESTS = [
@@ -2618,6 +2729,15 @@ TESTS = [
     # Feature — SOLFORM: onboarding form Back button; thumbnail made optional
     test_solform1_onboard_form_has_back_button,
     test_solform2_thumbnail_is_optional,
+    # Feature — HUBREPO: Import-from-Portal below Step 1; Hub Repository source
+    test_hubrepo1_import_section_appears_after_step1,
+    test_hubrepo2_step1_has_unmapped_note,
+    test_hubrepo3_empty_step1_selection_allowed,
+    test_hubrepo4_submit_no_longer_defaults_customer_name_to_all,
+    test_hubrepo5_hub_repository_card_right_of_techmobius,
+    test_hubrepo6_import_sources_use_popup_not_inline_cards,
+    test_hubrepo7_cards_show_selected_count_badge,
+    test_hubrepo8_map_badge_no_longer_defaults_to_all,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]
