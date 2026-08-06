@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from "react";
-import { X, Eye, EyeOff, Edit2, Trash2, LayoutGrid, Link2, RefreshCw } from "lucide-react";
+import React, { useState, useRef, useEffect } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { X, Eye, EyeOff, Edit2, Trash2, Link2, RefreshCw, ExternalLink, Search, SlidersHorizontal, ChevronDown } from "lucide-react";
 import { Solution, Collateral, SubdomainPortal } from "../../../shared/types";
 import { SafeImage } from "./SafeImage";
 import { AdminSolutions } from "./AdminSolutions";
@@ -24,6 +25,7 @@ interface PortalRow {
   name: string; // "" for the synthetic unmapped row
   displayName: string;
   isUnmapped?: boolean;
+  portal?: SubdomainPortal; // full backing record — absent for the unmapped pseudo-row
 }
 
 function namesOf(sol: Solution): string[] {
@@ -40,6 +42,13 @@ function solutionsForPortal(solutions: Solution[], row: PortalRow): Solution[] {
   });
 }
 
+// Same live-URL construction used on the Portal Domains tab's "Access" button.
+function portalUrl(portal: SubdomainPortal): string {
+  return portal.isDummy
+    ? `http://${window.location.hostname}:${portal.port}`
+    : `https://${portal.name}.${portal.domain || "mobiusservices.io"}`;
+}
+
 export function AdminMapSolutions({
   solutions,
   collaterals = [],
@@ -54,12 +63,46 @@ export function AdminMapSolutions({
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [editingSolution, setEditingSolution] = useState<Solution | null>(null);
 
+  // Search + portal checkbox filter — empty portalFilter set means "All Portals".
+  const [searchQuery, setSearchQuery] = useState("");
+  const [portalFilter, setPortalFilter] = useState<Set<string>>(new Set());
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
+        setFilterOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
   const subdomainProp = subdomains.map((s) => ({ id: s.id, name: s.name, displayName: s.displayName }));
 
   const rows: PortalRow[] = [
-    ...subdomains.map((s) => ({ id: s.id, name: s.name, displayName: s.displayName })),
+    ...subdomains.map((s) => ({ id: s.id, name: s.name, displayName: s.displayName, portal: s })),
     { id: "__unmapped__", name: "", displayName: "Hub Repository (Unmapped)", isUnmapped: true },
   ];
+
+  const filterKey = (row: PortalRow) => (row.isUnmapped ? "__unmapped__" : row.name);
+
+  const togglePortalFilter = (key: string) => {
+    setPortalFilter((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
+
+  const visibleRows = rows.filter((row) => {
+    if (portalFilter.size > 0 && !portalFilter.has(filterKey(row))) return false;
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+    if (row.displayName.toLowerCase().includes(q)) return true;
+    return solutionsForPortal(solutions, row).some((s) => s.title.toLowerCase().includes(q));
+  });
 
   const openMap = (row: PortalRow) => {
     setMapPortal(row);
@@ -91,44 +134,126 @@ export function AdminMapSolutions({
             Every customer portal, one row each — view what's mapped or map new solutions in.
           </p>
         </div>
-        {onReload && (
-          <button
-            onClick={async () => {
-              setRefreshing(true);
-              try { await onReload(); } finally { setRefreshing(false); }
-            }}
-            disabled={refreshing}
-            className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-600 text-xs font-semibold rounded-lg transition-colors disabled:opacity-50 self-start md:self-auto"
-            title="Reload solutions from server"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
-            {refreshing ? "Refreshing…" : "Refresh"}
-          </button>
-        )}
+        <div className="flex items-center gap-2 flex-wrap self-start md:self-auto">
+          {/* Search bar */}
+          <div className="relative">
+            <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search portals or solutions…"
+              className="pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-700 w-56 focus:outline-hidden focus:ring-1 focus:ring-orange-400"
+            />
+          </div>
+
+          {/* Portal checkbox filter */}
+          <div className="relative" ref={filterRef}>
+            <button
+              type="button"
+              onClick={() => setFilterOpen((o) => !o)}
+              className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-600 text-xs font-semibold rounded-lg transition-colors"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              Portals{portalFilter.size > 0 ? ` (${portalFilter.size})` : ""}
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+            {filterOpen && (
+              <div className="absolute left-0 mt-1.5 w-60 bg-white border border-slate-200 rounded-lg shadow-lg z-20 p-2 space-y-0.5 max-h-72 overflow-y-auto">
+                <label className="flex items-center gap-2 px-2 py-1.5 text-xs font-semibold text-slate-800 cursor-pointer hover:bg-slate-50 rounded-md select-none">
+                  <input
+                    type="checkbox"
+                    checked={portalFilter.size === 0}
+                    onChange={() => setPortalFilter(new Set())}
+                    className="h-3.5 w-3.5 accent-orange-600"
+                  />
+                  All Portals
+                </label>
+                {subdomains.map((s) => (
+                  <label key={s.id} className="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-700 cursor-pointer hover:bg-slate-50 rounded-md select-none">
+                    <input
+                      type="checkbox"
+                      checked={portalFilter.has(s.name)}
+                      onChange={() => togglePortalFilter(s.name)}
+                      className="h-3.5 w-3.5 accent-orange-600"
+                    />
+                    {s.displayName}
+                  </label>
+                ))}
+                <label className="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-500 cursor-pointer hover:bg-slate-50 rounded-md select-none">
+                  <input
+                    type="checkbox"
+                    checked={portalFilter.has("__unmapped__")}
+                    onChange={() => togglePortalFilter("__unmapped__")}
+                    className="h-3.5 w-3.5 accent-orange-600"
+                  />
+                  Hub Repository
+                </label>
+              </div>
+            )}
+          </div>
+
+          {onReload && (
+            <button
+              onClick={async () => {
+                setRefreshing(true);
+                try { await onReload(); } finally { setRefreshing(false); }
+              }}
+              disabled={refreshing}
+              className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-600 text-xs font-semibold rounded-lg transition-colors disabled:opacity-50"
+              title="Reload solutions from server"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+              {refreshing ? "Refreshing…" : "Refresh"}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="space-y-4">
-        {rows.map((row) => {
+        {visibleRows.length === 0 && (
+          <div className="text-center py-8 bg-white rounded-2xl border border-slate-100">
+            <p className="text-xs text-slate-400 font-mono">No portals match your search/filter.</p>
+          </div>
+        )}
+        {visibleRows.map((row) => {
+          if (viewPortal?.id === row.id) return null;
           const rowSolutions = solutionsForPortal(solutions, row);
           return (
-            <div key={row.id} className="bg-white rounded-2xl border border-slate-100 shadow-2xs p-4">
+            <motion.div
+              key={row.id}
+              layoutId={`portal-row-${row.id}`}
+              whileHover={{ scale: 1.012 }}
+              transition={{ duration: 0.2 }}
+              className="bg-white rounded-2xl border border-slate-100 shadow-2xs p-4"
+            >
               <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
                 <div className="flex items-center gap-2 min-w-0">
-                  <h4 className={`font-bold text-sm truncate ${row.isUnmapped ? "text-slate-500" : "text-slate-900"}`}>
-                    {row.displayName}
-                  </h4>
-                  <span className="text-[10px] text-slate-400 font-mono shrink-0">
-                    {rowSolutions.length} solution{rowSolutions.length !== 1 ? "s" : ""}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
                   <button
                     type="button"
                     onClick={() => setViewPortal(row)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-[11px] font-semibold rounded-lg transition-colors"
+                    className={`font-bold text-sm truncate transition-colors cursor-pointer ${row.isUnmapped ? "text-slate-500 hover:text-orange-500" : "text-slate-900 hover:text-orange-600"}`}
                   >
-                    <LayoutGrid className="h-3.5 w-3.5" /> View
+                    {row.displayName}
                   </button>
+                  <span className="text-[10px] text-slate-400 font-mono shrink-0">
+                    {rowSolutions.length} solution{rowSolutions.length !== 1 ? "s" : ""}
+                  </span>
+                  {row.portal && (
+                    <a
+                      href={portalUrl(row.portal)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex items-center gap-1 text-[10px] text-blue-600 hover:text-blue-700 font-mono shrink-0"
+                      title="Open portal in a new tab"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      {row.portal.name}.{row.portal.domain || "mobiusservices.io"}
+                    </a>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
                   {!row.isUnmapped && (
                     <button
                       type="button"
@@ -162,20 +287,26 @@ export function AdminMapSolutions({
                   ))}
                 </div>
               )}
-            </div>
+            </motion.div>
           );
         })}
       </div>
 
-      {/* View popup — expanded portal card, 2-column grid, existing hide/edit/delete actions */}
+      {/* View popup — expanded portal card, 2-column grid, existing hide/edit/delete actions.
+          Shares a layoutId with the row it was opened from for a seamless expand/close. */}
+      <AnimatePresence>
       {viewPortal && (() => {
         const rowSolutions = solutionsForPortal(solutions, viewPortal);
         return (
-          <div
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs"
             onClick={() => setViewPortal(null)}
           >
-            <div
+            <motion.div
+              layoutId={`portal-row-${viewPortal.id}`}
               className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
@@ -295,10 +426,11 @@ export function AdminMapSolutions({
                   )}
                 </div>
               </div>
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
         );
       })()}
+      </AnimatePresence>
 
       {/* Map Solution popup — same 3-source picker (Mobius / TechMobius / Hub
           Repository) as the onboarding form's Import from Portal section,

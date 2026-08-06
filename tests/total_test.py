@@ -2588,16 +2588,18 @@ def test_msui3_map_solutions_page_has_no_onboard_deploy_buttons_or_filter_bar():
         fail(name, str(e))
 
 
-def test_msui4_map_solutions_portal_rows_have_view_and_map_buttons():
-    name = "MSUI4 (static): AdminMapSolutions.tsx renders a per-portal row with View + Map Solution buttons and a horizontal-scroll strip"
+def test_msui4_map_solutions_portal_rows_have_clickable_name_and_map_button():
+    name = "MSUI4 (static): AdminMapSolutions.tsx renders a per-portal row with a clickable portal name (opens View) + Map Solution button and a horizontal-scroll strip"
     try:
         src = read_file("frontend/src/components/AdminMapSolutions.tsx")
         if "overflow-x-auto" not in src:
             fail(name, "no horizontal-scroll container for a portal's mapped solutions"); return
         if "Map Solution" not in src:
             fail(name, "no Map Solution button found"); return
-        if ">\n                    <LayoutGrid" not in src and "LayoutGrid" not in src:
-            fail(name, "no View button icon found"); return
+        if 'onClick={() => setViewPortal(row)}' not in src:
+            fail(name, "portal name is not wired to open the View popup"); return
+        if "hover:text-orange-600" not in src:
+            fail(name, "portal name does not turn orange on hover"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -2770,6 +2772,56 @@ def test_msui15_import_panel_reused_by_both_onboarding_and_map_solutions():
         map_src = read_file("frontend/src/components/AdminMapSolutions.tsx")
         if 'import { ImportFromPortalPanel } from "./ImportFromPortalPanel"' not in map_src:
             fail(name, "AdminMapSolutions.tsx does not import ImportFromPortalPanel"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+# ── Feature — MSUI2: portal link, search + checkbox filter, seamless row popup ─
+
+def test_msui16_portal_row_has_external_link_opening_in_new_tab():
+    name = "MSUI16 (static): each portal row shows a clickable link to the live portal that opens in a new tab"
+    try:
+        src = read_file("frontend/src/components/AdminMapSolutions.tsx")
+        if "function portalUrl(portal: SubdomainPortal)" not in src:
+            fail(name, "no portalUrl() URL builder found"); return
+        idx = src.index("href={portalUrl(row.portal)}")
+        body = src[idx:idx + 200]
+        if 'target="_blank"' not in body:
+            fail(name, "portal link does not open in a new tab"); return
+        if 'rel="noopener noreferrer"' not in body:
+            fail(name, "portal link is missing rel=noopener noreferrer"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui17_search_bar_and_portal_checkbox_filter_left_of_refresh():
+    name = "MSUI17 (static): a search bar and a portal checkbox filter sit to the left of the Refresh button"
+    try:
+        src = read_file("frontend/src/components/AdminMapSolutions.tsx")
+        search_idx = src.index("Search portals or solutions…")
+        filter_idx = src.index('checked={portalFilter.size === 0}')
+        refresh_idx = src.index('title="Reload solutions from server"')
+        if not (search_idx < filter_idx < refresh_idx):
+            fail(name, "search bar and/or checkbox filter are not positioned before the Refresh button in source order"); return
+        if "visibleRows" not in src:
+            fail(name, "portal rows are not actually filtered by search/checkbox state"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui18_view_popup_shares_layoutid_with_its_row_for_seamless_transition():
+    name = "MSUI18 (static): the View popup shares a per-row layoutId with its trigger row so open/close is a seamless expand/collapse"
+    try:
+        src = read_file("frontend/src/components/AdminMapSolutions.tsx")
+        if "layoutId={`portal-row-${row.id}`}" not in src:
+            fail(name, "portal row is not assigned a layoutId"); return
+        if "layoutId={`portal-row-${viewPortal.id}`}" not in src:
+            fail(name, "View popup does not share the row's layoutId"); return
+        if "whileHover={{ scale: 1.012 }}" not in src:
+            fail(name, "portal row card does not pop up slightly on hover"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -2976,7 +3028,7 @@ TESTS = [
     test_msui1_portal_domains_is_default_landing_tab,
     test_msui2_nav_has_onboard_and_map_solutions_tabs,
     test_msui3_map_solutions_page_has_no_onboard_deploy_buttons_or_filter_bar,
-    test_msui4_map_solutions_portal_rows_have_view_and_map_buttons,
+    test_msui4_map_solutions_portal_rows_have_clickable_name_and_map_button,
     test_msui5_view_popup_close_button_right_of_map_solution,
     test_msui6_view_popup_two_column_grid_with_hide_edit_delete,
     test_msui7_onboard_page_has_two_themed_cards,
@@ -2988,6 +3040,9 @@ TESTS = [
     test_msui13_deploy_backend_allows_empty_target_portals,
     test_msui14_map_solution_popup_uses_three_source_import_panel,
     test_msui15_import_panel_reused_by_both_onboarding_and_map_solutions,
+    test_msui16_portal_row_has_external_link_opening_in_new_tab,
+    test_msui17_search_bar_and_portal_checkbox_filter_left_of_refresh,
+    test_msui18_view_popup_shares_layoutid_with_its_row_for_seamless_transition,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]
