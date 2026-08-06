@@ -50,7 +50,8 @@ import { AccessWall } from "./components/AccessWall";
 import { SafeImage } from "./components/SafeImage";
 import { SolutionLaunchModal } from "./components/SolutionLaunchModal";
 import { CollateralDetailModal } from "./components/CollateralDetailModal";
-import { AdminSolutions } from "./components/AdminSolutions";
+import { AdminMapSolutions } from "./components/AdminMapSolutions";
+import { AdminOnboardSolutionPage } from "./components/AdminOnboardSolutionPage";
 import { AdminCollaterals } from "./components/AdminCollaterals";
 import { AdminLogs } from "./components/AdminLogs";
 import { AdminProjects } from "./components/AdminProjects";
@@ -155,7 +156,7 @@ export default function App() {
   // Layout navigation states
   const [currentTab, setCurrentTab] = useState<"solutions" | "collaterals" | "currentProjects" | "upcomingProjects" >("solutions");
   const [viewMode, setViewMode] = useState<"user" | "admin">("user"); // user, admin
-  const [adminActiveTab, setAdminActiveTab] = useState<"solutions" | "collaterals" | "projects" | "hero" | "subdomain" | "branding" | "users" | "logs">("solutions");
+  const [adminActiveTab, setAdminActiveTab] = useState<"solutions" | "onboardSolution" | "collaterals" | "projects" | "hero" | "subdomain" | "branding" | "users" | "logs">("subdomain");
 
   // Selection modal items
   const [selectedSolution, setSelectedSolution] = useState<Solution | null>(null);
@@ -1491,7 +1492,8 @@ export default function App() {
                 <nav className="space-y-1.5 flex flex-col">
                   {[
                     { id: "subdomain", label: "Portal Domains" },
-                    { id: "solutions", label: "Solutions Onboard" },
+                    { id: "onboardSolution", label: "Onboard Solution" },
+                    { id: "solutions", label: "Map Solutions" },
                     { id: "collaterals", label: "Collateral Catalogue" },
                     { id: "projects", label: "Projects & Portals" },
                     { id: "branding", label: "Hero section" },
@@ -1529,8 +1531,10 @@ export default function App() {
             <div className="flex-1 flex flex-col overflow-hidden bg-slate-50/40">
               {/* Horizontal Subdomain Switcher tabs bar — kept outside the scroll area so it never scrolls off-screen.
                   Hidden on the Portal Domains tab itself: "Step 2" below already lists every portal,
-                  so showing the same list twice was redundant there. */}
-              {adminActiveTab !== "subdomain" && (
+                  so showing the same list twice was redundant there. Also hidden on Onboard Solution
+                  and Map Solutions: neither page scopes its content by a single selected portal anymore
+                  (Map Solutions shows every portal as its own row; Onboard Solution has no portal context). */}
+              {adminActiveTab !== "subdomain" && adminActiveTab !== "solutions" && adminActiveTab !== "onboardSolution" && (
               <div className="px-6 md:px-8 pt-6 md:pt-8 shrink-0">
               <div className="mb-6 bg-white p-4 rounded-2xl border border-slate-200 shadow-3xs text-left animate-fade-in relative overflow-hidden">
                 <div className="absolute top-0 right-0 h-12 w-12 bg-orange-50/50 rounded-full blur-xl pointer-events-none" />
@@ -1584,20 +1588,28 @@ export default function App() {
                   exit={{ opacity: 0, y: -10 }}
                   className="flex-1"
                 >
-                  {/* Case 1: Solutions Onboarder */}
+                  {/* Case 1: Map Solutions — one row per portal, view/map into it */}
                   {adminActiveTab === "solutions" && (
-                    <AdminSolutions
-                      solutions={selectedAdminSubdomain === "all" ? solutions : solutions.filter((s) => {
-                        const names = s.customerNames || (s.customerName ? [s.customerName] : ["all"]);
-                        return names.includes(selectedAdminSubdomain) || names.includes("all");
-                      })}
-                      hubRepositorySolutions={solutions}
+                    <AdminMapSolutions
+                      solutions={solutions}
                       collaterals={collaterals}
                       subdomains={subdomainsList}
-                      prefilledSubdomain={selectedAdminSubdomain === "all" ? null : selectedAdminSubdomain}
                       onRefresh={async (action, data) => handleAdminDatabaseUpdate("solutions", action, data)}
                       onReload={fetchPortalData}
                       adminUserEmail={userEmail || ""}
+                    />
+                  )}
+
+                  {/* Case 1.5: Onboard Solution — landing page with Onboard / Deploy popups */}
+                  {adminActiveTab === "onboardSolution" && (
+                    <AdminOnboardSolutionPage
+                      solutions={solutions}
+                      collaterals={collaterals}
+                      subdomains={subdomainsList}
+                      onRefresh={async (action, data) => handleAdminDatabaseUpdate("solutions", action, data)}
+                      onReload={fetchPortalData}
+                      adminUserEmail={userEmail || ""}
+                      initialPortal={prefilledSubdomain}
                     />
                   )}
 
@@ -2357,7 +2369,7 @@ export default function App() {
                     onClick={() => {
                       setSelectedAdminSubdomain(portalSettingsTarget.name);
                       setPrefilledSubdomain(portalSettingsTarget.name);
-                      setAdminActiveTab("solutions");
+                      setAdminActiveTab("onboardSolution");
                       setPortalSettingsTarget(null);
                     }}
                     className="w-full py-2 px-4 bg-orange-600 hover:bg-orange-500 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2"

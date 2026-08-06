@@ -2117,14 +2117,15 @@ def test_deploy6_delete_cascades_dns_iis_and_file_cleanup():
 
 
 def test_deploy7_frontend_deploy_button_and_panel_exist():
-    name = "DEPLOY7 (static): AdminSolutions.tsx has a Deploy Solution button and upload panel"
+    name = "DEPLOY7 (static): Onboard Solution page has a Deploy Solution card, and DeploySolutionForm.tsx has the upload panel"
     try:
-        src = read_file("frontend/src/components/AdminSolutions.tsx")
-        if "Deploy Solution" not in src:
-            fail(name, "Deploy Solution button not found"); return
-        if "/api/admin/deploy-solution" not in src:
+        page_src = read_file("frontend/src/components/AdminOnboardSolutionPage.tsx")
+        if "Deploy Solution" not in page_src:
+            fail(name, "Deploy Solution card not found on the Onboard Solution page"); return
+        form_src = read_file("frontend/src/components/DeploySolutionForm.tsx")
+        if "/api/admin/deploy-solution" not in form_src:
             fail(name, "frontend does not call the deploy-solution endpoint"); return
-        if 'accept=".html,.htm,text/html"' not in src:
+        if 'accept=".html,.htm,text/html"' not in form_src:
             fail(name, "file input does not restrict to .html/.htm"); return
         ok(name)
     except Exception as e:
@@ -2247,17 +2248,15 @@ def test_cfilter3_filter_applied_before_grouping_rows():
 
 
 def test_cfilter4_admin_solutions_list_uses_safe_image():
-    name = "CFILTER4 (static): AdminSolutions.tsx list view uses SafeImage (not a raw <img>) for solution thumbnails"
+    name = "CFILTER4 (static): AdminMapSolutions.tsx list view uses SafeImage (not a raw <img>) for solution thumbnails"
     try:
-        src = read_file("frontend/src/components/AdminSolutions.tsx")
+        src = read_file("frontend/src/components/AdminMapSolutions.tsx")
         if "import { SafeImage }" not in src:
             fail(name, "SafeImage not imported"); return
-        idx = src.index("Visual preview")
-        body = src[idx:idx + 500]
+        idx = src.index("shrink-0 relative")
+        body = src[idx:idx + 200]
         if "<SafeImage" not in body:
             fail(name, "solution list thumbnail still uses a raw <img> instead of SafeImage"); return
-        if "shrink-0 relative" not in body:
-            fail(name, "thumbnail wrapper is missing 'relative' (PatternThumbnail fallback would break out of its box)"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -2401,15 +2400,15 @@ def test_mixed3_external_import_uses_resolve_hub_origin():
 # ── Feature — SOLFORM: onboarding form Back button; thumbnail made optional ────
 
 def test_solform1_onboard_form_has_back_button():
-    name = "SOLFORM1 (static): AdminSolutions.tsx onboarding form has a labeled Back button that returns to the solutions list"
+    name = "SOLFORM1 (static): AdminSolutions.tsx onboarding form has a labeled Back button that closes the popup"
     try:
         src = read_file("frontend/src/components/AdminSolutions.tsx")
         idx = src.index('editingId ? "Edit Solution Resource" : "Onboard New Utility"')
         body = src[max(0, idx - 700):idx]
-        if "Back to Solutions list" not in body:
+        if "ArrowLeft" not in body or "Back" not in body:
             fail(name, "no labeled Back button found before the onboarding form header"); return
-        if "onClick={resetForm}" not in body:
-            fail(name, "Back button is not wired to resetForm"); return
+        if "onClick={handleClose}" not in body:
+            fail(name, "Back button is not wired to handleClose"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -2536,6 +2535,163 @@ def test_hubrepo8_map_badge_no_longer_defaults_to_all():
         col_src = read_file("frontend/src/components/AdminCollaterals.tsx")
         if '{coll.customerName || "all"}' in col_src:
             fail(name, "AdminCollaterals.tsx Map: badge still falls back to displaying 'all' for unmapped collaterals"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+# ── Feature — MSUI: Portal Domains landing page, Onboard/Map Solutions split ───
+
+def test_msui1_portal_domains_is_default_landing_tab():
+    name = "MSUI1 (static): App.tsx defaults adminActiveTab to 'subdomain' (Portal Domains) on login/refresh"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        idx = src.index("const [adminActiveTab, setAdminActiveTab] = useState<")
+        line = src[idx:idx + 250]
+        if '>("subdomain")' not in line:
+            fail(name, "adminActiveTab does not default to 'subdomain'"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui2_nav_has_onboard_and_map_solutions_tabs():
+    name = "MSUI2 (static): sidebar nav has 'Onboard Solution' below Portal Domains, and 'Solutions Onboard' is renamed to 'Map Solutions'"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        idx = src.index('{ id: "subdomain", label: "Portal Domains" }')
+        body = src[idx:idx + 250]
+        if '{ id: "onboardSolution", label: "Onboard Solution" }' not in body:
+            fail(name, "Onboard Solution tab not found directly below Portal Domains"); return
+        if '{ id: "solutions", label: "Map Solutions" }' not in body:
+            fail(name, "Solutions tab was not renamed to 'Map Solutions'"); return
+        if "Solutions Onboard" in src:
+            fail(name, "old 'Solutions Onboard' label still present"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui3_map_solutions_page_has_no_onboard_deploy_buttons_or_filter_bar():
+    name = "MSUI3 (static): Map Solutions page has no Onboard/Deploy buttons and the tenant context filter bar is hidden there"
+    try:
+        map_src = read_file("frontend/src/components/AdminMapSolutions.tsx")
+        if "Onboard New Solution" in map_src or "Deploy Solution" in map_src:
+            fail(name, "AdminMapSolutions.tsx still renders an Onboard/Deploy trigger button"); return
+        app_src = read_file("frontend/src/App.tsx")
+        idx = app_src.index("ACTIVE TENANT PORTAL CONTEXT FILTER")
+        guard = app_src[max(0, idx - 900):idx]
+        if 'adminActiveTab !== "solutions"' not in guard or 'adminActiveTab !== "onboardSolution"' not in guard:
+            fail(name, "context filter bar guard does not exclude the solutions/onboardSolution tabs"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui4_map_solutions_portal_rows_have_view_and_map_buttons():
+    name = "MSUI4 (static): AdminMapSolutions.tsx renders a per-portal row with View + Map Solution buttons and a horizontal-scroll strip"
+    try:
+        src = read_file("frontend/src/components/AdminMapSolutions.tsx")
+        if "overflow-x-auto" not in src:
+            fail(name, "no horizontal-scroll container for a portal's mapped solutions"); return
+        if "Map Solution" not in src:
+            fail(name, "no Map Solution button found"); return
+        if ">\n                    <LayoutGrid" not in src and "LayoutGrid" not in src:
+            fail(name, "no View button icon found"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui5_view_popup_close_button_right_of_map_solution():
+    name = "MSUI5 (static): the View popup's close button sits to the right of its Map Solution button"
+    try:
+        src = read_file("frontend/src/components/AdminMapSolutions.tsx")
+        idx = src.index('{viewPortal.displayName} — Mapped Solutions')
+        body = src[idx:idx + 900]
+        map_idx = body.index("Map Solution")
+        close_idx = body.index('title="Close"')
+        if not (map_idx < close_idx):
+            fail(name, "Close button is not positioned after (to the right of) the Map Solution button"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui6_view_popup_two_column_grid_with_hide_edit_delete():
+    name = "MSUI6 (static): View popup lists mapped solutions in a 2-column grid with hide/edit/delete actions"
+    try:
+        src = read_file("frontend/src/components/AdminMapSolutions.tsx")
+        if "md:grid-cols-2" not in src:
+            fail(name, "solutions are not laid out in a 2-column grid"); return
+        if "handleToggleEnable" not in src or "setEditingSolution" not in src or "handleDelete" not in src:
+            fail(name, "hide/edit/delete actions are missing from the View popup"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui7_onboard_page_has_two_themed_cards():
+    name = "MSUI7 (static): Onboard Solution page has an Onboard card (white/orange) and a Deploy card (dark blue/orange)"
+    try:
+        src = read_file("frontend/src/components/AdminOnboardSolutionPage.tsx")
+        if 'text-orange-600">Onboard Solution</h4>' not in src:
+            fail(name, "Onboard Solution card title is not orange-accented"); return
+        onboard_idx = src.index("Onboard Solution</h4>")
+        onboard_body = src[max(0, onboard_idx - 800):onboard_idx]
+        if "bg-white" not in onboard_body:
+            fail(name, "Onboard Solution card is not white-themed"); return
+        if 'text-orange-400">Deploy Solution</h4>' not in src:
+            fail(name, "Deploy Solution card title is not orange-accented"); return
+        deploy_idx = src.index("Deploy Solution</h4>")
+        deploy_body = src[max(0, deploy_idx - 800):deploy_idx]
+        if "blue" not in deploy_body.lower():
+            fail(name, "Deploy Solution card is not dark-blue themed"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui8_popups_use_shared_layoutid_for_seamless_animation():
+    name = "MSUI8 (static): Onboard/Deploy card popups share a layoutId with their trigger card for a seamless expand animation"
+    try:
+        src = read_file("frontend/src/components/AdminOnboardSolutionPage.tsx")
+        if src.count('layoutId="onboard-solution-card"') < 2:
+            fail(name, "onboard card and its popup do not share a layoutId"); return
+        if src.count('layoutId="deploy-solution-card"') < 2:
+            fail(name, "deploy card and its popup do not share a layoutId"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui9_deploy_subdomain_optional_frontend():
+    name = "MSUI9 (static): DeploySolutionForm.tsx no longer requires a subdomain to be entered"
+    try:
+        src = read_file("frontend/src/components/DeploySolutionForm.tsx")
+        idx = src.index("const handleDeploySolution")
+        body = src[idx:idx + 400]
+        if "!deployFile || !deployTitle.trim() || !deploySlug.trim()" in body:
+            fail(name, "subdomain is still required by frontend validation"); return
+        if "!deployFile || !deployTitle.trim()" not in body:
+            fail(name, "expected relaxed validation (file + title only) not found"); return
+        if "optional" not in src.lower():
+            fail(name, "no 'optional' hint shown for the subdomain field"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui10_deploy_subdomain_optional_backend():
+    name = "MSUI10 (static): deploy-solution.routes.ts derives a slug from the title when no subdomain is supplied"
+    try:
+        src = read_file("backend/routes/deploy-solution.routes.ts")
+        if "titleSlug" not in src:
+            fail(name, "no title-derived slug fallback found"); return
+        if 'let cleanSlug = explicitSlug || titleSlug;' not in src:
+            fail(name, "cleanSlug does not fall back to the title-derived slug"); return
+        if 'if (!cleanSlug) return res.status(400).json({ error: "Subdomain has invalid characters." });' in src:
+            fail(name, "old hard requirement for a manually-typed subdomain is still present"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -2738,6 +2894,17 @@ TESTS = [
     test_hubrepo6_import_sources_use_popup_not_inline_cards,
     test_hubrepo7_cards_show_selected_count_badge,
     test_hubrepo8_map_badge_no_longer_defaults_to_all,
+    # Feature — MSUI: Portal Domains landing page, Onboard/Map Solutions split
+    test_msui1_portal_domains_is_default_landing_tab,
+    test_msui2_nav_has_onboard_and_map_solutions_tabs,
+    test_msui3_map_solutions_page_has_no_onboard_deploy_buttons_or_filter_bar,
+    test_msui4_map_solutions_portal_rows_have_view_and_map_buttons,
+    test_msui5_view_popup_close_button_right_of_map_solution,
+    test_msui6_view_popup_two_column_grid_with_hide_edit_delete,
+    test_msui7_onboard_page_has_two_themed_cards,
+    test_msui8_popups_use_shared_layoutid_for_seamless_animation,
+    test_msui9_deploy_subdomain_optional_frontend,
+    test_msui10_deploy_subdomain_optional_backend,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

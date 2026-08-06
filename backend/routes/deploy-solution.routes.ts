@@ -67,17 +67,34 @@ router.post("/deploy-solution", (req: any, res: any, next: any) => {
   if (!title) return res.status(400).json({ error: "Title is required." });
   if (customerNames.length === 0) return res.status(400).json({ error: "Select at least one target portal." });
 
-  const cleanSlug = rawSlug.toLowerCase().replace(/[^a-z0-9-]/g, "");
-  if (!cleanSlug) return res.status(400).json({ error: "Subdomain has invalid characters." });
-
   const db = readDatabase();
+
+  // Subdomain is optional — when left blank, derive a slug from the title so
+  // the admin isn't forced to hand-pick one just to deploy.
+  const explicitSlug = rawSlug.toLowerCase().replace(/[^a-z0-9-]/g, "");
+  const titleSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  let cleanSlug = explicitSlug || titleSlug;
+  if (!cleanSlug) return res.status(400).json({ error: "Could not derive a subdomain from the title — please enter one manually." });
 
   // The subdomain namespace is shared with customer portals — a deployed HTML
   // solution and a portal can't collide on the same slug.
-  const portalSlugTaken = (db.subdomains || []).some(s => s.name === cleanSlug);
-  const deployedSlugTaken = (db.solutions || []).some(s => s.deployedSlug === cleanSlug);
-  if (portalSlugTaken || deployedSlugTaken) {
-    return res.status(400).json({ error: `Subdomain "${cleanSlug}.${domain}" is already in use.` });
+  const taken = (slug: string) =>
+    (db.subdomains || []).some(s => s.name === slug) || (db.solutions || []).some(s => s.deployedSlug === slug);
+
+  if (explicitSlug) {
+    // Manually-typed slug — fail hard so the admin gets a clear, actionable error.
+    if (taken(cleanSlug)) {
+      return res.status(400).json({ error: `Subdomain "${cleanSlug}.${domain}" is already in use.` });
+    }
+  } else {
+    // Auto-derived from the title — disambiguate with a numeric suffix instead
+    // of failing outright.
+    let candidate = cleanSlug;
+    let suffix = 2;
+    while (taken(candidate)) {
+      candidate = `${cleanSlug}-${suffix++}`;
+    }
+    cleanSlug = candidate;
   }
 
   // Regular admins may only map to portals they own (or the legacy/no-owner
