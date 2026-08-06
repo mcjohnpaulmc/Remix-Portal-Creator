@@ -8,6 +8,7 @@ import { X, Eye, EyeOff, Edit2, Trash2, LayoutGrid, Link2, RefreshCw } from "luc
 import { Solution, Collateral, SubdomainPortal } from "../../../shared/types";
 import { SafeImage } from "./SafeImage";
 import { AdminSolutions } from "./AdminSolutions";
+import { ImportFromPortalPanel } from "./ImportFromPortalPanel";
 
 interface AdminMapSolutionsProps {
   solutions: Solution[];
@@ -50,8 +51,6 @@ export function AdminMapSolutions({
   const [refreshing, setRefreshing] = useState(false);
   const [viewPortal, setViewPortal] = useState<PortalRow | null>(null);
   const [mapPortal, setMapPortal] = useState<PortalRow | null>(null);
-  const [selectedToMap, setSelectedToMap] = useState<Set<string>>(new Set());
-  const [mapping, setMapping] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [editingSolution, setEditingSolution] = useState<Solution | null>(null);
 
@@ -63,7 +62,6 @@ export function AdminMapSolutions({
   ];
 
   const openMap = (row: PortalRow) => {
-    setSelectedToMap(new Set());
     setMapPortal(row);
   };
 
@@ -81,32 +79,6 @@ export function AdminMapSolutions({
     if (!confirm(`Delete solution "${sol.title}"? This cannot be undone.`)) return;
     await onRefresh("delete", { id: sol.id });
   };
-
-  const handleMapSelected = async () => {
-    if (!mapPortal || selectedToMap.size === 0) return;
-    setMapping(true);
-    try {
-      for (const id of selectedToMap) {
-        const sol = solutions.find((s) => s.id === id);
-        if (!sol) continue;
-        const existing = namesOf(sol).filter((n) => n !== "all");
-        const updated = existing.includes(mapPortal.name) ? existing : [...existing, mapPortal.name];
-        await onRefresh("update", { ...sol, customerNames: updated, customerName: updated[0] || "" });
-      }
-      await onReload?.();
-      setSelectedToMap(new Set());
-      setMapPortal(null);
-    } finally {
-      setMapping(false);
-    }
-  };
-
-  const candidateSolutions = mapPortal
-    ? solutions.filter((s) => {
-        const names = namesOf(s);
-        return !names.includes(mapPortal.name) && !names.includes("all");
-      })
-    : [];
 
   return (
     <div id="admin-map-solutions-view" className="space-y-6">
@@ -328,14 +300,16 @@ export function AdminMapSolutions({
         );
       })()}
 
-      {/* Map Solution popup — pick solutions to map into mapPortal */}
+      {/* Map Solution popup — same 3-source picker (Mobius / TechMobius / Hub
+          Repository) as the onboarding form's Import from Portal section,
+          scoped to this one portal. */}
       {mapPortal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs"
           onClick={() => setMapPortal(null)}
         >
           <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden"
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-4 border-b border-slate-100 flex items-center justify-between shrink-0">
@@ -345,48 +319,16 @@ export function AdminMapSolutions({
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
-              {candidateSolutions.length === 0 ? (
-                <p className="px-4 py-6 text-center text-[11px] text-slate-400">No unmapped solutions available to map.</p>
-              ) : (
-                candidateSolutions.map((sol) => {
-                  const collateralCount = collaterals.filter((c) => c.linkedSolutionId === sol.id).length;
-                  const checked = selectedToMap.has(sol.id);
-                  return (
-                    <label key={sol.id} className="flex items-start gap-2.5 px-4 py-2.5 cursor-pointer hover:bg-orange-50/50 transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => {
-                          setSelectedToMap((prev) => {
-                            const next = new Set(prev);
-                            next.has(sol.id) ? next.delete(sol.id) : next.add(sol.id);
-                            return next;
-                          });
-                        }}
-                        className="mt-0.5 h-3.5 w-3.5 accent-orange-600 shrink-0"
-                      />
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-slate-800 truncate">{sol.title}</p>
-                        <p className="text-[10px] text-slate-400">
-                          {collateralCount} collateral{collateralCount !== 1 ? "s" : ""}
-                        </p>
-                      </div>
-                    </label>
-                  );
-                })
-              )}
-            </div>
-
-            <div className="p-3 border-t border-slate-100 flex justify-end shrink-0">
-              <button
-                type="button"
-                disabled={selectedToMap.size === 0 || mapping}
-                onClick={handleMapSelected}
-                className="px-5 py-2 bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold rounded-lg transition-colors disabled:opacity-50"
-              >
-                {mapping ? "Mapping…" : `Map ${selectedToMap.size} Selected`}
-              </button>
+            <div className="flex-1 overflow-y-auto p-4">
+              <ImportFromPortalPanel
+                solutions={solutions}
+                repoSolutions={solutions}
+                collaterals={collaterals}
+                targetPortalNames={[mapPortal.name]}
+                onRefresh={onRefresh}
+                onImported={async () => { await onReload?.(); }}
+                title={`🔗 Import or Map into ${mapPortal.displayName}`}
+              />
             </div>
           </div>
         </div>
@@ -395,10 +337,10 @@ export function AdminMapSolutions({
       {/* Edit popup — reuses the onboarding form component in edit mode */}
       {editingSolution && (
         <div
-          className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-xs flex items-start md:items-center justify-center p-4 overflow-y-auto"
+          className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
           onClick={() => setEditingSolution(null)}
         >
-          <div className="w-full max-w-3xl my-8" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-6xl max-h-[88vh] overflow-y-auto rounded-3xl" onClick={(e) => e.stopPropagation()}>
             <AdminSolutions
               solutions={solutions}
               hubRepositorySolutions={solutions}

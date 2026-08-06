@@ -65,7 +65,9 @@ router.post("/deploy-solution", (req: any, res: any, next: any) => {
   }
 
   if (!title) return res.status(400).json({ error: "Title is required." });
-  if (customerNames.length === 0) return res.status(400).json({ error: "Select at least one target portal." });
+  // No target-portal requirement — an empty selection is valid and mirrors the
+  // manual onboarding form: the deployed app lands in the Hub Repository only,
+  // unmapped to any portal, until mapped later from the Map Solutions page.
 
   const db = readDatabase();
 
@@ -135,7 +137,7 @@ router.post("/deploy-solution", (req: any, res: any, next: any) => {
     tags: [],
     createdAt: new Date().toISOString(),
     enabled: true,
-    customerName: customerNames[0],
+    customerName: customerNames[0] || "",
     customerNames,
     deployedSlug: cleanSlug,
     deployedDomain: domain,

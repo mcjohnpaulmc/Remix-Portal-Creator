@@ -91,12 +91,12 @@ export function AdminOnboardSolutionPage({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-start md:items-center justify-center p-4 overflow-y-auto"
+            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
             onClick={() => setOpenPopup(null)}
           >
             <motion.div
               layoutId="onboard-solution-card"
-              className="w-full max-w-3xl my-8 rounded-3xl overflow-hidden"
+              className="w-full max-w-6xl max-h-[88vh] overflow-y-auto rounded-3xl"
               onClick={(e) => e.stopPropagation()}
             >
               <AdminSolutions
@@ -119,12 +119,12 @@ export function AdminOnboardSolutionPage({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-start md:items-center justify-center p-4 overflow-y-auto"
+            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
             onClick={() => setOpenPopup(null)}
           >
             <motion.div
               layoutId="deploy-solution-card"
-              className="w-full max-w-2xl my-8 rounded-3xl overflow-hidden"
+              className="w-full max-w-4xl max-h-[88vh] overflow-y-auto rounded-3xl"
               onClick={(e) => e.stopPropagation()}
             >
               <DeploySolutionForm

@@ -22,7 +22,7 @@ export function DeploySolutionForm({
   const [deployFile, setDeployFile] = useState<File | null>(null);
   const [deployTitle, setDeployTitle] = useState("");
   const [deploySlug, setDeploySlug] = useState("");
-  const [deployCustomerNames, setDeployCustomerNames] = useState<string[]>(prefilledSubdomain ? [prefilledSubdomain] : ["all"]);
+  const [deployCustomerNames, setDeployCustomerNames] = useState<string[]>(prefilledSubdomain ? [prefilledSubdomain] : []);
   const [deploySubmitting, setDeploySubmitting] = useState(false);
   const [deployError, setDeployError] = useState("");
 
@@ -30,7 +30,7 @@ export function DeploySolutionForm({
     setDeployFile(null);
     setDeployTitle("");
     setDeploySlug("");
-    setDeployCustomerNames(prefilledSubdomain ? [prefilledSubdomain] : ["all"]);
+    setDeployCustomerNames(prefilledSubdomain ? [prefilledSubdomain] : []);
     setDeployError("");
     onClose?.();
   };
@@ -46,7 +46,9 @@ export function DeploySolutionForm({
     } else {
       updated.push(name);
     }
-    if (updated.length === 0) updated = ["all"];
+    // No fallback to ["all"] when this becomes empty — leaving every box
+    // unchecked is valid: the deployed app lands in the Hub Repository only,
+    // unmapped to any portal, until mapped later from the Map Solutions page.
     setDeployCustomerNames(updated);
   };
 
@@ -170,6 +172,10 @@ export function DeploySolutionForm({
               </label>
             ))}
           </div>
+          <p className="text-[10px] text-slate-400 leading-relaxed">
+            Leaving every box unchecked deploys this app to the <strong className="text-slate-500 font-semibold">Hub Repository</strong> only —
+            it won't appear on any live portal until mapped later from the Map Solutions page.
+          </p>
         </div>
       </div>
 

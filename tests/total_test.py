@@ -1739,14 +1739,14 @@ def test_imp3_import_rehosts_thumbnails_instead_of_https_only_filter():
 
 
 def test_imp4_frontend_import_calls_server_endpoint_and_reloads():
-    name = "IMP4 (static): AdminSolutions.tsx bulk import calls the server import endpoint and reloads full DB state"
+    name = "IMP4 (static): ImportFromPortalPanel.tsx bulk import calls the server import endpoint and reloads full DB state"
     try:
-        src = read_file("frontend/src/components/AdminSolutions.tsx")
+        src = read_file("frontend/src/components/ImportFromPortalPanel.tsx")
         idx = src.index("handleBulkImport = async")
         body = src[idx:idx + 2500]
         if "/api/admin/external-portals/import" not in body:
             fail(name, "handleBulkImport no longer calls the server-side import endpoint"); return
-        if "onReload?.()" not in body:
+        if "onImported()" not in body:
             fail(name, "handleBulkImport does not reload full database state after import (collaterals changed too)"); return
         ok(name)
     except Exception as e:
@@ -2436,7 +2436,7 @@ def test_hubrepo1_import_section_appears_after_step1():
     try:
         src = read_file("frontend/src/components/AdminSolutions.tsx")
         step1_idx = src.index("STEP 1: Select Target Subdomains")
-        import_idx = src.index("Import from Portal (optional)")
+        import_idx = src.index("<ImportFromPortalPanel")
         if import_idx < step1_idx:
             fail(name, "Import from Portal section still appears before STEP 1"); return
         ok(name)
@@ -2486,7 +2486,7 @@ def test_hubrepo4_submit_no_longer_defaults_customer_name_to_all():
 def test_hubrepo5_hub_repository_card_right_of_techmobius():
     name = "HUBREPO5 (static): Hub Repository is a third import card positioned after TechMobius Portal"
     try:
-        src = read_file("frontend/src/components/AdminSolutions.tsx")
+        src = read_file("frontend/src/components/ImportFromPortalPanel.tsx")
         techmobius_idx = src.index("TechMobius Portal")
         hubrepo_idx = src.index("Hub Repository", techmobius_idx)
         if hubrepo_idx <= techmobius_idx:
@@ -2499,7 +2499,7 @@ def test_hubrepo5_hub_repository_card_right_of_techmobius():
 def test_hubrepo6_import_sources_use_popup_not_inline_cards():
     name = "HUBREPO6 (static): Mobius/TechMobius/Hub Repository open a shared popup modal instead of expanding inline"
     try:
-        src = read_file("frontend/src/components/AdminSolutions.tsx")
+        src = read_file("frontend/src/components/ImportFromPortalPanel.tsx")
         if "activeImportModal" not in src:
             fail(name, "no unified activeImportModal state found"); return
         if "mobiusOpen" in src or "techMobiusOpen" in src:
@@ -2514,7 +2514,7 @@ def test_hubrepo6_import_sources_use_popup_not_inline_cards():
 def test_hubrepo7_cards_show_selected_count_badge():
     name = "HUBREPO7 (static): each import card shows a selected-count badge, blank when nothing is selected"
     try:
-        src = read_file("frontend/src/components/AdminSolutions.tsx")
+        src = read_file("frontend/src/components/ImportFromPortalPanel.tsx")
         idx = src.index("Mobius Portal")
         body = src[idx:idx + 3500]
         if "selectedMobius.size > 0 &&" not in body:
@@ -2692,6 +2692,84 @@ def test_msui10_deploy_subdomain_optional_backend():
             fail(name, "cleanSlug does not fall back to the title-derived slug"); return
         if 'if (!cleanSlug) return res.status(400).json({ error: "Subdomain has invalid characters." });' in src:
             fail(name, "old hard requirement for a manually-typed subdomain is still present"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui11_popups_are_landscape_with_internal_scroll():
+    name = "MSUI11 (static): Onboard/Deploy/Edit popups use a wide max-width with internal scroll instead of a tall page-level scroll"
+    try:
+        page_src = read_file("frontend/src/components/AdminOnboardSolutionPage.tsx")
+        if 'max-w-6xl max-h-[88vh] overflow-y-auto' not in page_src:
+            fail(name, "Onboard popup is not a wide, height-capped, internally-scrolling box"); return
+        if 'max-w-4xl max-h-[88vh] overflow-y-auto' not in page_src:
+            fail(name, "Deploy popup is not a wide, height-capped, internally-scrolling box"); return
+        if 'items-start md:items-center' in page_src:
+            fail(name, "popup backdrop still scrolls the whole page instead of the modal box internally"); return
+        map_src = read_file("frontend/src/components/AdminMapSolutions.tsx")
+        if 'max-w-6xl max-h-[88vh] overflow-y-auto' not in map_src:
+            fail(name, "Edit-solution popup is not a wide, height-capped, internally-scrolling box"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui12_deploy_solution_defaults_to_no_checkbox_ticked():
+    name = "MSUI12 (static): DeploySolutionForm.tsx no longer defaults the target-portal checkboxes to ['all']"
+    try:
+        src = read_file("frontend/src/components/DeploySolutionForm.tsx")
+        if 'useState<string[]>(prefilledSubdomain ? [prefilledSubdomain] : ["all"])' in src:
+            fail(name, "deployCustomerNames still defaults to ['all'] when there is no prefilled portal"); return
+        if 'useState<string[]>(prefilledSubdomain ? [prefilledSubdomain] : [])' not in src:
+            fail(name, "deployCustomerNames does not default to an empty (no ticks) selection"); return
+        idx = src.index("const handleDeployCustomerCheckboxChange")
+        body = src[idx:idx + 500]
+        if 'updated = ["all"]' in body:
+            fail(name, "checkbox handler still force-reverts an empty selection back to ['all']"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui13_deploy_backend_allows_empty_target_portals():
+    name = "MSUI13 (static): deploy-solution.routes.ts no longer requires at least one target portal"
+    try:
+        src = read_file("backend/routes/deploy-solution.routes.ts")
+        if 'if (customerNames.length === 0) return res.status(400).json({ error: "Select at least one target portal." });' in src:
+            fail(name, "backend still hard-requires at least one target portal for deploy"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui14_map_solution_popup_uses_three_source_import_panel():
+    name = "MSUI14 (static): the Map Solution popup reuses the 3-source (Mobius/TechMobius/Hub Repository) import panel"
+    try:
+        src = read_file("frontend/src/components/AdminMapSolutions.tsx")
+        idx = src.index("Map Solutions to {mapPortal.displayName}")
+        body = src[idx:idx + 800]
+        if "<ImportFromPortalPanel" not in body:
+            fail(name, "Map Solution popup does not render ImportFromPortalPanel"); return
+        if "targetPortalNames={[mapPortal.name]}" not in body:
+            fail(name, "ImportFromPortalPanel is not scoped to the clicked portal"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui15_import_panel_reused_by_both_onboarding_and_map_solutions():
+    name = "MSUI15 (static): ImportFromPortalPanel.tsx exists and is imported by both AdminSolutions.tsx and AdminMapSolutions.tsx"
+    try:
+        panel_src = read_file("frontend/src/components/ImportFromPortalPanel.tsx")
+        if "export function ImportFromPortalPanel" not in panel_src:
+            fail(name, "ImportFromPortalPanel is not exported"); return
+        onboard_src = read_file("frontend/src/components/AdminSolutions.tsx")
+        if 'import { ImportFromPortalPanel } from "./ImportFromPortalPanel"' not in onboard_src:
+            fail(name, "AdminSolutions.tsx does not import ImportFromPortalPanel"); return
+        map_src = read_file("frontend/src/components/AdminMapSolutions.tsx")
+        if 'import { ImportFromPortalPanel } from "./ImportFromPortalPanel"' not in map_src:
+            fail(name, "AdminMapSolutions.tsx does not import ImportFromPortalPanel"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -2905,6 +2983,11 @@ TESTS = [
     test_msui8_popups_use_shared_layoutid_for_seamless_animation,
     test_msui9_deploy_subdomain_optional_frontend,
     test_msui10_deploy_subdomain_optional_backend,
+    test_msui11_popups_are_landscape_with_internal_scroll,
+    test_msui12_deploy_solution_defaults_to_no_checkbox_ticked,
+    test_msui13_deploy_backend_allows_empty_target_portals,
+    test_msui14_map_solution_popup_uses_three_source_import_panel,
+    test_msui15_import_panel_reused_by_both_onboarding_and_map_solutions,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]
