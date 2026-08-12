@@ -4,25 +4,18 @@
  */
 
 import React, { useState } from "react";
-import { Shield, Globe, Image, Tag, Key, FolderOpen, Link2, AlertCircle, Upload, X, ArrowLeft } from "lucide-react";
-import { Solution, Collateral } from "../../../shared/types";
-import { ImportFromPortalPanel } from "./ImportFromPortalPanel";
+import { Shield, Globe, Image, Tag, Key, FolderOpen, Link2, Upload, X, ArrowLeft } from "lucide-react";
+import { Solution } from "../../../shared/types";
 
 interface AdminSolutionsProps {
   solutions: Solution[];
-  // Full, unfiltered solutions list for the Hub Repository picker and the
-  // already-imported-title dedup check — callers should pass the same
-  // unfiltered array for both `solutions` and this prop; kept separate for
-  // backward compatibility with callers that still distinguish the two.
-  hubRepositorySolutions?: Solution[];
-  collaterals?: Collateral[];
   onRefresh: (action: string, solutionData: any) => Promise<void>;
-  onReload?: () => Promise<void>;
-  subdomains?: { id: string; name: string; displayName: string }[];
-  prefilledSubdomain?: string | null;
   adminUserEmail?: string;
   // When provided, the form opens pre-filled to edit this solution instead of
-  // creating a new one (the "Import from Portal" section is hidden in this mode).
+  // creating a new one. Portal mapping isn't editable here — that's handled
+  // entirely by the Map Solutions page now; this form only touches a
+  // solution's own fields (title, URL, thumbnail, credentials, etc.) and
+  // silently carries its existing mapping through on submit.
   editingSolution?: Solution | null;
   // Called when Back/Close/Cancel is clicked, or after a successful submit —
   // this component is always rendered inside a popup by its callers now.
@@ -39,21 +32,17 @@ const VISUAL_PRESETS = [
 
 export function AdminSolutions({
   solutions,
-  hubRepositorySolutions,
-  collaterals = [],
   onRefresh,
-  onReload,
-  subdomains = [],
-  prefilledSubdomain,
   adminUserEmail = "",
   editingSolution = null,
   onClose,
 }: AdminSolutionsProps) {
-  const repoSolutions = hubRepositorySolutions ?? solutions;
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  // Form states
-  const [customerNames, setCustomerNames] = useState<string[]>(prefilledSubdomain ? [prefilledSubdomain] : ["all"]);
+  // Portal mapping isn't set here — new solutions always land in the Hub
+  // Repository unmapped; editing preserves whatever the solution's existing
+  // mapping already is (set via handleEditClick, never shown/edited in this form).
+  const [customerNames, setCustomerNames] = useState<string[]>([]);
   const [title, setTitle] = useState("");
   const [thumbnail, setThumbnail] = useState("");
   const [appUrl, setAppUrl] = useState("");
@@ -77,7 +66,7 @@ export function AdminSolutions({
 
   const resetForm = () => {
     setEditingId(null);
-    setCustomerNames(prefilledSubdomain ? [prefilledSubdomain] : ["all"]);
+    setCustomerNames([]);
     setTitle("");
     setThumbnail("");
     setAppUrl("");
@@ -107,24 +96,6 @@ export function AdminSolutions({
     setTagsInput(sol.tags ? sol.tags.join(", ") : "");
     setGoogleDriveUrl((sol as any).googleDriveUrl || "");
     setUploadedFiles((sol as any).uploadedFiles || []);
-  };
-
-  const handleSubdomainCheckboxChange = (name: string) => {
-    if (name === "all") {
-      setCustomerNames(["all"]);
-      return;
-    }
-    let updated = customerNames.filter((n) => n !== "all");
-    if (updated.includes(name)) {
-      updated = updated.filter((n) => n !== name);
-    } else {
-      updated.push(name);
-    }
-    // Deliberately no fallback to ["all"] when this becomes empty — leaving every
-    // checkbox unchecked is a valid, intentional state: the solution is onboarded
-    // to the Hub Repository only, not mapped to any live portal, until mapped
-    // later via the Map Solutions page.
-    setCustomerNames(updated);
   };
 
   const handleLocalFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -218,61 +189,10 @@ export function AdminSolutions({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Target Subdomain Checkboxes — STEP 1 */}
-          <div className="md:col-span-2 space-y-2">
-            <span className="text-[10px] font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded uppercase tracking-wider inline-block">
-              📍 STEP 1: Select Target Subdomains (Multi-Select Enabled)
-            </span>
-            <label className="block text-xs font-semibold text-slate-500">
-              Linked Customer Subdomain Portals (Asset will list under selected portals)
-            </label>
-
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-2 md:grid-cols-3 gap-2.5">
-              <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={customerNames.includes("all")}
-                  onChange={() => handleSubdomainCheckboxChange("all")}
-                  className="h-3.5 w-3.5 accent-orange-600 rounded border-slate-350"
-                />
-                <span className="text-slate-900 font-mono font-bold">All (Global Asset)</span>
-              </label>
-              {subdomains.map((sub) => (
-                <label key={sub.id} className="flex items-center gap-2 text-xs cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={customerNames.includes(sub.name)}
-                    onChange={() => handleSubdomainCheckboxChange(sub.name)}
-                    className="h-3.5 w-3.5 accent-orange-600 rounded border-slate-350"
-                  />
-                  <span className="text-slate-700 font-mono text-[11px]">{sub.displayName} ({sub.name})</span>
-                </label>
-              ))}
-            </div>
-            <p className="text-[10px] text-slate-400 leading-relaxed flex items-start gap-1.5">
-              <AlertCircle className="h-3 w-3 text-slate-350 shrink-0 mt-0.5" />
-              Leaving every box unchecked onboards this solution to the <strong className="text-slate-500 font-semibold">Hub Repository</strong> only —
-              it won't appear on any live portal until mapped later from the Map Solutions page.
-            </p>
-          </div>
-
-          {/* ── Portal Import Section (only shown when creating, not editing) ── */}
           {!editingId && (
-            <div className="md:col-span-2 space-y-3">
-              <ImportFromPortalPanel
-                solutions={solutions}
-                repoSolutions={repoSolutions}
-                collaterals={collaterals}
-                targetPortalNames={customerNames}
-                onRefresh={onRefresh}
-                onImported={async () => { await onReload?.(); }}
-              />
-              <div className="flex items-center gap-2 pt-1">
-                <div className="flex-1 border-t border-blue-100" />
-                <span className="text-[10px] text-slate-400 font-medium shrink-0">— or fill in manually below —</span>
-                <div className="flex-1 border-t border-blue-100" />
-              </div>
-            </div>
+            <p className="md:col-span-2 text-[10px] text-slate-400 leading-relaxed">
+              Saves to the <strong className="text-slate-500 font-semibold">Solution Repository</strong> — map it to one or more portals afterward from the Map Solutions page.
+            </p>
           )}
 
           {/* Title */}

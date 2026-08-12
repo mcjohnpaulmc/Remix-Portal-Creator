@@ -80,8 +80,6 @@ export function AdminMapSolutions({
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const subdomainProp = subdomains.map((s) => ({ id: s.id, name: s.name, displayName: s.displayName }));
-
   const rows: PortalRow[] = [
     ...subdomains.map((s) => ({ id: s.id, name: s.name, displayName: s.displayName, portal: s })),
     { id: "__unmapped__", name: "", displayName: "Hub Repository (Unmapped)", isUnmapped: true },
@@ -567,11 +565,7 @@ export function AdminMapSolutions({
           <div className="w-full max-w-6xl max-h-[88vh] overflow-y-auto rounded-3xl" onClick={(e) => e.stopPropagation()}>
             <AdminSolutions
               solutions={solutions}
-              hubRepositorySolutions={solutions}
-              collaterals={collaterals}
-              subdomains={subdomainProp}
               onRefresh={onRefresh}
-              onReload={onReload}
               adminUserEmail={adminUserEmail}
               editingSolution={editingSolution}
               onClose={() => setEditingSolution(null)}

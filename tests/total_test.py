@@ -1738,33 +1738,12 @@ def test_imp3_import_rehosts_thumbnails_instead_of_https_only_filter():
         fail(name, str(e))
 
 
-def test_imp4_frontend_import_calls_server_endpoint_and_reloads():
-    name = "IMP4 (static): ImportFromPortalPanel.tsx bulk import calls the server import endpoint and reloads full DB state"
-    try:
-        src = read_file("frontend/src/components/ImportFromPortalPanel.tsx")
-        idx = src.index("handleBulkImport = async")
-        body = src[idx:idx + 2500]
-        if "/api/admin/external-portals/import" not in body:
-            fail(name, "handleBulkImport no longer calls the server-side import endpoint"); return
-        if "onImported()" not in body:
-            fail(name, "handleBulkImport does not reload full database state after import (collaterals changed too)"); return
-        ok(name)
-    except Exception as e:
-        fail(name, str(e))
-
-
-def test_map1_solutions_reset_form_respects_prefilled_subdomain():
-    name = "MAP1 (static): AdminSolutions.tsx resetForm() seeds customerNames from prefilledSubdomain instead of hardcoding 'all'"
-    try:
-        src = read_file("frontend/src/components/AdminSolutions.tsx")
-        idx = src.index("const resetForm = ()")
-        body = src[idx:idx + 700]
-        if 'setCustomerNames(prefilledSubdomain ? [prefilledSubdomain] : ["all"])' not in body:
-            fail(name, "resetForm no longer respects prefilledSubdomain — opening the create form after "
-                       "'Onboard Assets for this Portal' would silently reset the mapping to every portal"); return
-        ok(name)
-    except Exception as e:
-        fail(name, str(e))
+# IMP4 (selective per-solution Mobius/TechMobius import picker) and MAP1
+# (prefilledSubdomain-seeded Step 1 checkboxes) tested a manual import/mapping
+# UI inside the onboarding form that MSUI26 below confirms was intentionally
+# removed — see that test and its containing section for the replacement
+# behavior (onboarding always saves unmapped; bulk import lives on the
+# Solution Repository's Update button; mapping lives on Map Solutions).
 
 
 # ── Bug fixes — IMP2: thumbnail import fidelity, collateral kinds, catalogue layout ─
@@ -2429,46 +2408,11 @@ def test_solform2_thumbnail_is_optional():
         fail(name, str(e))
 
 
-# ── Feature — HUBREPO: Import-from-Portal below Step 1; Hub Repository source ──
-
-def test_hubrepo1_import_section_appears_after_step1():
-    name = "HUBREPO1 (static): 'Import from Portal' section renders after STEP 1 in the onboarding form"
-    try:
-        src = read_file("frontend/src/components/AdminSolutions.tsx")
-        step1_idx = src.index("STEP 1: Select Target Subdomains")
-        import_idx = src.index("<ImportFromPortalPanel")
-        if import_idx < step1_idx:
-            fail(name, "Import from Portal section still appears before STEP 1"); return
-        ok(name)
-    except Exception as e:
-        fail(name, str(e))
-
-
-def test_hubrepo2_step1_has_unmapped_note():
-    name = "HUBREPO2 (static): STEP 1 has a note explaining that an empty selection onboards to the Hub Repository"
-    try:
-        src = read_file("frontend/src/components/AdminSolutions.tsx")
-        step1_idx = src.index("STEP 1: Select Target Subdomains")
-        body = src[step1_idx:step1_idx + 2500]
-        if "Hub Repository" not in body or "unchecked" not in body:
-            fail(name, "no note about leaving Step 1 unchecked found near the checkboxes"); return
-        ok(name)
-    except Exception as e:
-        fail(name, str(e))
-
-
-def test_hubrepo3_empty_step1_selection_allowed():
-    name = "HUBREPO3 (static): unchecking every Step 1 box no longer force-reverts to ['all']"
-    try:
-        src = read_file("frontend/src/components/AdminSolutions.tsx")
-        idx = src.index("const handleSubdomainCheckboxChange")
-        body = src[idx:idx + 700]
-        if 'updated = ["all"]' in body:
-            fail(name, "handleSubdomainCheckboxChange still forces ['all'] when the selection becomes empty"); return
-        ok(name)
-    except Exception as e:
-        fail(name, str(e))
-
+# ── Feature — HUBREPO: onboarding always saves unmapped to the Hub Repository ──
+# HUBREPO1/2/3/5/6/7 tested the Step 1 checkbox grid and the Mobius/TechMobius/
+# Hub Repository import-card picker that used to live inside the onboarding
+# form — MSUI26 below confirms both were intentionally removed (see that
+# section for why). HUBREPO4/8 still apply to what's left of the form.
 
 def test_hubrepo4_submit_no_longer_defaults_customer_name_to_all():
     name = "HUBREPO4 (static): submitting with no Step 1 selection stores an empty customerName, not 'all'"
@@ -2478,49 +2422,6 @@ def test_hubrepo4_submit_no_longer_defaults_customer_name_to_all():
             fail(name, "handleSubmit payload still defaults customerName to 'all' when unmapped"); return
         if 'customerName: customerNames[0] || ""' not in src:
             fail(name, "handleSubmit payload does not default customerName to an empty string when unmapped"); return
-        ok(name)
-    except Exception as e:
-        fail(name, str(e))
-
-
-def test_hubrepo5_hub_repository_card_right_of_techmobius():
-    name = "HUBREPO5 (static): Hub Repository is a third import card positioned after TechMobius Portal"
-    try:
-        src = read_file("frontend/src/components/ImportFromPortalPanel.tsx")
-        techmobius_idx = src.index("TechMobius Portal")
-        hubrepo_idx = src.index("Hub Repository", techmobius_idx)
-        if hubrepo_idx <= techmobius_idx:
-            fail(name, "Hub Repository card does not appear after TechMobius Portal"); return
-        ok(name)
-    except Exception as e:
-        fail(name, str(e))
-
-
-def test_hubrepo6_import_sources_use_popup_not_inline_cards():
-    name = "HUBREPO6 (static): Mobius/TechMobius/Hub Repository open a shared popup modal instead of expanding inline"
-    try:
-        src = read_file("frontend/src/components/ImportFromPortalPanel.tsx")
-        if "activeImportModal" not in src:
-            fail(name, "no unified activeImportModal state found"); return
-        if "mobiusOpen" in src or "techMobiusOpen" in src:
-            fail(name, "old inline-expand booleans (mobiusOpen/techMobiusOpen) still present"); return
-        if 'className="fixed inset-0 z-50' not in src:
-            fail(name, "no fixed full-screen popup overlay found for the import source modal"); return
-        ok(name)
-    except Exception as e:
-        fail(name, str(e))
-
-
-def test_hubrepo7_cards_show_selected_count_badge():
-    name = "HUBREPO7 (static): each import card shows a selected-count badge, blank when nothing is selected"
-    try:
-        src = read_file("frontend/src/components/ImportFromPortalPanel.tsx")
-        idx = src.index("Mobius Portal")
-        body = src[idx:idx + 3500]
-        if "selectedMobius.size > 0 &&" not in body:
-            fail(name, "Mobius card does not conditionally render a selected-count badge"); return
-        if "selectedHubRepo.size > 0 &&" not in body:
-            fail(name, "Hub Repository card does not conditionally render a selected-count badge"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -2762,18 +2663,15 @@ def test_msui14_map_solution_popup_shows_only_the_solution_repository():
         fail(name, str(e))
 
 
-def test_msui15_import_panel_reused_only_by_onboarding_not_map_solutions():
-    name = "MSUI15 (static): ImportFromPortalPanel.tsx exists and is imported by AdminSolutions.tsx, but no longer by AdminMapSolutions.tsx"
+def test_msui15_import_from_portal_panel_fully_removed():
+    name = "MSUI15 (static): ImportFromPortalPanel.tsx is gone and nothing still imports it (its only caller, the onboarding form's picker, was removed — see MSUI26)"
     try:
-        panel_src = read_file("frontend/src/components/ImportFromPortalPanel.tsx")
-        if "export function ImportFromPortalPanel" not in panel_src:
-            fail(name, "ImportFromPortalPanel is not exported"); return
-        onboard_src = read_file("frontend/src/components/AdminSolutions.tsx")
-        if 'import { ImportFromPortalPanel } from "./ImportFromPortalPanel"' not in onboard_src:
-            fail(name, "AdminSolutions.tsx does not import ImportFromPortalPanel"); return
-        map_src = read_file("frontend/src/components/AdminMapSolutions.tsx")
-        if "ImportFromPortalPanel" in map_src:
-            fail(name, "AdminMapSolutions.tsx still references ImportFromPortalPanel — Map Solution should use its own repository list instead"); return
+        if os.path.exists(os.path.join(APP_ROOT, "frontend/src/components/ImportFromPortalPanel.tsx")):
+            fail(name, "ImportFromPortalPanel.tsx still exists on disk but has no remaining callers"); return
+        for component in ["AdminSolutions.tsx", "AdminMapSolutions.tsx", "AdminOnboardSolutionPage.tsx"]:
+            src = read_file(f"frontend/src/components/{component}")
+            if "ImportFromPortalPanel" in src:
+                fail(name, f"{component} still references the removed ImportFromPortalPanel"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -2954,6 +2852,62 @@ def test_msui25_map_selected_syncs_both_additions_and_removals():
         fail(name, str(e))
 
 
+# ── Feature — MSUI26: onboarding form simplified to just its own fields ────────
+# Portal targeting (Step 1) and the Mobius/TechMobius/Hub Repository import
+# picker were removed from the onboarding form entirely — onboarding a new
+# solution now always saves it unmapped to the Solution Repository; mapping
+# to portals, and bulk-importing from the external portals, both moved
+# elsewhere (Map Solutions, and the Solution Repository's Update button).
+
+def test_msui26_onboard_form_has_no_step1_or_import_section():
+    name = "MSUI26 (static): AdminSolutions.tsx no longer has a Step 1 portal-checkbox grid or a Mobius/TechMobius/Hub Repository import picker"
+    try:
+        src = read_file("frontend/src/components/AdminSolutions.tsx")
+        if "STEP 1" in src or "Select Target Subdomains" in src:
+            fail(name, "Step 1 target-subdomain section is still present"); return
+        if "ImportFromPortalPanel" in src:
+            fail(name, "onboarding form still references the removed ImportFromPortalPanel"); return
+        if "Mobius Portal" in src or "TechMobius Portal" in src:
+            fail(name, "onboarding form still references the two external portal import cards"); return
+        if "handleSubdomainCheckboxChange" in src:
+            fail(name, "the now-unused Step 1 checkbox handler is still present"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui27_new_solutions_always_land_unmapped():
+    name = "MSUI27 (static): a brand-new solution from the onboarding form always starts unmapped (customerNames defaults to [])"
+    try:
+        src = read_file("frontend/src/components/AdminSolutions.tsx")
+        idx = src.index("const [customerNames, setCustomerNames] = useState<string[]>(")
+        line = src[idx:idx + 120]
+        if "useState<string[]>([])" not in line:
+            fail(name, "customerNames does not default to an empty (unmapped) array"); return
+        reset_idx = src.index("const resetForm = ()")
+        reset_body = src[reset_idx:reset_idx + 200]
+        if "setCustomerNames([])" not in reset_body:
+            fail(name, "resetForm does not reset customerNames back to unmapped"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui28_editing_still_preserves_existing_mapping_silently():
+    name = "MSUI28 (static): editing an existing solution still carries its current portal mapping through on submit, even with no UI to change it"
+    try:
+        src = read_file("frontend/src/components/AdminSolutions.tsx")
+        idx = src.index("const handleEditClick = (sol: Solution) => {")
+        body = src[idx:idx + 300]
+        if "sol.customerNames" not in body:
+            fail(name, "handleEditClick does not seed customerNames from the solution being edited"); return
+        if "customerNames," not in src.split("const payload = {")[1][:600]:
+            fail(name, "submit payload does not include customerNames, so editing would silently unmap the solution"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 # ── run all tests ─────────────────────────────────────────────────────────────
 
 TESTS = [
@@ -3085,8 +3039,6 @@ TESTS = [
     test_imp1_solution_card_hides_target_url,
     test_imp2_import_endpoint_creates_linked_collaterals,
     test_imp3_import_rehosts_thumbnails_instead_of_https_only_filter,
-    test_imp4_frontend_import_calls_server_endpoint_and_reloads,
-    test_map1_solutions_reset_form_respects_prefilled_subdomain,
     # Bug fixes — IMP2: thumbnail import fidelity, collateral kinds, catalogue layout
     test_imp5_thumbnail_import_sniffs_magic_bytes_not_just_content_type_header,
     test_imp6_thumbnail_import_falls_back_to_direct_url_on_rehost_failure,
@@ -3142,14 +3094,8 @@ TESTS = [
     # Feature — SOLFORM: onboarding form Back button; thumbnail made optional
     test_solform1_onboard_form_has_back_button,
     test_solform2_thumbnail_is_optional,
-    # Feature — HUBREPO: Import-from-Portal below Step 1; Hub Repository source
-    test_hubrepo1_import_section_appears_after_step1,
-    test_hubrepo2_step1_has_unmapped_note,
-    test_hubrepo3_empty_step1_selection_allowed,
+    # Feature — HUBREPO: onboarding always saves unmapped to the Hub Repository
     test_hubrepo4_submit_no_longer_defaults_customer_name_to_all,
-    test_hubrepo5_hub_repository_card_right_of_techmobius,
-    test_hubrepo6_import_sources_use_popup_not_inline_cards,
-    test_hubrepo7_cards_show_selected_count_badge,
     test_hubrepo8_map_badge_no_longer_defaults_to_all,
     # Feature — MSUI: Portal Domains landing page, Onboard/Map Solutions split
     test_msui1_portal_domains_is_default_landing_tab,
@@ -3166,7 +3112,7 @@ TESTS = [
     test_msui12_deploy_solution_defaults_to_no_checkbox_ticked,
     test_msui13_deploy_backend_allows_empty_target_portals,
     test_msui14_map_solution_popup_shows_only_the_solution_repository,
-    test_msui15_import_panel_reused_only_by_onboarding_not_map_solutions,
+    test_msui15_import_from_portal_panel_fully_removed,
     test_msui16_portal_row_has_external_link_opening_in_new_tab,
     test_msui17_search_bar_and_portal_checkbox_filter_left_of_refresh,
     test_msui18_view_popup_shares_layoutid_with_its_row_for_seamless_transition,
@@ -3177,6 +3123,9 @@ TESTS = [
     test_msui23_map_solution_popup_has_checkbox_column_and_is_larger,
     test_msui24_map_solution_popup_preticks_already_mapped_solutions,
     test_msui25_map_selected_syncs_both_additions_and_removals,
+    test_msui26_onboard_form_has_no_step1_or_import_section,
+    test_msui27_new_solutions_always_land_unmapped,
+    test_msui28_editing_still_preserves_existing_mapping_silently,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

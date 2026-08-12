@@ -1609,7 +1609,6 @@ export default function App() {
                       onRefresh={async (action, data) => handleAdminDatabaseUpdate("solutions", action, data)}
                       onReload={fetchPortalData}
                       adminUserEmail={userEmail || ""}
-                      initialPortal={prefilledSubdomain}
                     />
                   )}
 

@@ -17,9 +17,6 @@ interface AdminOnboardSolutionPageProps {
   onRefresh: (action: string, solutionData: any) => Promise<void>;
   onReload?: () => Promise<void>;
   adminUserEmail?: string;
-  // Set when arriving via the "Onboard Assets for this Portal" shortcut — opens
-  // the Onboard popup immediately with Step 1 pre-checked for that portal.
-  initialPortal?: string | null;
 }
 
 export function AdminOnboardSolutionPage({
@@ -29,7 +26,6 @@ export function AdminOnboardSolutionPage({
   onRefresh,
   onReload,
   adminUserEmail = "",
-  initialPortal = null,
 }: AdminOnboardSolutionPageProps) {
   const [openPopup, setOpenPopup] = useState<"onboard" | "deploy" | null>(null);
   const [updatingRepo, setUpdatingRepo] = useState(false);
@@ -126,7 +122,7 @@ export function AdminOnboardSolutionPage({
             <div>
               <h4 className="text-base font-bold text-orange-600">Onboard Solution</h4>
               <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
-                Manually register a solution, or import one from Mobius / TechMobius / the Hub Repository.
+                Manually register a new solution to the repository — map it to a portal afterward.
               </p>
             </div>
           </motion.button>
@@ -237,12 +233,7 @@ export function AdminOnboardSolutionPage({
             >
               <AdminSolutions
                 solutions={solutions}
-                hubRepositorySolutions={solutions}
-                collaterals={collaterals}
-                subdomains={subdomainProp}
-                prefilledSubdomain={initialPortal}
                 onRefresh={onRefresh}
-                onReload={onReload}
                 adminUserEmail={adminUserEmail}
                 onClose={() => setOpenPopup(null)}
               />
