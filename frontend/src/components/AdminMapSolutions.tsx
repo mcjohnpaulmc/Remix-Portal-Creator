@@ -9,7 +9,6 @@ import { X, Eye, EyeOff, Edit2, Trash2, Link2, RefreshCw, ExternalLink, Search, 
 import { Solution, Collateral, SubdomainPortal } from "../../../shared/types";
 import { SafeImage } from "./SafeImage";
 import { AdminSolutions } from "./AdminSolutions";
-import { ImportFromPortalPanel } from "./ImportFromPortalPanel";
 
 interface AdminMapSolutionsProps {
   solutions: Solution[];
@@ -60,6 +59,8 @@ export function AdminMapSolutions({
   const [refreshing, setRefreshing] = useState(false);
   const [viewPortal, setViewPortal] = useState<PortalRow | null>(null);
   const [mapPortal, setMapPortal] = useState<PortalRow | null>(null);
+  const [selectedToMap, setSelectedToMap] = useState<Set<string>>(new Set());
+  const [mapping, setMapping] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [editingSolution, setEditingSolution] = useState<Solution | null>(null);
 
@@ -104,8 +105,43 @@ export function AdminMapSolutions({
     return solutionsForPortal(solutions, row).some((s) => s.title.toLowerCase().includes(q));
   });
 
+  // Opening the popup pre-ticks every solution already explicitly mapped to this
+  // portal (not ones mapped via the "all" sentinel — those are shown checked but
+  // disabled below, since unchecking them here can't sensibly remove them from
+  // every other portal too).
   const openMap = (row: PortalRow) => {
+    const initial = new Set(
+      solutions.filter((s) => namesOf(s).includes(row.name)).map((s) => s.id)
+    );
+    setSelectedToMap(initial);
     setMapPortal(row);
+  };
+
+  // Syncs each solution's mapping to this one portal to match the checkbox
+  // state — adds it for newly-checked solutions, removes it for unchecked ones
+  // that were previously mapped here, and leaves everything else untouched.
+  // Solutions mapped via "all" are skipped entirely (see openMap above). The
+  // backend re-syncs each solution's linked collaterals to match automatically.
+  const handleMapSelected = async () => {
+    if (!mapPortal) return;
+    setMapping(true);
+    try {
+      for (const sol of solutions) {
+        const names = namesOf(sol);
+        if (names.includes("all")) continue;
+        const isMapped = names.includes(mapPortal.name);
+        const shouldBeMapped = selectedToMap.has(sol.id);
+        if (isMapped === shouldBeMapped) continue;
+        const updated = shouldBeMapped
+          ? [...names, mapPortal.name]
+          : names.filter((n) => n !== mapPortal.name);
+        await onRefresh("update", { ...sol, customerNames: updated, customerName: updated[0] || "" });
+      }
+      await onReload?.();
+      setMapPortal(null);
+    } finally {
+      setMapping(false);
+    }
   };
 
   const handleToggleEnable = async (sol: Solution) => {
@@ -432,35 +468,91 @@ export function AdminMapSolutions({
       })()}
       </AnimatePresence>
 
-      {/* Map Solution popup — same 3-source picker (Mobius / TechMobius / Hub
-          Repository) as the onboarding form's Import from Portal section,
-          scoped to this one portal. */}
+      {/* Map Solution popup — the full Solution Repository as a checkbox list,
+          scoped to this one portal. No Mobius/TechMobius import cards here —
+          that's what the Onboard Solution page is for. */}
       {mapPortal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs"
           onClick={() => setMapPortal(null)}
         >
           <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden"
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-4 border-b border-slate-100 flex items-center justify-between shrink-0">
-              <span className="text-sm font-bold text-slate-900">Map Solutions to {mapPortal.displayName}</span>
+              <div>
+                <span className="text-sm font-bold text-slate-900">Map Solutions to {mapPortal.displayName}</span>
+                <p className="text-[10.5px] text-slate-400 mt-0.5">Check solutions to map them here — uncheck to remove them from this portal only.</p>
+              </div>
               <button type="button" onClick={() => setMapPortal(null)} className="text-slate-400 hover:text-slate-600 transition-colors">
-                <X className="h-4 w-4" />
+                <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4">
-              <ImportFromPortalPanel
-                solutions={solutions}
-                repoSolutions={solutions}
-                collaterals={collaterals}
-                targetPortalNames={[mapPortal.name]}
-                onRefresh={onRefresh}
-                onImported={async () => { await onReload?.(); }}
-                title={`🔗 Import or Map into ${mapPortal.displayName}`}
-              />
+            <div className="flex-1 overflow-y-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 text-slate-500 text-[10px] font-mono uppercase tracking-wider sticky top-0">
+                  <tr>
+                    <th className="px-4 py-2.5 w-10"></th>
+                    <th className="px-4 py-2.5 font-semibold">Solution Name</th>
+                    <th className="px-4 py-2.5 font-semibold">URL</th>
+                    <th className="px-4 py-2.5 font-semibold text-right">Collaterals</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {solutions.map((sol) => {
+                    const names = namesOf(sol);
+                    const mappedViaAll = names.includes("all");
+                    const checked = mappedViaAll || selectedToMap.has(sol.id);
+                    const collateralCount = collaterals.filter((c) => c.linkedSolutionId === sol.id).length;
+                    return (
+                      <tr key={sol.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="px-4 py-2.5">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={mappedViaAll}
+                            onChange={() => {
+                              setSelectedToMap((prev) => {
+                                const next = new Set(prev);
+                                next.has(sol.id) ? next.delete(sol.id) : next.add(sol.id);
+                                return next;
+                              });
+                            }}
+                            className="h-3.5 w-3.5 accent-orange-600 disabled:opacity-40"
+                            title={mappedViaAll ? "Mapped to all portals — edit from the solution's Edit form" : undefined}
+                          />
+                        </td>
+                        <td className="px-4 py-2.5 font-semibold text-slate-800 truncate max-w-[240px]">
+                          {sol.title}
+                          {mappedViaAll && <span className="ml-1.5 text-[9px] text-slate-400 font-normal">(all portals)</span>}
+                        </td>
+                        <td className="px-4 py-2.5 text-slate-500 font-mono truncate max-w-[320px]">{sol.url || "—"}</td>
+                        <td className="px-4 py-2.5 text-right text-slate-600">{collateralCount}</td>
+                      </tr>
+                    );
+                  })}
+                  {solutions.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-6 text-center text-slate-400 font-mono">
+                        No solutions in the repository yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="p-3 border-t border-slate-100 flex justify-end shrink-0">
+              <button
+                type="button"
+                disabled={mapping}
+                onClick={handleMapSelected}
+                className="px-5 py-2 bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold rounded-lg transition-colors disabled:opacity-50"
+              >
+                {mapping ? "Mapping…" : `Map ${selectedToMap.size} Selected`}
+              </button>
             </div>
           </div>
         </div>

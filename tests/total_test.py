@@ -2745,23 +2745,25 @@ def test_msui13_deploy_backend_allows_empty_target_portals():
         fail(name, str(e))
 
 
-def test_msui14_map_solution_popup_uses_three_source_import_panel():
-    name = "MSUI14 (static): the Map Solution popup reuses the 3-source (Mobius/TechMobius/Hub Repository) import panel"
+def test_msui14_map_solution_popup_shows_only_the_solution_repository():
+    name = "MSUI14 (static): the Map Solution popup shows only the Solution Repository list (no Mobius/TechMobius import cards)"
     try:
         src = read_file("frontend/src/components/AdminMapSolutions.tsx")
         idx = src.index("Map Solutions to {mapPortal.displayName}")
-        body = src[idx:idx + 800]
-        if "<ImportFromPortalPanel" not in body:
-            fail(name, "Map Solution popup does not render ImportFromPortalPanel"); return
-        if "targetPortalNames={[mapPortal.name]}" not in body:
-            fail(name, "ImportFromPortalPanel is not scoped to the clicked portal"); return
+        body = src[idx:idx + 3500]
+        if "<ImportFromPortalPanel" in body:
+            fail(name, "Map Solution popup still renders the Mobius/TechMobius/Hub Repository import panel"); return
+        if "Mobius Portal" in body or "TechMobius Portal" in body:
+            fail(name, "Map Solution popup still references the two other portal sources"); return
+        if "solutions.map((sol) =>" not in body:
+            fail(name, "Map Solution popup does not list every solution from the repository"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
 
 
-def test_msui15_import_panel_reused_by_both_onboarding_and_map_solutions():
-    name = "MSUI15 (static): ImportFromPortalPanel.tsx exists and is imported by both AdminSolutions.tsx and AdminMapSolutions.tsx"
+def test_msui15_import_panel_reused_only_by_onboarding_not_map_solutions():
+    name = "MSUI15 (static): ImportFromPortalPanel.tsx exists and is imported by AdminSolutions.tsx, but no longer by AdminMapSolutions.tsx"
     try:
         panel_src = read_file("frontend/src/components/ImportFromPortalPanel.tsx")
         if "export function ImportFromPortalPanel" not in panel_src:
@@ -2770,8 +2772,8 @@ def test_msui15_import_panel_reused_by_both_onboarding_and_map_solutions():
         if 'import { ImportFromPortalPanel } from "./ImportFromPortalPanel"' not in onboard_src:
             fail(name, "AdminSolutions.tsx does not import ImportFromPortalPanel"); return
         map_src = read_file("frontend/src/components/AdminMapSolutions.tsx")
-        if 'import { ImportFromPortalPanel } from "./ImportFromPortalPanel"' not in map_src:
-            fail(name, "AdminMapSolutions.tsx does not import ImportFromPortalPanel"); return
+        if "ImportFromPortalPanel" in map_src:
+            fail(name, "AdminMapSolutions.tsx still references ImportFromPortalPanel — Map Solution should use its own repository list instead"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -2897,6 +2899,56 @@ def test_msui22_external_import_empty_customer_names_means_unmapped_not_all():
             fail(name, "import route still defaults empty customerNames to ['all'] instead of leaving the solution unmapped"); return
         if "const targetCustomerNames = Array.isArray(customerNames) ? customerNames : [];" not in src:
             fail(name, "targetCustomerNames does not fall back to an empty (unmapped) array"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui23_map_solution_popup_has_checkbox_column_and_is_larger():
+    name = "MSUI23 (static): the Map Solution popup has a checkbox to the left of each solution and a larger max-width/height"
+    try:
+        src = read_file("frontend/src/components/AdminMapSolutions.tsx")
+        idx = src.index("Map Solutions to {mapPortal.displayName}")
+        wrapper_before = src[max(0, idx - 400):idx]
+        if "max-w-5xl max-h-[90vh]" not in wrapper_before:
+            fail(name, "Map Solution popup is not sized larger (expected max-w-5xl max-h-[90vh])"); return
+        body = src[idx:idx + 3500]
+        if 'type="checkbox"' not in body:
+            fail(name, "no checkbox found in the Map Solution popup's solution rows"); return
+        if "Solution Name" not in body or ">URL<" not in body or "Collaterals" not in body:
+            fail(name, "Map Solution popup table is missing the Solution Name/URL/Collaterals columns"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui24_map_solution_popup_preticks_already_mapped_solutions():
+    name = "MSUI24 (static): reopening the Map Solution popup pre-ticks solutions already mapped to that portal"
+    try:
+        src = read_file("frontend/src/components/AdminMapSolutions.tsx")
+        idx = src.index("const openMap = (row: PortalRow)")
+        body = src[idx:idx + 500]
+        if "namesOf(s).includes(row.name)" not in body:
+            fail(name, "openMap does not seed selectedToMap from solutions already mapped to this portal"); return
+        if "setSelectedToMap(initial)" not in body:
+            fail(name, "openMap does not initialize selectedToMap before opening the popup"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui25_map_selected_syncs_both_additions_and_removals():
+    name = "MSUI25 (static): clicking Map both adds newly-checked solutions to the portal and removes unchecked ones that were previously mapped"
+    try:
+        src = read_file("frontend/src/components/AdminMapSolutions.tsx")
+        idx = src.index("const handleMapSelected = async () => {\n    if (!mapPortal) return;")
+        body = src[idx:idx + 1200]
+        if "names.filter((n) => n !== mapPortal.name)" not in body:
+            fail(name, "unchecking a previously-mapped solution does not remove it from the portal"); return
+        if "[...names, mapPortal.name]" not in body:
+            fail(name, "checking a solution does not add it to the portal while preserving its other mappings"); return
+        if 'onRefresh("update", { ...sol, customerNames: updated' not in body:
+            fail(name, "mapping change is not persisted via onRefresh with the full updated customerNames (needed so linked collaterals re-sync too)"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -3113,8 +3165,8 @@ TESTS = [
     test_msui11_popups_are_landscape_with_internal_scroll,
     test_msui12_deploy_solution_defaults_to_no_checkbox_ticked,
     test_msui13_deploy_backend_allows_empty_target_portals,
-    test_msui14_map_solution_popup_uses_three_source_import_panel,
-    test_msui15_import_panel_reused_by_both_onboarding_and_map_solutions,
+    test_msui14_map_solution_popup_shows_only_the_solution_repository,
+    test_msui15_import_panel_reused_only_by_onboarding_not_map_solutions,
     test_msui16_portal_row_has_external_link_opening_in_new_tab,
     test_msui17_search_bar_and_portal_checkbox_filter_left_of_refresh,
     test_msui18_view_popup_shares_layoutid_with_its_row_for_seamless_transition,
@@ -3122,6 +3174,9 @@ TESTS = [
     test_msui20_solution_repository_section_below_cards,
     test_msui21_repository_update_button_dedupes_from_both_portals,
     test_msui22_external_import_empty_customer_names_means_unmapped_not_all,
+    test_msui23_map_solution_popup_has_checkbox_column_and_is_larger,
+    test_msui24_map_solution_popup_preticks_already_mapped_solutions,
+    test_msui25_map_selected_syncs_both_additions_and_removals,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]
