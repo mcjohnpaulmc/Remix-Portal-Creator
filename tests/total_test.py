@@ -2827,6 +2827,43 @@ def test_msui18_view_popup_shares_layoutid_with_its_row_for_seamless_transition(
         fail(name, str(e))
 
 
+def test_msui19_onboard_deploy_cards_are_shorter():
+    name = "MSUI19 (static): the Onboard/Deploy cards on the Onboard Solution page are shorter (no min-h-[220px], reduced padding)"
+    try:
+        src = read_file("frontend/src/components/AdminOnboardSolutionPage.tsx")
+        if "min-h-[220px]" in src:
+            fail(name, "cards still use the old tall min-h-[220px]"); return
+        if "p-8 bg-white" in src or "p-8 bg-gradient-to-br" in src:
+            fail(name, "cards still use the old p-8 padding"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui20_solution_repository_section_below_cards():
+    name = "MSUI20 (static): a 'Solution Repository' row-list (name, URL, collateral count) renders below the Onboard/Deploy cards"
+    try:
+        src = read_file("frontend/src/components/AdminOnboardSolutionPage.tsx")
+        cards_idx = src.index('className="grid grid-cols-1 md:grid-cols-2 gap-6"')
+        repo_idx = src.index("Solution Repository")
+        if repo_idx < cards_idx:
+            fail(name, "Solution Repository section appears before the cards, not below them"); return
+        body = src[repo_idx:repo_idx + 2500]
+        if "Solution Name" not in body:
+            fail(name, "no Solution Name column"); return
+        if ">URL<" not in body:
+            fail(name, "no URL column"); return
+        if "Collaterals" not in body:
+            fail(name, "no Collaterals count column"); return
+        if "solutions.map((sol) =>" not in body:
+            fail(name, "repository does not iterate over every solution (not just unmapped ones)"); return
+        if "collaterals.filter((c) => c.linkedSolutionId === sol.id).length" not in body:
+            fail(name, "collateral count is not computed per-solution"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 # ── run all tests ─────────────────────────────────────────────────────────────
 
 TESTS = [
@@ -3043,6 +3080,8 @@ TESTS = [
     test_msui16_portal_row_has_external_link_opening_in_new_tab,
     test_msui17_search_bar_and_portal_checkbox_filter_left_of_refresh,
     test_msui18_view_popup_shares_layoutid_with_its_row_for_seamless_transition,
+    test_msui19_onboard_deploy_cards_are_shorter,
+    test_msui20_solution_repository_section_below_cards,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

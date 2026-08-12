@@ -5,7 +5,7 @@
 
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { PlusCircle, Rocket } from "lucide-react";
+import { PlusCircle, Rocket, Link2 } from "lucide-react";
 import { Solution, Collateral, SubdomainPortal } from "../../../shared/types";
 import { AdminSolutions } from "./AdminSolutions";
 import { DeploySolutionForm } from "./DeploySolutionForm";
@@ -51,14 +51,14 @@ export function AdminOnboardSolutionPage({
             layoutId="onboard-solution-card"
             type="button"
             onClick={() => setOpenPopup("onboard")}
-            className="text-left p-8 bg-white border border-slate-200 rounded-3xl shadow-xs hover:shadow-md hover:border-orange-300 transition-shadow duration-200 cursor-pointer flex flex-col justify-between min-h-[220px]"
+            className="text-left p-5 bg-white border border-slate-200 rounded-2xl shadow-xs hover:shadow-md hover:border-orange-300 transition-shadow duration-200 cursor-pointer flex items-center gap-4"
           >
-            <div className="h-12 w-12 rounded-2xl bg-orange-50 border border-orange-100 flex items-center justify-center">
-              <PlusCircle className="h-6 w-6 text-orange-600" />
+            <div className="h-10 w-10 shrink-0 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center">
+              <PlusCircle className="h-5 w-5 text-orange-600" />
             </div>
-            <div className="mt-6">
-              <h4 className="text-lg font-bold text-orange-600">Onboard Solution</h4>
-              <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+            <div>
+              <h4 className="text-base font-bold text-orange-600">Onboard Solution</h4>
+              <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
                 Manually register a solution, or import one from Mobius / TechMobius / the Hub Repository.
               </p>
             </div>
@@ -70,19 +70,74 @@ export function AdminOnboardSolutionPage({
             layoutId="deploy-solution-card"
             type="button"
             onClick={() => setOpenPopup("deploy")}
-            className="text-left p-8 bg-gradient-to-br from-slate-900 to-blue-950 border border-blue-900/50 rounded-3xl shadow-md hover:shadow-lg transition-shadow duration-200 cursor-pointer flex flex-col justify-between min-h-[220px]"
+            className="text-left p-5 bg-gradient-to-br from-slate-900 to-blue-950 border border-blue-900/50 rounded-2xl shadow-md hover:shadow-lg transition-shadow duration-200 cursor-pointer flex items-center gap-4"
           >
-            <div className="h-12 w-12 rounded-2xl bg-white/10 border border-white/10 flex items-center justify-center">
-              <Rocket className="h-6 w-6 text-orange-400" />
+            <div className="h-10 w-10 shrink-0 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center">
+              <Rocket className="h-5 w-5 text-orange-400" />
             </div>
-            <div className="mt-6">
-              <h4 className="text-lg font-bold text-orange-400">Deploy Solution</h4>
-              <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">
+            <div>
+              <h4 className="text-base font-bold text-orange-400">Deploy Solution</h4>
+              <p className="text-[11px] text-slate-300 mt-0.5 leading-snug">
                 Upload a self-contained HTML app and host it on its own subdomain.
               </p>
             </div>
           </motion.button>
         )}
+      </div>
+
+      {/* Solution Repository — every solution in the hub, regardless of how many
+          portals (if any) it's currently mapped to. */}
+      <div>
+        <h3 className="font-display text-base font-bold text-slate-900 leading-tight">
+          Solution Repository
+        </h3>
+        <p className="text-xs text-slate-500 mb-3">
+          Every solution onboarded to the hub — a solution can be mapped to more than one portal from the Map Solutions page.
+        </p>
+        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 text-slate-500 text-[10px] font-mono uppercase tracking-wider">
+              <tr>
+                <th className="px-4 py-2.5 font-semibold">Solution Name</th>
+                <th className="px-4 py-2.5 font-semibold">URL</th>
+                <th className="px-4 py-2.5 font-semibold text-right">Collaterals</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {solutions.map((sol) => {
+                const collateralCount = collaterals.filter((c) => c.linkedSolutionId === sol.id).length;
+                return (
+                  <tr key={sol.id} className="hover:bg-slate-50/70 transition-colors">
+                    <td className="px-4 py-2.5 font-semibold text-slate-800 truncate max-w-[260px]">{sol.title}</td>
+                    <td className="px-4 py-2.5 text-slate-500 font-mono truncate max-w-[320px]">
+                      {sol.url ? (
+                        <a
+                          href={sol.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-blue-600 hover:text-blue-700"
+                        >
+                          <Link2 className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{sol.url}</span>
+                        </a>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-slate-600">{collateralCount}</td>
+                  </tr>
+                );
+              })}
+              {solutions.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="px-4 py-6 text-center text-slate-400 font-mono">
+                    No solutions onboarded yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <AnimatePresence>
