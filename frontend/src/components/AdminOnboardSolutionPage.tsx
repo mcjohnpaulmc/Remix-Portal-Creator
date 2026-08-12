@@ -5,10 +5,11 @@
 
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { PlusCircle, Rocket, Link2, Download } from "lucide-react";
+import { PlusCircle, Rocket, Link2, Download, Edit2 } from "lucide-react";
 import { Solution, Collateral, SubdomainPortal } from "../../../shared/types";
 import { AdminSolutions } from "./AdminSolutions";
 import { DeploySolutionForm } from "./DeploySolutionForm";
+import { EditSolutionQuickPopup } from "./EditSolutionQuickPopup";
 
 interface AdminOnboardSolutionPageProps {
   solutions: Solution[];
@@ -29,6 +30,7 @@ export function AdminOnboardSolutionPage({
 }: AdminOnboardSolutionPageProps) {
   const [openPopup, setOpenPopup] = useState<"onboard" | "deploy" | null>(null);
   const [updatingRepo, setUpdatingRepo] = useState(false);
+  const [editingSolution, setEditingSolution] = useState<Solution | null>(null);
   const subdomainProp = subdomains.map((s) => ({ id: s.id, name: s.name, displayName: s.displayName }));
 
   // Pulls every solution from Mobius + TechMobius that isn't already in the hub
@@ -178,6 +180,7 @@ export function AdminOnboardSolutionPage({
                 <th className="px-4 py-2.5 font-semibold">Solution Name</th>
                 <th className="px-4 py-2.5 font-semibold">URL</th>
                 <th className="px-4 py-2.5 font-semibold text-right">Collaterals</th>
+                <th className="px-4 py-2.5 font-semibold text-right">Edit</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -202,12 +205,22 @@ export function AdminOnboardSolutionPage({
                       )}
                     </td>
                     <td className="px-4 py-2.5 text-right text-slate-600">{collateralCount}</td>
+                    <td className="px-4 py-2.5 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setEditingSolution(sol)}
+                        className="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 rounded bg-slate-50 hover:bg-slate-100 text-slate-600 text-[10px] font-semibold transition-colors"
+                        title="Edit Solution"
+                      >
+                        <Edit2 className="h-3 w-3" /> Edit
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
               {solutions.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="px-4 py-6 text-center text-slate-400 font-mono">
+                  <td colSpan={4} className="px-4 py-6 text-center text-slate-400 font-mono">
                     No solutions onboarded yet.
                   </td>
                 </tr>
@@ -263,6 +276,22 @@ export function AdminOnboardSolutionPage({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {editingSolution && (
+        <div
+          className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={() => setEditingSolution(null)}
+        >
+          <div className="w-full max-w-2xl max-h-[88vh] overflow-y-auto rounded-3xl" onClick={(e) => e.stopPropagation()}>
+            <EditSolutionQuickPopup
+              solution={editingSolution}
+              onRefresh={onRefresh}
+              adminUserEmail={adminUserEmail}
+              onClose={() => setEditingSolution(null)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

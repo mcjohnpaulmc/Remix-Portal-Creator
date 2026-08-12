@@ -2908,6 +2908,66 @@ def test_msui28_editing_still_preserves_existing_mapping_silently():
         fail(name, str(e))
 
 
+# ── Feature — MSUI29: Edit button on the Solution Repository list ──────────────
+
+def test_msui29_repository_row_has_edit_button():
+    name = "MSUI29 (static): each row in the Solution Repository list has an Edit button that opens EditSolutionQuickPopup"
+    try:
+        page_src = read_file("frontend/src/components/AdminOnboardSolutionPage.tsx")
+        if "import { EditSolutionQuickPopup }" not in page_src:
+            fail(name, "AdminOnboardSolutionPage.tsx does not import EditSolutionQuickPopup"); return
+        if "onClick={() => setEditingSolution(sol)}" not in page_src:
+            fail(name, "no per-row Edit button wired to open the quick-edit popup"); return
+        if "<EditSolutionQuickPopup" not in page_src:
+            fail(name, "EditSolutionQuickPopup is not rendered"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui30_quick_edit_popup_has_title_url_thumbnail_only():
+    name = "MSUI30 (static): EditSolutionQuickPopup only edits title, URL, and thumbnail — no tags/credentials/portal-mapping fields"
+    try:
+        src = read_file("frontend/src/components/EditSolutionQuickPopup.tsx")
+        if "Solution Name / Title" not in src:
+            fail(name, "no title field"); return
+        if "Application URL" not in src:
+            fail(name, "no URL field"); return
+        if "Visual Card Thumbnail Setup" not in src:
+            fail(name, "no thumbnail setup section"); return
+        if "Tag Categories" in src or "Credentials Instruction" in src or "STEP 1" in src:
+            fail(name, "quick-edit popup pulls in fields beyond title/URL/thumbnail"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui31_quick_edit_locks_url_for_deployed_solutions():
+    name = "MSUI31 (static): the URL field is locked (disabled) when editing a solution deployed via Deploy Solution, editable otherwise"
+    try:
+        src = read_file("frontend/src/components/EditSolutionQuickPopup.tsx")
+        if "const isDeployed = !!solution.deployedSlug;" not in src:
+            fail(name, "no isDeployed check based on solution.deployedSlug"); return
+        idx = src.index("{isDeployed ? (")
+        body = src[idx:idx + 500]
+        if "disabled" not in body:
+            fail(name, "URL input is not disabled in the deployed branch"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui32_quick_edit_submits_minimal_partial_payload():
+    name = "MSUI32 (static): EditSolutionQuickPopup submits only id/title/url/thumbnail — a partial merge, not the full solution object"
+    try:
+        src = read_file("frontend/src/components/EditSolutionQuickPopup.tsx")
+        if 'onRefresh("update", { id: solution.id, title: title.trim(), url: appUrl, thumbnail })' not in src:
+            fail(name, "submit does not send the expected minimal partial-update payload"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 # ── run all tests ─────────────────────────────────────────────────────────────
 
 TESTS = [
@@ -3126,6 +3186,10 @@ TESTS = [
     test_msui26_onboard_form_has_no_step1_or_import_section,
     test_msui27_new_solutions_always_land_unmapped,
     test_msui28_editing_still_preserves_existing_mapping_silently,
+    test_msui29_repository_row_has_edit_button,
+    test_msui30_quick_edit_popup_has_title_url_thumbnail_only,
+    test_msui31_quick_edit_locks_url_for_deployed_solutions,
+    test_msui32_quick_edit_submits_minimal_partial_payload,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]
