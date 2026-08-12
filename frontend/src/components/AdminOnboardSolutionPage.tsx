@@ -5,7 +5,7 @@
 
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { PlusCircle, Rocket, Link2 } from "lucide-react";
+import { PlusCircle, Rocket, Link2, Download } from "lucide-react";
 import { Solution, Collateral, SubdomainPortal } from "../../../shared/types";
 import { AdminSolutions } from "./AdminSolutions";
 import { DeploySolutionForm } from "./DeploySolutionForm";
@@ -32,7 +32,74 @@ export function AdminOnboardSolutionPage({
   initialPortal = null,
 }: AdminOnboardSolutionPageProps) {
   const [openPopup, setOpenPopup] = useState<"onboard" | "deploy" | null>(null);
+  const [updatingRepo, setUpdatingRepo] = useState(false);
   const subdomainProp = subdomains.map((s) => ({ id: s.id, name: s.name, displayName: s.displayName }));
+
+  // Pulls every solution from Mobius + TechMobius that isn't already in the hub
+  // (deduped by title) and lands them in the Hub Repository, unmapped — the same
+  // dedup + collateral-import behavior as the "Import from Portal" pickers, just
+  // bulk and source-wide instead of a manual selection.
+  const handleUpdateRepository = async () => {
+    setUpdatingRepo(true);
+    try {
+      const res = await fetch("/api/admin/external-portals/solutions", { credentials: "include" });
+      if (!res.ok) {
+        alert("Could not reach Mobius/TechMobius portals.");
+        return;
+      }
+      const portalSolutions: { mobius: { id: string; title: string }[]; techmobius: { id: string; title: string }[] } = await res.json();
+      const existingTitles = new Set(solutions.map((s) => s.title.toLowerCase().trim()));
+
+      const jobs: { portal: "mobius" | "techmobius"; solutionIds: string[] }[] = [];
+      for (const portal of ["mobius", "techmobius"] as const) {
+        const ids = (portalSolutions[portal] ?? [])
+          .filter((s) => !existingTitles.has((s.title || "").toLowerCase().trim()))
+          .map((s) => s.id);
+        if (ids.length > 0) jobs.push({ portal, solutionIds: ids });
+      }
+
+      if (jobs.length === 0) {
+        alert("Everything from Mobius and TechMobius is already in the repository — nothing to update.");
+        return;
+      }
+
+      let totalSolutions = 0;
+      let totalCollaterals = 0;
+      let totalSkipped = 0;
+      const errors: string[] = [];
+
+      for (const job of jobs) {
+        try {
+          const importRes = await fetch("/api/admin/external-portals/import", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ portal: job.portal, solutionIds: job.solutionIds, customerNames: [] }),
+          });
+          const data = await importRes.json();
+          if (!importRes.ok) {
+            errors.push(data.error || `Import from ${job.portal} failed.`);
+            continue;
+          }
+          totalSolutions += data.importedSolutions || 0;
+          totalCollaterals += data.importedCollaterals || 0;
+          totalSkipped += data.skippedSolutions || 0;
+        } catch {
+          errors.push(`Import from ${job.portal} failed — server unreachable.`);
+        }
+      }
+
+      await onReload?.();
+
+      const summary = `Added ${totalSolutions} new solution(s) and ${totalCollaterals} linked collateral(s) to the repository.` +
+        (totalSkipped > 0 ? ` Skipped ${totalSkipped} duplicate(s).` : "");
+      alert(errors.length > 0 ? `${summary}\n\n${errors.join("\n")}` : summary);
+    } catch {
+      alert("Server error updating the repository.");
+    } finally {
+      setUpdatingRepo(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -88,12 +155,26 @@ export function AdminOnboardSolutionPage({
       {/* Solution Repository — every solution in the hub, regardless of how many
           portals (if any) it's currently mapped to. */}
       <div>
-        <h3 className="font-display text-base font-bold text-slate-900 leading-tight">
-          Solution Repository
-        </h3>
-        <p className="text-xs text-slate-500 mb-3">
-          Every solution onboarded to the hub — a solution can be mapped to more than one portal from the Map Solutions page.
-        </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="font-display text-base font-bold text-slate-900 leading-tight">
+              Solution Repository
+            </h3>
+            <p className="text-xs text-slate-500 mb-3">
+              Every solution onboarded to the hub — a solution can be mapped to more than one portal from the Map Solutions page.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleUpdateRepository}
+            disabled={updatingRepo}
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50 shrink-0"
+            title="Import every new solution from Mobius and TechMobius (duplicates skipped)"
+          >
+            <Download className={`h-3.5 w-3.5 ${updatingRepo ? "animate-pulse" : ""}`} />
+            {updatingRepo ? "Updating…" : "Update"}
+          </button>
+        </div>
         <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 text-slate-500 text-[10px] font-mono uppercase tracking-wider">

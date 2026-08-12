@@ -2848,7 +2848,7 @@ def test_msui20_solution_repository_section_below_cards():
         repo_idx = src.index("Solution Repository")
         if repo_idx < cards_idx:
             fail(name, "Solution Repository section appears before the cards, not below them"); return
-        body = src[repo_idx:repo_idx + 2500]
+        body = src[repo_idx:repo_idx + 5000]
         if "Solution Name" not in body:
             fail(name, "no Solution Name column"); return
         if ">URL<" not in body:
@@ -2859,6 +2859,44 @@ def test_msui20_solution_repository_section_below_cards():
             fail(name, "repository does not iterate over every solution (not just unmapped ones)"); return
         if "collaterals.filter((c) => c.linkedSolutionId === sol.id).length" not in body:
             fail(name, "collateral count is not computed per-solution"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui21_repository_update_button_dedupes_from_both_portals():
+    name = "MSUI21 (static): the Solution Repository 'Update' button bulk-imports from Mobius+TechMobius with title-based dedup, landing new items unmapped"
+    try:
+        src = read_file("frontend/src/components/AdminOnboardSolutionPage.tsx")
+        idx = src.index("const handleUpdateRepository")
+        body = src[idx:idx + 2500]
+        if '"/api/admin/external-portals/solutions"' not in body:
+            fail(name, "does not fetch the combined Mobius/TechMobius solutions list"); return
+        if "existingTitles.has" not in body:
+            fail(name, "does not dedupe against solutions already in the repository by title"); return
+        if '"mobius", "techmobius"' not in body:
+            fail(name, "does not pull from both mobius and techmobius"); return
+        if '"/api/admin/external-portals/import"' not in body:
+            fail(name, "does not call the server-side import endpoint"); return
+        if "customerNames: []" not in body:
+            fail(name, "imported solutions are not left unmapped (Hub Repository) by default"); return
+        button_idx = src.index("Solution Repository")
+        button_body = src[button_idx:button_idx + 1200]
+        if "onClick={handleUpdateRepository}" not in button_body:
+            fail(name, "no Update button wired to handleUpdateRepository near the Solution Repository header"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui22_external_import_empty_customer_names_means_unmapped_not_all():
+    name = "MSUI22 (static): external-portals import no longer defaults an empty/missing customerNames to ['all']"
+    try:
+        src = read_file("backend/routes/external-portals.routes.ts")
+        if 'customerNames.length > 0 ? customerNames : ["all"]' in src:
+            fail(name, "import route still defaults empty customerNames to ['all'] instead of leaving the solution unmapped"); return
+        if "const targetCustomerNames = Array.isArray(customerNames) ? customerNames : [];" not in src:
+            fail(name, "targetCustomerNames does not fall back to an empty (unmapped) array"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -3082,6 +3120,8 @@ TESTS = [
     test_msui18_view_popup_shares_layoutid_with_its_row_for_seamless_transition,
     test_msui19_onboard_deploy_cards_are_shorter,
     test_msui20_solution_repository_section_below_cards,
+    test_msui21_repository_update_button_dedupes_from_both_portals,
+    test_msui22_external_import_empty_customer_names_means_unmapped_not_all,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

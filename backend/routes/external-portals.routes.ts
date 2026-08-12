@@ -190,7 +190,11 @@ router.post("/external-portals/import", async (req, res) => {
 
   const adminEmail = (req as any).adminEmail;
   const isSuperAdmin = isSuperAdminRole((req as any).userRole);
-  const targetCustomerNames = Array.isArray(customerNames) && customerNames.length > 0 ? customerNames : ["all"];
+  // No "all" fallback: an empty/missing selection means the import targets the
+  // Hub Repository only (unmapped to any portal), matching every other onboarding
+  // path in this app — the caller is responsible for passing an explicit target
+  // (e.g. ["all"] or specific portal names) if that's actually what's wanted.
+  const targetCustomerNames = Array.isArray(customerNames) ? customerNames : [];
   const base = PORTALS[portal];
   const hubOrigin = resolveHubOrigin(req);
 
@@ -236,7 +240,7 @@ router.post("/external-portals/import", async (req, res) => {
       tags,
       createdAt: new Date().toISOString(),
       enabled: true,
-      customerName: targetCustomerNames[0],
+      customerName: targetCustomerNames[0] || "",
       customerNames: targetCustomerNames,
       createdBy: adminEmail || undefined,
     };
@@ -275,7 +279,7 @@ router.post("/external-portals/import", async (req, res) => {
           : [],
         createdAt: new Date().toISOString(),
         enabled: true,
-        customerName: targetCustomerNames[0],
+        customerName: targetCustomerNames[0] || "",
         customerNames: targetCustomerNames,
         googleDriveUrl: driveUrl,
         tag: c.tag || c.category || kind || undefined,
