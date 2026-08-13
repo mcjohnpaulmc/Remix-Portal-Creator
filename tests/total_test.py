@@ -2755,8 +2755,8 @@ def test_msui20_solution_repository_section_below_cards():
             fail(name, "no URL column"); return
         if "Collaterals" not in body:
             fail(name, "no Collaterals count column"); return
-        if "solutions.map((sol) =>" not in body:
-            fail(name, "repository does not iterate over every solution (not just unmapped ones)"); return
+        if "filteredSolutions.map((sol) =>" not in body:
+            fail(name, "repository does not iterate over the (filterable) solutions list"); return
         if "collaterals.filter((c) => c.linkedSolutionId === sol.id).length" not in body:
             fail(name, "collateral count is not computed per-solution"); return
         ok(name)
@@ -2781,7 +2781,7 @@ def test_msui21_repository_update_button_dedupes_from_both_portals():
         if "customerNames: []" not in body:
             fail(name, "imported solutions are not left unmapped (Hub Repository) by default"); return
         button_idx = src.index("Solution Repository")
-        button_body = src[button_idx:button_idx + 1200]
+        button_body = src[button_idx:button_idx + 3000]
         if "onClick={handleUpdateRepository}" not in button_body:
             fail(name, "no Update button wired to handleUpdateRepository near the Solution Repository header"); return
         ok(name)
@@ -3059,6 +3059,61 @@ def test_msui37_backend_rename_subdomain_decommissions_old_subdomain_first_creat
         fail(name, str(e))
 
 
+# ── Feature — MSUI38: Total/Onboarded/Deployed sliding filter widget ───────────
+
+def test_msui38_repo_filter_widget_left_of_update_with_three_segments():
+    name = "MSUI38 (static): a Total/Onboarded/Deployed filter widget sits left of the Update button, in that order"
+    try:
+        src = read_file("frontend/src/components/AdminOnboardSolutionPage.tsx")
+        widget_idx = src.index('repoFilters.map((f, i) =>')
+        update_idx = src.index('onClick={handleUpdateRepository}')
+        if not (widget_idx < update_idx):
+            fail(name, "filter widget does not appear before (left of) the Update button in source order"); return
+        idx = src.index('{ key: "all", label: "Total", count: totalCount }')
+        body = src[idx:idx + 300]
+        if '{ key: "onboarded", label: "Onboarded", count: onboardedCount }' not in body:
+            fail(name, "Onboarded segment does not follow Total"); return
+        if '{ key: "deployed", label: "Deployed", count: deployedCount }' not in body:
+            fail(name, "Deployed segment does not follow Onboarded"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui39_repo_filter_defaults_to_total_and_actually_filters_rows():
+    name = "MSUI39 (static): the filter defaults to 'all' (Total) and actually narrows the repository rows by onboarded/deployed status"
+    try:
+        src = read_file("frontend/src/components/AdminOnboardSolutionPage.tsx")
+        if 'useState<"all" | "onboarded" | "deployed">("all")' not in src:
+            fail(name, "repoFilter does not default to 'all' (the Total segment)"); return
+        idx = src.index("const filteredSolutions = solutions.filter((s) => {")
+        body = src[idx:idx + 300]
+        if 'if (repoFilter === "onboarded") return !s.deployedSlug;' not in body:
+            fail(name, "onboarded filter does not exclude deployed solutions"); return
+        if 'if (repoFilter === "deployed") return !!s.deployedSlug;' not in body:
+            fail(name, "deployed filter does not restrict to deployed solutions"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui40_repo_filter_segments_share_layoutid_for_seamless_slide():
+    name = "MSUI40 (static): the active filter segment's glass highlight shares a layoutId so it slides seamlessly between segments"
+    try:
+        src = read_file("frontend/src/components/AdminOnboardSolutionPage.tsx")
+        if 'layoutId="repo-filter-highlight"' not in src:
+            fail(name, "no shared layoutId on the sliding highlight"); return
+        idx = src.index('layoutId="repo-filter-highlight"')
+        body = src[max(0, idx - 200):idx + 300]
+        if "backdrop-blur" not in body:
+            fail(name, "highlight does not have a glass/frosted (backdrop-blur) look"); return
+        if "{active &&" not in body:
+            fail(name, "highlight is not conditionally rendered only in the active segment"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 # ── run all tests ─────────────────────────────────────────────────────────────
 
 TESTS = [
@@ -3286,6 +3341,9 @@ TESTS = [
     test_msui35_delete_warns_about_unassigning_subdomain_when_deployed,
     test_msui36_edit_subdomain_button_toggles_to_save_changes,
     test_msui37_backend_rename_subdomain_decommissions_old_subdomain_first_creates_new,
+    test_msui38_repo_filter_widget_left_of_update_with_three_segments,
+    test_msui39_repo_filter_defaults_to_total_and_actually_filters_rows,
+    test_msui40_repo_filter_segments_share_layoutid_for_seamless_slide,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]
