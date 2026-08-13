@@ -2949,7 +2949,7 @@ def test_msui31_quick_edit_locks_url_for_deployed_solutions():
         if "const isDeployed = !!solution.deployedSlug;" not in src:
             fail(name, "no isDeployed check based on solution.deployedSlug"); return
         idx = src.index("{isDeployed ? (")
-        body = src[idx:idx + 500]
+        body = src[idx:idx + 1200]
         if "disabled" not in body:
             fail(name, "URL input is not disabled in the deployed branch"); return
         ok(name)
@@ -2963,6 +2963,97 @@ def test_msui32_quick_edit_submits_minimal_partial_payload():
         src = read_file("frontend/src/components/EditSolutionQuickPopup.tsx")
         if 'onRefresh("update", { id: solution.id, title: title.trim(), url: appUrl, thumbnail })' not in src:
             fail(name, "submit does not send the expected minimal partial-update payload"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+# ── Feature — MSUI33: Modify rename, Delete Solution, Edit Subdomain rename ────
+
+def test_msui33_repository_edit_button_renamed_to_modify_no_icon():
+    name = "MSUI33 (static): the Solution Repository's Edit button is renamed to 'Modify' with no pencil icon"
+    try:
+        src = read_file("frontend/src/components/AdminOnboardSolutionPage.tsx")
+        if "Edit2" in src:
+            fail(name, "AdminOnboardSolutionPage.tsx still imports/uses the Edit2 pencil icon"); return
+        idx = src.index("onClick={() => setEditingSolution(sol)}")
+        body = src[idx:idx + 300]
+        if ">\n                        Modify\n" not in body and "Modify" not in body:
+            fail(name, "Modify button label not found"); return
+        if "\n                        Edit\n" in body:
+            fail(name, "button still labeled Edit"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui34_quick_edit_has_delete_solution_button_opposite_apply():
+    name = "MSUI34 (static): EditSolutionQuickPopup has a Delete Solution button on the opposite side of Apply Modifications"
+    try:
+        src = read_file("frontend/src/components/EditSolutionQuickPopup.tsx")
+        footer_idx = src.index('className="pt-3 border-t border-slate-100 flex items-center justify-between')
+        footer_body = src[footer_idx:footer_idx + 1200]
+        delete_idx = footer_body.index("Delete Solution")
+        apply_idx = footer_body.index("Apply Modifications")
+        if not (delete_idx < apply_idx):
+            fail(name, "Delete Solution does not appear before (left of) Apply Modifications in the justify-between footer"); return
+        if "onClick={handleDelete}" not in footer_body:
+            fail(name, "Delete Solution button is not wired to handleDelete"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui35_delete_warns_about_unassigning_subdomain_when_deployed():
+    name = "MSUI35 (static): deleting a deployed solution warns that its subdomain will be unassigned first"
+    try:
+        src = read_file("frontend/src/components/EditSolutionQuickPopup.tsx")
+        idx = src.index("const handleDelete = async () => {")
+        body = src[idx:idx + 500]
+        if "unassigned" not in body.lower():
+            fail(name, "no mention of the subdomain being unassigned in the deployed delete warning"); return
+        if 'onRefresh("delete", { id: solution.id })' not in body:
+            fail(name, "delete does not call onRefresh with the delete action (backend cascade handles DNS/IIS cleanup)"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui36_edit_subdomain_button_toggles_to_save_changes():
+    name = "MSUI36 (static): the Edit Subdomain button unlocks the field, then switches to an orange Save Changes button once the value differs"
+    try:
+        src = read_file("frontend/src/components/EditSolutionQuickPopup.tsx")
+        if "const subdomainChanged = subdomainSlug.trim() !== \"\" && subdomainSlug !== currentSlug;" not in src:
+            fail(name, "no subdomainChanged detection comparing the edited slug to the current one"); return
+        idx = src.index("onClick={handleSubdomainButtonClick}")
+        body = src[idx:idx + 700]
+        if "bg-orange-600" not in body:
+            fail(name, "button does not switch to an orange 'changed' style"); return
+        if '"Save Changes"' not in body or '"Edit Subdomain"' not in body:
+            fail(name, "button does not toggle between 'Edit Subdomain' and 'Save Changes' labels"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui37_backend_rename_subdomain_decommissions_old_subdomain_first_creates_new():
+    name = "MSUI37 (static): the rename-subdomain action stands up the new subdomain before tearing down and fully decommissioning the old one"
+    try:
+        src = read_file("backend/routes/content.routes.ts")
+        idx = src.index('action === "rename-subdomain"')
+        body = src[idx:idx + 3000]
+        if "ensureDnsRecord(cleanSlug, domain)" not in body:
+            fail(name, "does not create a DNS record for the new subdomain"); return
+        if "ensureStaticHtmlIisSite(cleanSlug, newFqdn, contentDir)" not in body:
+            fail(name, "does not create an IIS site for the new subdomain"); return
+        if "removeStaticHtmlIisSite(oldSlug)" not in body:
+            fail(name, "does not remove the old IIS site — the app would still be reachable at the previous subdomain"); return
+        if "deleteDnsRecord(oldSlug, domain)" not in body:
+            fail(name, "does not delete the old DNS record — the previous subdomain would still resolve"); return
+        new_idx = body.index("ensureStaticHtmlIisSite(cleanSlug")
+        old_idx = body.index("removeStaticHtmlIisSite(oldSlug)")
+        if not (new_idx < old_idx):
+            fail(name, "old subdomain is torn down before the new one is stood up (risks a dead app mid-rename)"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -3190,6 +3281,11 @@ TESTS = [
     test_msui30_quick_edit_popup_has_title_url_thumbnail_only,
     test_msui31_quick_edit_locks_url_for_deployed_solutions,
     test_msui32_quick_edit_submits_minimal_partial_payload,
+    test_msui33_repository_edit_button_renamed_to_modify_no_icon,
+    test_msui34_quick_edit_has_delete_solution_button_opposite_apply,
+    test_msui35_delete_warns_about_unassigning_subdomain_when_deployed,
+    test_msui36_edit_subdomain_button_toggles_to_save_changes,
+    test_msui37_backend_rename_subdomain_decommissions_old_subdomain_first_creates_new,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

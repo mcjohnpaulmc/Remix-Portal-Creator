@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import path from "path";
 import { Router } from "express";
 import { Solution, Collateral, CurrentProject, UpcomingProject } from "../../shared/types";
 import { readDatabase, writeDatabase } from "../storage/db";
@@ -10,6 +11,10 @@ import { autoDeployLivePortals } from "../portal/deploy";
 import { buildAdminSafeDbView } from "../utils/dbView";
 import { isSuperAdminRole } from "../auth";
 import { deleteSolutionCascade } from "../utils/solutionCascade";
+import { DEPLOYED_SOLUTIONS_DIR } from "../config";
+import { ensureDnsRecord, deleteDnsRecord } from "../dns/cloudflare";
+import { ensureStaticHtmlIisSite, removeStaticHtmlIisSite } from "../iis/site";
+import { logger } from "../logger";
 
 const router = Router();
 
@@ -74,6 +79,62 @@ router.post("/solutions", async (req, res) => {
       action: "Solution Deleted",
       details: `Solution with ID "${solution.id}" was deleted` +
         (linkedCollateralCount > 0 ? `, along with ${linkedCollateralCount} linked collateral(s).` : "."),
+      date: new Date().toISOString()
+    });
+  } else if (action === "rename-subdomain") {
+    // Moves a deployed standalone HTML solution to a new subdomain — points DNS
+    // and IIS at the new slug first, then tears down the old DNS record and IIS
+    // site so the app stops resolving at the previous subdomain entirely.
+    const target = db.solutions.find(s => s.id === solution.id);
+    if (!target) {
+      return res.status(404).json({ error: "Solution not found." });
+    }
+    if (target.createdBy && target.createdBy !== adminEmail && !isSuperAdmin) {
+      return res.status(403).json({ error: "You do not have permission to modify this solution." });
+    }
+    if (!target.deployedSlug) {
+      return res.status(400).json({ error: "This solution was not deployed to its own subdomain." });
+    }
+
+    const domain = target.deployedDomain || "mobiusservices.io";
+    const cleanSlug = String(solution.newSubdomain || "").toLowerCase().replace(/[^a-z0-9-]/g, "");
+    if (!cleanSlug) {
+      return res.status(400).json({ error: "Subdomain has invalid characters." });
+    }
+
+    const oldSlug = target.deployedSlug;
+    if (cleanSlug === oldSlug) {
+      return res.json({ success: true, database: buildAdminSafeDbView(db, adminEmail, isSuperAdmin) });
+    }
+
+    const taken = (db.subdomains || []).some(s => s.name === cleanSlug) ||
+      (db.solutions || []).some(s => s.id !== target.id && s.deployedSlug === cleanSlug);
+    if (taken) {
+      return res.status(400).json({ error: `Subdomain "${cleanSlug}.${domain}" is already in use.` });
+    }
+
+    const contentDir = path.join(DEPLOYED_SOLUTIONS_DIR, oldSlug);
+    const newFqdn = `${cleanSlug}.${domain}`;
+
+    // Stand up the new subdomain before tearing down the old one, so a failure
+    // here leaves the app still reachable at its current address.
+    const dnsOk = await ensureDnsRecord(cleanSlug, domain).catch(() => false);
+    await ensureStaticHtmlIisSite(cleanSlug, newFqdn, contentDir).catch(err =>
+      logger.error(`rename-subdomain-${cleanSlug}`, `IIS site creation failed: ${err?.message}`)
+    );
+
+    // Now decommission the old address — it must stop resolving/serving entirely.
+    await removeStaticHtmlIisSite(oldSlug).catch(() => {});
+    await deleteDnsRecord(oldSlug, domain).catch(() => {});
+
+    target.deployedSlug = cleanSlug;
+    target.url = `https://${newFqdn}`;
+
+    db.userLogs.unshift({
+      id: `log-${Date.now()}`,
+      email: adminEmail || "admin@mobiusservices.co.in",
+      action: "Solution Subdomain Renamed",
+      details: `Moved deployed solution "${target.title}" from ${oldSlug}.${domain} to ${newFqdn}. DNS: ${dnsOk ? "active" : "pending"}.`,
       date: new Date().toISOString()
     });
   }

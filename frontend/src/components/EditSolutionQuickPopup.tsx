@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from "react";
-import { X, Globe, Image, Upload, Lock } from "lucide-react";
+import { X, Globe, Image, Upload, Lock, Trash2 } from "lucide-react";
 import { Solution } from "../../../shared/types";
 
 interface EditSolutionQuickPopupProps {
@@ -36,10 +36,20 @@ export function EditSolutionQuickPopup({
   onClose,
 }: EditSolutionQuickPopupProps) {
   const isDeployed = !!solution.deployedSlug;
+  const deployedDomain = solution.deployedDomain || "mobiusservices.io";
   const [title, setTitle] = useState(solution.title);
   const [appUrl, setAppUrl] = useState(solution.url);
   const [thumbnail, setThumbnail] = useState(solution.thumbnail);
   const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  // Deployed-solution subdomain rename — separate from the title/URL/thumbnail
+  // "Apply Modifications" save, since it drives its own DNS/IIS server-side flow.
+  const [subdomainEditing, setSubdomainEditing] = useState(false);
+  const [currentSlug, setCurrentSlug] = useState(solution.deployedSlug || "");
+  const [subdomainSlug, setSubdomainSlug] = useState(solution.deployedSlug || "");
+  const [savingSubdomain, setSavingSubdomain] = useState(false);
+  const subdomainChanged = subdomainSlug.trim() !== "" && subdomainSlug !== currentSlug;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,6 +65,42 @@ export function EditSolutionQuickPopup({
       alert("Execution error while trying to save changes.");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleSubdomainButtonClick = async () => {
+    if (!subdomainEditing) {
+      setSubdomainEditing(true);
+      return;
+    }
+    if (!subdomainChanged) return;
+    setSavingSubdomain(true);
+    try {
+      await onRefresh("rename-subdomain", { id: solution.id, newSubdomain: subdomainSlug });
+      const newFqdn = `${subdomainSlug}.${deployedDomain}`;
+      setCurrentSlug(subdomainSlug);
+      setAppUrl(`https://${newFqdn}`);
+      setSubdomainEditing(false);
+    } catch {
+      alert("Execution error while trying to change the subdomain.");
+    } finally {
+      setSavingSubdomain(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    const warning = isDeployed
+      ? `Delete "${solution.title}"? Its subdomain (${currentSlug}.${deployedDomain}) will be unassigned first — the app will no longer be reachable there. This cannot be undone.`
+      : `Delete "${solution.title}"? This cannot be undone.`;
+    if (!confirm(warning)) return;
+    setDeleting(true);
+    try {
+      await onRefresh("delete", { id: solution.id });
+      onClose();
+    } catch {
+      alert("Execution error while trying to delete the solution.");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -88,14 +134,40 @@ export function EditSolutionQuickPopup({
           </label>
           {isDeployed ? (
             <>
-              <input
-                type="url"
-                value={appUrl}
-                disabled
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-400 bg-slate-50 cursor-not-allowed"
-              />
+              <div className="flex items-center gap-2">
+                {subdomainEditing ? (
+                  <div className="flex-1 flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={subdomainSlug}
+                      onChange={(e) => setSubdomainSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                      className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono text-slate-900 focus:outline-hidden focus:ring-1 focus:ring-orange-500"
+                    />
+                    <span className="text-[10.5px] text-slate-400 font-mono whitespace-nowrap">.{deployedDomain}</span>
+                  </div>
+                ) : (
+                  <input
+                    type="url"
+                    value={appUrl}
+                    disabled
+                    className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-400 bg-slate-50 cursor-not-allowed"
+                  />
+                )}
+                <button
+                  type="button"
+                  onClick={handleSubdomainButtonClick}
+                  disabled={savingSubdomain || (subdomainEditing && !subdomainChanged)}
+                  className={`shrink-0 px-3 py-2 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 ${
+                    subdomainChanged
+                      ? "bg-orange-600 hover:bg-orange-500 text-white"
+                      : "border border-slate-200 hover:bg-slate-50 text-slate-600"
+                  }`}
+                >
+                  {savingSubdomain ? "Saving…" : subdomainChanged ? "Save Changes" : "Edit Subdomain"}
+                </button>
+              </div>
               <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
-                <Lock className="h-3 w-3 shrink-0" /> Deployed to its own subdomain — the URL is managed automatically and can't be edited here.
+                <Lock className="h-3 w-3 shrink-0" /> Deployed to its own subdomain — use Edit Subdomain to move it elsewhere.
               </p>
             </>
           ) : (
@@ -196,21 +268,32 @@ export function EditSolutionQuickPopup({
         </div>
       </div>
 
-      <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3.5">
+      <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3.5">
         <button
           type="button"
-          onClick={onClose}
-          className="px-4 py-2 border border-slate-200 hover:border-slate-350 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg transition-colors"
+          onClick={handleDelete}
+          disabled={deleting}
+          className="flex items-center gap-1.5 px-4 py-2 bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 text-xs font-semibold rounded-lg transition-colors disabled:opacity-50"
         >
-          Cancel
+          <Trash2 className="h-3.5 w-3.5" />
+          {deleting ? "Deleting…" : "Delete Solution"}
         </button>
-        <button
-          type="submit"
-          disabled={submitting}
-          className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50"
-        >
-          {submitting ? "Saving changes..." : "Apply Modifications"}
-        </button>
+        <div className="flex items-center gap-3.5">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 border border-slate-200 hover:border-slate-350 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50"
+          >
+            {submitting ? "Saving changes..." : "Apply Modifications"}
+          </button>
+        </div>
       </div>
     </form>
   );

@@ -5,7 +5,7 @@
 
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { PlusCircle, Rocket, Link2, Download, Edit2 } from "lucide-react";
+import { PlusCircle, Rocket, Link2, Download } from "lucide-react";
 import { Solution, Collateral, SubdomainPortal } from "../../../shared/types";
 import { AdminSolutions } from "./AdminSolutions";
 import { DeploySolutionForm } from "./DeploySolutionForm";
@@ -180,7 +180,7 @@ export function AdminOnboardSolutionPage({
                 <th className="px-4 py-2.5 font-semibold">Solution Name</th>
                 <th className="px-4 py-2.5 font-semibold">URL</th>
                 <th className="px-4 py-2.5 font-semibold text-right">Collaterals</th>
-                <th className="px-4 py-2.5 font-semibold text-right">Edit</th>
+                <th className="px-4 py-2.5 font-semibold text-right">Modify</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -209,10 +209,10 @@ export function AdminOnboardSolutionPage({
                       <button
                         type="button"
                         onClick={() => setEditingSolution(sol)}
-                        className="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 rounded bg-slate-50 hover:bg-slate-100 text-slate-600 text-[10px] font-semibold transition-colors"
-                        title="Edit Solution"
+                        className="inline-flex items-center px-2 py-1 border border-slate-200 rounded bg-slate-50 hover:bg-slate-100 text-slate-600 text-[10px] font-semibold transition-colors"
+                        title="Modify Solution"
                       >
-                        <Edit2 className="h-3 w-3" /> Edit
+                        Modify
                       </button>
                     </td>
                   </tr>
