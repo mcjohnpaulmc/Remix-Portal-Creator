@@ -750,6 +750,22 @@ export default function App() {
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
 
+  // Portal subdomain rename — separate from the display-name "Save Settings"
+  // above, since it drives its own DNS/IIS server-side migration.
+  const [subdomainEditing, setSubdomainEditing] = useState(false);
+  const [subdomainSlug, setSubdomainSlug] = useState("");
+  const [savingSubdomainRename, setSavingSubdomainRename] = useState(false);
+
+  // Bottom-right toast notification — shared by both "Edit Subdomain" flows
+  // (this portal one, and the deployed-solution one on the Onboard Solution page).
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showToast = (message: string) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToastMessage(message);
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), 3500);
+  };
+
   const handleSavePortalSettings = async () => {
     if (!portalSettingsTarget) return;
     setSettingsSaving(true);
@@ -775,6 +791,33 @@ export default function App() {
       alert("Server error saving portal settings.");
     } finally {
       setSettingsSaving(false);
+    }
+  };
+
+  const handleRenamePortalSubdomain = async () => {
+    if (!portalSettingsTarget) return;
+    setSavingSubdomainRename(true);
+    try {
+      const res = await adminFetch("/api/admin/subdomains", {
+        method: "POST",
+        body: JSON.stringify({
+          action: "rename-subdomain",
+          id: portalSettingsTarget.id,
+          newSubdomain: subdomainSlug,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        await fetchPortalData();
+        setPortalSettingsTarget(null);
+        showToast("Changes saved successfully");
+      } else {
+        alert(data.error || "Failed to change the subdomain.");
+      }
+    } catch {
+      alert("Server error changing the subdomain.");
+    } finally {
+      setSavingSubdomainRename(false);
     }
   };
 
@@ -1609,6 +1652,7 @@ export default function App() {
                       onRefresh={async (action, data) => handleAdminDatabaseUpdate("solutions", action, data)}
                       onReload={fetchPortalData}
                       adminUserEmail={userEmail || ""}
+                      onNotify={showToast}
                     />
                   )}
 
@@ -1887,6 +1931,8 @@ export default function App() {
                                         setPortalSettingsTarget(portal);
                                         setSettingsDisplayName(portal.displayName);
                                         setSettingsSaved(false);
+                                        setSubdomainEditing(false);
+                                        setSubdomainSlug(portal.name);
                                       }}
                                       className="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold text-[10px] rounded-lg transition-colors cursor-pointer flex items-center gap-1"
                                       title="Portal settings"
@@ -2362,6 +2408,51 @@ export default function App() {
                   )}
                 </div>
 
+                {/* Edit Subdomain — unlocks the slug for editing; the button turns into
+                    an orange "Save Changes" once the value actually differs. Saving
+                    unassigns the old subdomain and points the portal at the new one. */}
+                {!portalSettingsTarget.isDummy && (() => {
+                  const subdomainChanged = subdomainSlug.trim() !== "" && subdomainSlug !== portalSettingsTarget.name;
+                  return (
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-semibold text-slate-700">Subdomain</label>
+                      <div className="flex items-center gap-2">
+                        {subdomainEditing ? (
+                          <div className="flex-1 flex items-center gap-1.5 px-3 py-2 bg-white border border-orange-300 rounded-lg overflow-hidden">
+                            <input
+                              type="text"
+                              value={subdomainSlug}
+                              onChange={(e) => setSubdomainSlug(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))}
+                              className="flex-1 min-w-0 text-xs font-mono text-slate-900 focus:outline-none"
+                              autoFocus
+                            />
+                            <span className="text-[10.5px] font-mono text-slate-400 shrink-0">.{portalSettingsTarget.domain || "mobiusservices.io"}</span>
+                          </div>
+                        ) : (
+                          <div className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-600 truncate">
+                            {portalSettingsTarget.name}.{portalSettingsTarget.domain || "mobiusservices.io"}
+                          </div>
+                        )}
+                        <button
+                          onClick={() => {
+                            if (!subdomainEditing) { setSubdomainEditing(true); return; }
+                            if (subdomainChanged) handleRenamePortalSubdomain();
+                          }}
+                          disabled={savingSubdomainRename || (subdomainEditing && !subdomainChanged)}
+                          className={`shrink-0 px-3 py-2 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 ${
+                            subdomainChanged
+                              ? "bg-orange-600 hover:bg-orange-500 text-white"
+                              : "border border-slate-200 hover:bg-slate-50 text-slate-600"
+                          }`}
+                        >
+                          {savingSubdomainRename ? "Saving…" : subdomainChanged ? "Save Changes" : "Edit Subdomain"}
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-slate-400">Renaming unassigns the previous subdomain and points this portal at the new one.</p>
+                    </div>
+                  );
+                })()}
+
                 {/* Onboard Assets shortcut */}
                 <div className="pt-1 border-t border-slate-100">
                   <button
@@ -2402,6 +2493,23 @@ export default function App() {
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Bottom-right toast — shared by the portal and deployed-solution "Edit
+          Subdomain" flows; stays mounted here so it survives the triggering
+          popup closing. */}
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 16 }}
+            className="fixed bottom-6 right-6 z-[100] flex items-center gap-2 px-4 py-3 bg-slate-900 text-white text-xs font-semibold rounded-xl shadow-2xl border border-slate-800"
+          >
+            <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+            {toastMessage}
+          </motion.div>
         )}
       </AnimatePresence>
 

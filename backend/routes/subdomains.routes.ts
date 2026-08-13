@@ -76,6 +76,84 @@ router.post("/subdomains", async (req, res) => {
     const safeView = buildAdminSafeDbView(db, adminEmail, isSuperAdmin);
     return res.json({ success: true, subdomains: safeView.subdomains, database: safeView });
 
+  } else if (action === "rename-subdomain") {
+    // Moves a portal's public subdomain to a new slug. The portal's id (and
+    // therefore its PM2 process, local data directory, port assignment, and S3
+    // prefix) never changes — only the DNS record, the IIS site's HostHeader
+    // binding, and the portal's `name` (which is what customerNames/collateral
+    // mappings and the displayed Access URL are keyed by) move to the new slug.
+    const targetId = id;
+    if (!targetId) return res.status(400).json({ error: "Portal id is required." });
+    const portal = (db.subdomains || []).find(s => s.id === targetId);
+    if (!portal) return res.status(404).json({ error: "Portal not found." });
+    if (portal.createdBy && portal.createdBy !== adminEmail && !isSuperAdmin) {
+      return res.status(403).json({ error: "You do not have permission to modify this portal." });
+    }
+    if (portal.isDummy) {
+      return res.status(400).json({ error: "Dummy portals run on localhost — there's no subdomain to rename." });
+    }
+
+    const newName = String(req.body.newSubdomain || "").trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
+    if (!newName) {
+      return res.status(400).json({ error: "Subdomain has invalid characters." });
+    }
+    const oldName = portal.name;
+    if (newName === oldName) {
+      const safeView = buildAdminSafeDbView(db, adminEmail, isSuperAdmin);
+      return res.json({ success: true, subdomains: safeView.subdomains, database: safeView });
+    }
+
+    const domain = portal.domain || "mobiusservices.io";
+    const taken = (db.subdomains || []).some(s => s.id !== targetId && (s.name === newName || s.id === newName)) ||
+      (db.solutions || []).some(s => s.deployedSlug === newName);
+    if (taken) {
+      return res.status(400).json({ error: `Subdomain "${newName}.${domain}" is already in use.` });
+    }
+
+    // Stand up the new subdomain before tearing down the old one, so a failure
+    // here leaves the portal still reachable at its current address.
+    const dnsOk = await ensureDnsRecord(newName, domain).catch(() => false);
+    if (portal.status === "live" && portal.port) {
+      await ensureIisSite(targetId, `${newName}.${domain}`, portal.port).catch(err =>
+        logger.error(`rename-portal-${targetId}`, `IIS rebind failed: ${err?.message}`)
+      );
+    }
+    // Now decommission the old address — it must stop resolving/serving entirely.
+    await deleteDnsRecord(oldName, domain).catch(() => {});
+
+    portal.name = newName;
+    if (portal.dnsStatus !== "not_required") portal.dnsStatus = dnsOk ? "active" : "pending";
+    if (db.subdomain === oldName) db.subdomain = newName;
+
+    // Keep every mapped solution/collateral/project pointed at this portal under
+    // its new public name — otherwise they'd silently vanish from its Map
+    // Solutions row (a customerName-only match would even read as unmapped).
+    const renameSlugRefs = (items: any[]) => (items || []).forEach((item: any) => {
+      if (Array.isArray(item.customerNames)) {
+        item.customerNames = item.customerNames.map((n: string) => (n === oldName ? newName : n));
+      }
+      if (item.customerName === oldName) item.customerName = newName;
+    });
+    renameSlugRefs(db.solutions);
+    renameSlugRefs(db.collaterals);
+    renameSlugRefs(db.currentProjects);
+    renameSlugRefs(db.upcomingProjects);
+
+    db.userLogs.unshift({
+      id: `log-${Date.now()}`,
+      email: adminEmail || "admin@mobiusservices.co.in",
+      action: "Portal Subdomain Renamed",
+      details: `Moved portal "${portal.displayName}" from ${oldName}.${domain} to ${newName}.${domain}. DNS: ${dnsOk ? "active" : "pending"}.`,
+      date: new Date().toISOString(),
+    });
+
+    writeDatabase(db);
+    // Push the portal's own snapshot immediately so a live instance picks up the
+    // new display name and re-matched content without waiting on other traffic.
+    await deployPortalInProcess(targetId, db, newName).catch(() => {});
+    const safeView = buildAdminSafeDbView(db, adminEmail, isSuperAdmin);
+    return res.json({ success: true, subdomains: safeView.subdomains, database: safeView });
+
   } else if (action === "create") {
     if (!resolvedName || !displayName) {
       return res.status(400).json({ error: "Subdomain name and Portal Display Name are required." });
@@ -218,10 +296,13 @@ router.post("/subdomains", async (req, res) => {
         logger.warn(`toggle-deploy`, `${targetId}: ${err?.message}`);
       }
       pm2SpawnPortal(targetId, portal.port);
-      // Fire-and-forget: DNS + IIS site for real (non-dummy) portals
+      // Fire-and-forget: DNS + IIS site for real (non-dummy) portals. The IIS
+      // site object itself stays keyed by the portal's permanent id (targetId);
+      // only the fqdn/HostHeader it binds to uses the portal's current public
+      // name, which can differ from id after a subdomain rename.
       if (!portal.isDummy && portal.domain) {
-        ensureDnsRecord(targetId, portal.domain).catch(() => {});
-        ensureIisSite(targetId, `${targetId}.${portal.domain}`, portal.port).catch(() => {});
+        ensureDnsRecord(portal.name, portal.domain).catch(() => {});
+        ensureIisSite(targetId, `${portal.name}.${portal.domain}`, portal.port).catch(() => {});
       }
     } else {
       // Awaited — a rapid live→sleep→live re-toggle must not respawn on a port
@@ -297,8 +378,10 @@ router.post("/subdomains", async (req, res) => {
       await removeIisSite(targetId).catch(() => {});
     }
     // DNS cleanup doesn't affect local port reuse — safe to leave fire-and-forget.
+    // Uses the portal's current name (it may have been renamed since creation),
+    // not its permanent id, since that's what the DNS record is actually keyed by.
     if (deletedPortal && !deletedPortal.isDummy && deletedPortal.domain) {
-      deleteDnsRecord(targetId, deletedPortal.domain).catch(() => {});
+      deleteDnsRecord(deletedPortal.name, deletedPortal.domain).catch(() => {});
     }
 
     // Free the port assignment
@@ -350,7 +433,7 @@ router.post("/refresh-dns", async (req, res) => {
   let updated = 0;
   await Promise.all(
     pendingPortals.map(async (portal) => {
-      const active = await checkDnsRecord(portal.id, portal.domain!).catch(() => false);
+      const active = await checkDnsRecord(portal.name, portal.domain!).catch(() => false);
       if (active) {
         portal.dnsStatus = "active";
         updated++;

@@ -1645,7 +1645,7 @@ def test_pc5_deploy_reload_verifies_slug_identity():
         src = read_file("backend/portal/deploy.ts")
         idx = src.index('path: "/api/reload"')
         body = src[idx:idx + 1200]
-        if "parsed.slug === cleanSlug" not in body:
+        if "parsed.slug === processId" not in body:
             fail(name, "reload handler does not verify the responder's slug matches the deploy target"); return
         ok(name)
     except Exception as e:
@@ -3114,6 +3114,153 @@ def test_msui40_repo_filter_segments_share_layoutid_for_seamless_slide():
         fail(name, str(e))
 
 
+# ── Feature — MSUI41: Portal subdomain rename + shared toast notification ──────
+
+def test_msui41_deploy_in_process_decouples_process_id_from_content_slug():
+    name = "MSUI41 (static): deployPortalInProcess takes a separate contentSlug so a renamed portal's process/data dir stay keyed by its permanent id"
+    try:
+        src = read_file("backend/portal/deploy.ts")
+        if "processId: string" not in src or "contentSlug?: string" not in src:
+            fail(name, "deployPortalInProcess does not accept a separate processId/contentSlug"); return
+        if "const slug = contentSlug || processId;" not in src:
+            fail(name, "contentSlug does not default to processId for backward compatibility"); return
+        if "find(s => s.id === processId)" not in src:
+            fail(name, "subdomainInfo lookup does not match by the permanent id"); return
+        if "deployPortalInProcess(portal.id, db, portal.name)" not in src:
+            fail(name, "autoDeployLivePortals does not pass both the permanent id and the current name"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui42_toggle_and_delete_use_current_name_for_dns_not_permanent_id():
+    name = "MSUI42 (static): toggling live and deleting a portal use its current public name for DNS/IIS fqdn, not its permanent id (so a rename sticks)"
+    try:
+        src = read_file("backend/routes/subdomains.routes.ts")
+        if "ensureDnsRecord(portal.name, portal.domain)" not in src:
+            fail(name, "toggle-live does not create the DNS record under the portal's current name"); return
+        if "ensureIisSite(targetId, `${portal.name}.${portal.domain}`, portal.port)" not in src:
+            fail(name, "toggle-live does not rebind IIS to the portal's current name"); return
+        if "deleteDnsRecord(deletedPortal.name, deletedPortal.domain)" not in src:
+            fail(name, "portal delete does not clean up the DNS record under the portal's current name"); return
+        if "checkDnsRecord(portal.name, portal.domain!)" not in src:
+            fail(name, "refresh-dns does not check the portal's current name"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui43_backend_portal_rename_migrates_dns_and_iis_then_cascades_mappings():
+    name = "MSUI43 (static): portal rename-subdomain stands up the new DNS/IIS, decommissions the old DNS, and re-maps every solution/collateral/project reference"
+    try:
+        src = read_file("backend/routes/subdomains.routes.ts")
+        idx = src.index('action === "rename-subdomain"')
+        body = src[idx:idx + 4000]
+        if "ensureDnsRecord(newName, domain)" not in body:
+            fail(name, "does not create a DNS record for the new subdomain"); return
+        if 'ensureIisSite(targetId, `${newName}.${domain}`, portal.port)' not in body:
+            fail(name, "does not rebind the IIS site to the new subdomain when live"); return
+        if "deleteDnsRecord(oldName, domain)" not in body:
+            fail(name, "does not delete the old DNS record — the previous subdomain would keep resolving"); return
+        new_idx = body.index("ensureIisSite(targetId")
+        old_idx = body.index("deleteDnsRecord(oldName, domain)")
+        if not (new_idx < old_idx):
+            fail(name, "old subdomain is decommissioned before the new one is stood up"); return
+        if "renameSlugRefs(db.solutions)" not in body or "renameSlugRefs(db.collaterals)" not in body:
+            fail(name, "does not cascade-rename customerNames/customerName references on solutions/collaterals"); return
+        if "renameSlugRefs(db.currentProjects)" not in body or "renameSlugRefs(db.upcomingProjects)" not in body:
+            fail(name, "does not cascade-rename customerNames/customerName references on projects"); return
+        if "portal.id = " in body:
+            fail(name, "rename mutates the portal's permanent id — it must stay fixed (PM2/data dir/port depend on it)"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui44_portal_rename_rejects_dummy_portals_and_taken_slugs():
+    name = "MSUI44 (static): portal rename-subdomain refuses dummy portals and slugs already in use"
+    try:
+        src = read_file("backend/routes/subdomains.routes.ts")
+        idx = src.index('action === "rename-subdomain"')
+        body = src[idx:idx + 4000]
+        if "portal.isDummy" not in body:
+            fail(name, "no guard against renaming a dummy (localhost-only) portal"); return
+        if "already in use" not in body:
+            fail(name, "no uniqueness check against other portals/deployed solutions"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui45_portal_settings_has_edit_subdomain_toggle():
+    name = "MSUI45 (static): the Portal Settings popup has an Edit Subdomain field that toggles to an orange Save Changes button once changed"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        if "handleRenamePortalSubdomain" not in src:
+            fail(name, "no handler for renaming the portal's subdomain"); return
+        idx = src.index("const subdomainChanged = subdomainSlug.trim()")
+        body = src[idx:idx + 2600]
+        if '"Edit Subdomain"' not in body or '"Save Changes"' not in body:
+            fail(name, "button does not toggle between Edit Subdomain and Save Changes labels"); return
+        if "bg-orange-600" not in body:
+            fail(name, "button does not switch to an orange changed style"); return
+        if "!portalSettingsTarget.isDummy" not in src.split("const subdomainChanged")[0][-300:]:
+            fail(name, "Edit Subdomain section is not gated off for dummy portals"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui46_portal_rename_posts_rename_subdomain_action_and_closes_on_success():
+    name = "MSUI46 (static): saving a portal subdomain change posts the rename-subdomain action and closes the popup on success"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        idx = src.index("const handleRenamePortalSubdomain = async () => {")
+        body = src[idx:idx + 900]
+        if '"rename-subdomain"' not in body:
+            fail(name, "does not call the rename-subdomain action"); return
+        if "setPortalSettingsTarget(null)" not in body:
+            fail(name, "popup does not close after a successful subdomain rename"); return
+        if "showToast(" not in body:
+            fail(name, "no success toast triggered after the rename"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui47_bottom_right_toast_shared_by_both_edit_subdomain_flows():
+    name = "MSUI47 (static): a bottom-right toast is rendered in App.tsx and wired into both the portal and deployed-solution Edit Subdomain flows"
+    try:
+        app_src = read_file("frontend/src/App.tsx")
+        if "fixed bottom-6 right-6" not in app_src:
+            fail(name, "no bottom-right-positioned toast element"); return
+        if "toastMessage &&" not in app_src:
+            fail(name, "toast is not conditionally rendered from toastMessage state"); return
+        if "onNotify={showToast}" not in app_src:
+            fail(name, "showToast is not passed down to AdminOnboardSolutionPage"); return
+        popup_src = read_file("frontend/src/components/EditSolutionQuickPopup.tsx")
+        if "onNotify?.(\"Changes saved successfully\")" not in popup_src:
+            fail(name, "deployed-solution subdomain save does not trigger the success toast"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui48_deployed_solution_subdomain_save_now_closes_popup():
+    name = "MSUI48 (static): saving a deployed solution's subdomain change now closes the popup immediately (not just re-locking the field)"
+    try:
+        src = read_file("frontend/src/components/EditSolutionQuickPopup.tsx")
+        idx = src.index("const handleSubdomainButtonClick = async () => {")
+        body = src[idx:idx + 700]
+        if 'onRefresh("rename-subdomain"' not in body:
+            fail(name, "does not call the rename-subdomain action"); return
+        if "onClose();" not in body:
+            fail(name, "popup does not close after a successful subdomain save"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 # ── run all tests ─────────────────────────────────────────────────────────────
 
 TESTS = [
@@ -3344,6 +3491,14 @@ TESTS = [
     test_msui38_repo_filter_widget_left_of_update_with_three_segments,
     test_msui39_repo_filter_defaults_to_total_and_actually_filters_rows,
     test_msui40_repo_filter_segments_share_layoutid_for_seamless_slide,
+    test_msui41_deploy_in_process_decouples_process_id_from_content_slug,
+    test_msui42_toggle_and_delete_use_current_name_for_dns_not_permanent_id,
+    test_msui43_backend_portal_rename_migrates_dns_and_iis_then_cascades_mappings,
+    test_msui44_portal_rename_rejects_dummy_portals_and_taken_slugs,
+    test_msui45_portal_settings_has_edit_subdomain_toggle,
+    test_msui46_portal_rename_posts_rename_subdomain_action_and_closes_on_success,
+    test_msui47_bottom_right_toast_shared_by_both_edit_subdomain_flows,
+    test_msui48_deployed_solution_subdomain_save_now_closes_popup,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

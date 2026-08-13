@@ -18,6 +18,9 @@ interface AdminOnboardSolutionPageProps {
   onRefresh: (action: string, solutionData: any) => Promise<void>;
   onReload?: () => Promise<void>;
   adminUserEmail?: string;
+  // Bottom-right toast trigger, passed through to EditSolutionQuickPopup for its
+  // subdomain-rename flow.
+  onNotify?: (message: string) => void;
 }
 
 export function AdminOnboardSolutionPage({
@@ -27,6 +30,7 @@ export function AdminOnboardSolutionPage({
   onRefresh,
   onReload,
   adminUserEmail = "",
+  onNotify,
 }: AdminOnboardSolutionPageProps) {
   const [openPopup, setOpenPopup] = useState<"onboard" | "deploy" | null>(null);
   const [updatingRepo, setUpdatingRepo] = useState(false);
@@ -336,6 +340,7 @@ export function AdminOnboardSolutionPage({
               onRefresh={onRefresh}
               adminUserEmail={adminUserEmail}
               onClose={() => setEditingSolution(null)}
+              onNotify={onNotify}
             />
           </div>
         </div>

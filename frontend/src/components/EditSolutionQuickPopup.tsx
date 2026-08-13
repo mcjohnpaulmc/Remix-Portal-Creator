@@ -12,6 +12,9 @@ interface EditSolutionQuickPopupProps {
   onRefresh: (action: string, solutionData: any) => Promise<void>;
   adminUserEmail?: string;
   onClose: () => void;
+  // Called with a message to show as a bottom-right toast after the subdomain
+  // is successfully changed (the popup closes immediately after).
+  onNotify?: (message: string) => void;
 }
 
 // Same presets offered on the full onboarding form — kept here as a small,
@@ -34,6 +37,7 @@ export function EditSolutionQuickPopup({
   onRefresh,
   adminUserEmail = "",
   onClose,
+  onNotify,
 }: EditSolutionQuickPopupProps) {
   const isDeployed = !!solution.deployedSlug;
   const deployedDomain = solution.deployedDomain || "mobiusservices.io";
@@ -77,10 +81,8 @@ export function EditSolutionQuickPopup({
     setSavingSubdomain(true);
     try {
       await onRefresh("rename-subdomain", { id: solution.id, newSubdomain: subdomainSlug });
-      const newFqdn = `${subdomainSlug}.${deployedDomain}`;
-      setCurrentSlug(subdomainSlug);
-      setAppUrl(`https://${newFqdn}`);
-      setSubdomainEditing(false);
+      onNotify?.("Changes saved successfully");
+      onClose();
     } catch {
       alert("Execution error while trying to change the subdomain.");
     } finally {

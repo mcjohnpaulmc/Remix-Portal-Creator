@@ -21,18 +21,32 @@ export interface DeployResult {
 }
 
 /**
- * deployPortalInProcess — builds and writes portal.json for a slug, uploads to S3,
- * then signals the live portal process to hot-reload its data.
+ * deployPortalInProcess — builds and writes portal.json for a portal, uploads to
+ * S3, then signals the live portal process to hot-reload its data.
+ *
+ * `processId` is the portal's permanent identity: it's what the PM2 process was
+ * spawned with (`--slug <processId>`), so it's also the directory this portal's
+ * process reads from and the value it self-reports on /api/reload — this never
+ * changes, even if the portal's public subdomain is later renamed.
+ *
+ * `contentSlug` (defaults to `processId`) is what actually gets embedded in the
+ * deployed portal.json's own `slug`/`subdomain` fields and used to match
+ * customerNames — i.e. the portal's *current* public subdomain. Callers that
+ * rename a portal's subdomain (see subdomains.routes.ts) pass the new name here
+ * while `processId` stays the same, so the already-running process picks up the
+ * new content/display name without needing to be respawned.
  */
 export async function deployPortalInProcess(
-  cleanSlug: string,
-  db: DatabaseSchema
+  processId: string,
+  db: DatabaseSchema,
+  contentSlug?: string
 ): Promise<DeployResult> {
-  const subdomainInfo = (db.subdomains || []).find(s => s.name === cleanSlug) || null;
-  const portalDir = path.join(PORTALS_DIR, cleanSlug);
+  const slug = contentSlug || processId;
+  const subdomainInfo = (db.subdomains || []).find(s => s.id === processId) || null;
+  const portalDir = path.join(PORTALS_DIR, processId);
   fs.mkdirSync(path.join(portalDir, "assets"), { recursive: true });
 
-  const portalJson = buildPortalSnapshot(cleanSlug, db, subdomainInfo);
+  const portalJson = buildPortalSnapshot(slug, db, subdomainInfo);
 
   // Write local snapshot — this is the primary content source; portal reads from disk.
   let localWriteOk = false;
@@ -40,12 +54,12 @@ export async function deployPortalInProcess(
     fs.writeFileSync(path.join(portalDir, "portal.json"), JSON.stringify(portalJson, null, 2), "utf-8");
     localWriteOk = true;
   } catch (err: any) {
-    logger.error(`portal-${cleanSlug}`, `Failed to write local portal.json: ${err?.message}`);
+    logger.error(`portal-${processId}`, `Failed to write local portal.json: ${err?.message}`);
   }
 
   // Signal reload immediately after local write — the portal reads from disk, so there
   // is no reason to wait for S3 before sending the signal.
-  const portalPort = subdomainInfo?.port || (db.portAssignments || {})[cleanSlug];
+  const portalPort = subdomainInfo?.port || (db.portAssignments || {})[processId];
   let reloadOk = false;
   if (portalPort) {
     reloadOk = await new Promise<boolean>((resolve) => {
@@ -67,13 +81,13 @@ export async function deployPortalInProcess(
             // this slug before the reload counts as ok.
             try {
               const parsed = JSON.parse(body);
-              if (res.statusCode === 200 && parsed.slug === cleanSlug) {
+              if (res.statusCode === 200 && parsed.slug === processId) {
                 resolve(true);
               } else {
                 logger.error(
-                  `portal-${cleanSlug}`,
+                  `portal-${processId}`,
                   `Reload responder on port ${portalPort} reported slug "${parsed.slug}" — ` +
-                  `expected "${cleanSlug}". Likely a stale process still bound to this port; refusing to report success.`
+                  `expected "${processId}". Likely a stale process still bound to this port; refusing to report success.`
                 );
                 resolve(false);
               }
@@ -90,7 +104,7 @@ export async function deployPortalInProcess(
   }
 
   // S3 upload is fire-and-forget — only needed for cold-start recovery on new machines.
-  s3PutPortalFile(cleanSlug, "portal.json", portalJson).catch(() => {});
+  s3PutPortalFile(processId, "portal.json", portalJson).catch(() => {});
 
   return { localWriteOk, s3Ok: true, reloadOk };
 }
@@ -104,7 +118,7 @@ export async function autoDeployLivePortals(db: DatabaseSchema): Promise<void> {
   const livePortals = (db.subdomains || []).filter(s => s.status === "live");
   await Promise.all(
     livePortals.map(portal =>
-      deployPortalInProcess(portal.name, db).catch(err =>
+      deployPortalInProcess(portal.id, db, portal.name).catch(err =>
         logger.warn("auto-deploy", `${portal.name}: ${err?.message}`)
       )
     )
