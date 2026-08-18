@@ -10,6 +10,7 @@ import { Solution, Collateral, SubdomainPortal } from "../../../shared/types";
 import { AdminSolutions } from "./AdminSolutions";
 import { DeploySolutionForm } from "./DeploySolutionForm";
 import { EditSolutionQuickPopup } from "./EditSolutionQuickPopup";
+import { MapSubdomainPanel } from "./MapSubdomainPanel";
 
 interface AdminOnboardSolutionPageProps {
   solutions: Solution[];
@@ -38,15 +39,19 @@ export function AdminOnboardSolutionPage({
   const [repoFilter, setRepoFilter] = useState<"all" | "onboarded" | "deployed">("all");
   const subdomainProp = subdomains.map((s) => ({ id: s.id, name: s.name, displayName: s.displayName }));
 
-  const totalCount = solutions.length;
-  const deployedCount = solutions.filter((s) => !!s.deployedSlug).length;
+  // "Map to solution repository" left unticked when mapping a subdomain keeps a
+  // solution out of this whole section (counts included) — it's still a normal,
+  // manageable solution everywhere else (Map Solutions, Edit, Delete).
+  const repositorySolutions = solutions.filter((s) => !s.hiddenFromRepository);
+  const totalCount = repositorySolutions.length;
+  const deployedCount = repositorySolutions.filter((s) => !!s.deployedSlug).length;
   const onboardedCount = totalCount - deployedCount;
   const repoFilters: { key: "all" | "onboarded" | "deployed"; label: string; count: number }[] = [
     { key: "all", label: "Total", count: totalCount },
     { key: "onboarded", label: "Onboarded", count: onboardedCount },
     { key: "deployed", label: "Deployed", count: deployedCount },
   ];
-  const filteredSolutions = solutions.filter((s) => {
+  const filteredSolutions = repositorySolutions.filter((s) => {
     if (repoFilter === "onboarded") return !s.deployedSlug;
     if (repoFilter === "deployed") return !!s.deployedSlug;
     return true;
@@ -141,9 +146,9 @@ export function AdminOnboardSolutionPage({
               <PlusCircle className="h-5 w-5 text-orange-600" />
             </div>
             <div>
-              <h4 className="text-base font-bold text-orange-600">Onboard Solution</h4>
+              <h4 className="text-base font-bold text-orange-600">Map/Onboard Solution</h4>
               <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
-                Manually register a new solution to the repository — map it to a portal afterward.
+                Map a subdomain to an already-public app, or manually register a new solution to the repository.
               </p>
             </div>
           </motion.button>
@@ -273,7 +278,7 @@ export function AdminOnboardSolutionPage({
               {filteredSolutions.length === 0 && (
                 <tr>
                   <td colSpan={4} className="px-4 py-6 text-center text-slate-400 font-mono">
-                    {solutions.length === 0 ? "No solutions onboarded yet." : "No solutions match this filter."}
+                    {repositorySolutions.length === 0 ? "No solutions onboarded yet." : "No solutions match this filter."}
                   </td>
                 </tr>
               )}
@@ -293,15 +298,21 @@ export function AdminOnboardSolutionPage({
           >
             <motion.div
               layoutId="onboard-solution-card"
-              className="w-full max-w-6xl max-h-[88vh] overflow-y-auto rounded-3xl"
+              className="w-full max-w-7xl max-h-[88vh] overflow-y-auto rounded-3xl"
               onClick={(e) => e.stopPropagation()}
             >
-              <AdminSolutions
-                solutions={solutions}
-                onRefresh={onRefresh}
-                adminUserEmail={adminUserEmail}
-                onClose={() => setOpenPopup(null)}
-              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                <MapSubdomainPanel
+                  onReload={onReload}
+                  onClose={() => setOpenPopup(null)}
+                />
+                <AdminSolutions
+                  solutions={solutions}
+                  onRefresh={onRefresh}
+                  adminUserEmail={adminUserEmail}
+                  onClose={() => setOpenPopup(null)}
+                />
+              </div>
             </motion.div>
           </motion.div>
         )}

@@ -42,6 +42,16 @@ export interface Solution {
   // the DNS record, IIS site, and stored file when the solution is deleted.
   deployedSlug?: string;
   deployedDomain?: string;
+  // Set when this solution is a reverse-proxy mapping created via "Map Subdomain"
+  // (Onboard Solution page's left panel) — the external http(s) origin this
+  // subdomain forwards to. Distinguishes these from a real "Deploy Solution"
+  // upload, which also sets deployedSlug/deployedDomain but has no external
+  // origin (it serves a locally-stored file instead).
+  mappedExternalUrl?: string;
+  // When true, this solution is excluded from the Solution Repository table on
+  // the Onboard Solution page (the "Map to solution repository" checkbox was
+  // left unticked) — it still exists as a normal solution everywhere else.
+  hiddenFromRepository?: boolean;
 }
 
 export interface Collateral {

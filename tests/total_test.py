@@ -2538,9 +2538,9 @@ def test_msui7_onboard_page_has_two_themed_cards():
     name = "MSUI7 (static): Onboard Solution page has an Onboard card (white/orange) and a Deploy card (dark blue/orange)"
     try:
         src = read_file("frontend/src/components/AdminOnboardSolutionPage.tsx")
-        if 'text-orange-600">Onboard Solution</h4>' not in src:
+        if 'text-orange-600">Map/Onboard Solution</h4>' not in src:
             fail(name, "Onboard Solution card title is not orange-accented"); return
-        onboard_idx = src.index("Onboard Solution</h4>")
+        onboard_idx = src.index("Map/Onboard Solution</h4>")
         onboard_body = src[max(0, onboard_idx - 800):onboard_idx]
         if "bg-white" not in onboard_body:
             fail(name, "Onboard Solution card is not white-themed"); return
@@ -2604,7 +2604,7 @@ def test_msui11_popups_are_landscape_with_internal_scroll():
     name = "MSUI11 (static): Onboard/Deploy/Edit popups use a wide max-width with internal scroll instead of a tall page-level scroll"
     try:
         page_src = read_file("frontend/src/components/AdminOnboardSolutionPage.tsx")
-        if 'max-w-6xl max-h-[88vh] overflow-y-auto' not in page_src:
+        if 'max-w-7xl max-h-[88vh] overflow-y-auto' not in page_src:
             fail(name, "Onboard popup is not a wide, height-capped, internally-scrolling box"); return
         if 'max-w-4xl max-h-[88vh] overflow-y-auto' not in page_src:
             fail(name, "Deploy popup is not a wide, height-capped, internally-scrolling box"); return
@@ -3086,7 +3086,7 @@ def test_msui39_repo_filter_defaults_to_total_and_actually_filters_rows():
         src = read_file("frontend/src/components/AdminOnboardSolutionPage.tsx")
         if 'useState<"all" | "onboarded" | "deployed">("all")' not in src:
             fail(name, "repoFilter does not default to 'all' (the Total segment)"); return
-        idx = src.index("const filteredSolutions = solutions.filter((s) => {")
+        idx = src.index("const filteredSolutions = repositorySolutions.filter((s) => {")
         body = src[idx:idx + 300]
         if 'if (repoFilter === "onboarded") return !s.deployedSlug;' not in body:
             fail(name, "onboarded filter does not exclude deployed solutions"); return
@@ -3256,6 +3256,174 @@ def test_msui48_deployed_solution_subdomain_save_now_closes_popup():
             fail(name, "does not call the rename-subdomain action"); return
         if "onClose();" not in body:
             fail(name, "popup does not close after a successful subdomain save"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+# ── Feature — MSUI49: Map Subdomain panel (public-IP reverse-proxy mapping) ────
+
+def test_msui49_solution_type_tracks_mapped_external_url_and_hidden_flag():
+    name = "MSUI49 (static): shared/types.ts Solution tracks mappedExternalUrl and hiddenFromRepository"
+    try:
+        src = read_file("shared/types.ts")
+        if "mappedExternalUrl?: string;" not in src:
+            fail(name, "Solution does not track mappedExternalUrl"); return
+        if "hiddenFromRepository?: boolean;" not in src:
+            fail(name, "Solution does not track hiddenFromRepository"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui50_iis_has_reverse_proxy_to_arbitrary_origin_helpers():
+    name = "MSUI50 (static): iis/site.ts exports ensureMappedUrlIisSite/removeMappedUrlIisSite, distinct from the static-HTML site kind"
+    try:
+        src = read_file("backend/iis/site.ts")
+        if "export async function ensureMappedUrlIisSite" not in src:
+            fail(name, "no ensureMappedUrlIisSite export"); return
+        if "export async function removeMappedUrlIisSite" not in src:
+            fail(name, "no removeMappedUrlIisSite export"); return
+        if 'const siteName = `mapurl-${slug}`;' not in src:
+            fail(name, "mapped-URL sites are not distinctly named from html-*/portal-* sites"); return
+        if "${targetOrigin}/{R:1}" not in src:
+            fail(name, "reverse-proxy rule does not rewrite to the arbitrary target origin"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui51_test_public_url_rejects_private_and_loopback_addresses():
+    name = "MSUI51 (static): /test-public-url rejects localhost/private-range addresses before checking reachability"
+    try:
+        src = read_file("backend/routes/map-subdomain.routes.ts")
+        if "function isPrivateOrLoopbackIp" not in src:
+            fail(name, "no private/loopback IP guard"); return
+        if 'hostname === "localhost"' not in src:
+            fail(name, "does not explicitly reject the literal 'localhost' hostname"); return
+        if "/^127\\./.test(ip)" not in src or "/^192\\.168\\./.test(ip)" not in src:
+            fail(name, "private IPv4 ranges are not comprehensively checked"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui52_map_subdomain_route_creates_dns_iis_and_optional_solution():
+    name = "MSUI52 (static): /map-subdomain creates the DNS record + reverse-proxy IIS site, and a Solution unless addToRepository is false"
+    try:
+        src = read_file("backend/routes/map-subdomain.routes.ts")
+        idx = src.index('router.post("/map-subdomain"')
+        body = src[idx:idx + 3000]
+        if "ensureDnsRecord(cleanSlug, domain)" not in body:
+            fail(name, "does not create a DNS record"); return
+        if "ensureMappedUrlIisSite(cleanSlug, fqdn, targetOrigin)" not in body:
+            fail(name, "does not create the reverse-proxy IIS site"); return
+        if "hiddenFromRepository: !addToRepository" not in body:
+            fail(name, "created solution does not respect the addToRepository flag"); return
+        if "mappedExternalUrl: targetOrigin" not in body:
+            fail(name, "created solution is not tagged with mappedExternalUrl"); return
+        if 'customerNames: [],' not in body:
+            fail(name, "mapped solution is not left unmapped (Hub Repository) by default"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui53_map_subdomain_rejects_taken_slugs_and_mounted_in_server():
+    name = "MSUI53 (static): /map-subdomain rejects an already-used subdomain, and the router is mounted under /api/admin"
+    try:
+        src = read_file("backend/routes/map-subdomain.routes.ts")
+        if "already in use" not in src:
+            fail(name, "no uniqueness check against existing portals/deployed solutions"); return
+        server_src = read_file("backend/server.ts")
+        if 'import mapSubdomainRouter from "./routes/map-subdomain.routes";' not in server_src:
+            fail(name, "map-subdomain router is not imported in server.ts"); return
+        if 'app.use("/api/admin", mapSubdomainRouter);' not in server_src:
+            fail(name, "map-subdomain router is not mounted under /api/admin"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui54_cascade_delete_and_rename_branch_on_mapped_external_url():
+    name = "MSUI54 (static): deleting or renaming a mapped-URL solution's subdomain uses the reverse-proxy IIS helpers, not the static-HTML ones"
+    try:
+        cascade_src = read_file("backend/utils/solutionCascade.ts")
+        if "target.mappedExternalUrl" not in cascade_src:
+            fail(name, "solutionCascade does not branch on mappedExternalUrl"); return
+        if "removeMappedUrlIisSite(target.deployedSlug)" not in cascade_src:
+            fail(name, "cascade delete does not remove the reverse-proxy IIS site for mapped-URL solutions"); return
+        content_src = read_file("backend/routes/content.routes.ts")
+        if "target.mappedExternalUrl" not in content_src:
+            fail(name, "rename-subdomain does not branch on mappedExternalUrl"); return
+        if "ensureMappedUrlIisSite(cleanSlug, newFqdn, target.mappedExternalUrl)" not in content_src:
+            fail(name, "rename-subdomain does not rebind the reverse-proxy IIS site for mapped-URL solutions"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui55_repository_table_excludes_hidden_from_repository_solutions():
+    name = "MSUI55 (static): the Solution Repository table/counts exclude solutions with hiddenFromRepository set"
+    try:
+        src = read_file("frontend/src/components/AdminOnboardSolutionPage.tsx")
+        if "const repositorySolutions = solutions.filter((s) => !s.hiddenFromRepository);" not in src:
+            fail(name, "repositorySolutions does not filter out hiddenFromRepository solutions"); return
+        idx = src.index("const totalCount = repositorySolutions.length;")
+        body = src[idx:idx + 400]
+        if "repositorySolutions.filter((s) => !!s.deployedSlug).length" not in body:
+            fail(name, "deployedCount is not computed from the filtered repository list"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui56_onboard_card_renamed_and_popup_has_two_panels():
+    name = "MSUI56 (static): the onboard card is renamed to 'Map/Onboard Solution' and its popup has a Map Subdomain panel alongside the onboarding form"
+    try:
+        src = read_file("frontend/src/components/AdminOnboardSolutionPage.tsx")
+        if "Map/Onboard Solution</h4>" not in src:
+            fail(name, "card title was not renamed to 'Map/Onboard Solution'"); return
+        if "import { MapSubdomainPanel }" not in src:
+            fail(name, "AdminOnboardSolutionPage.tsx does not import MapSubdomainPanel"); return
+        idx = src.index('max-w-7xl max-h-[88vh]')
+        body = src[idx:idx + 700]
+        if "<MapSubdomainPanel" not in body:
+            fail(name, "MapSubdomainPanel is not rendered inside the onboard popup"); return
+        if "<AdminSolutions" not in body:
+            fail(name, "the onboarding form is not still rendered alongside the Map Subdomain panel"); return
+        if "grid grid-cols-1 md:grid-cols-2" not in src:
+            fail(name, "popup is not laid out as two side-by-side panels"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui57_map_subdomain_panel_locks_subdomain_until_url_tests_public():
+    name = "MSUI57 (static): MapSubdomainPanel's subdomain field stays disabled until the URL test reports public, and shows green/red outline"
+    try:
+        src = read_file("frontend/src/components/MapSubdomainPanel.tsx")
+        if "disabled={testState !== \"public\"}" not in src:
+            fail(name, "subdomain field is not gated on the URL test passing"); return
+        if "border-emerald-500" not in src or "border-red-500" not in src:
+            fail(name, "URL field does not show a green/red outline based on the test result"); return
+        if "setTestState(\"idle\")" not in src:
+            fail(name, "changing the URL after a test does not invalidate the previous result"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui58_map_subdomain_panel_has_repository_checkbox_ticked_by_default():
+    name = "MSUI58 (static): the 'Map to solution repository' checkbox defaults to ticked and is sent as addToRepository"
+    try:
+        src = read_file("frontend/src/components/MapSubdomainPanel.tsx")
+        if "useState(true)" not in src:
+            fail(name, "addToRepository state does not default to true"); return
+        if "Map to solution repository" not in src:
+            fail(name, "no 'Map to solution repository' checkbox label"); return
+        if "addToRepository," not in src:
+            fail(name, "addToRepository is not sent in the map-subdomain request body"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -3499,6 +3667,16 @@ TESTS = [
     test_msui46_portal_rename_posts_rename_subdomain_action_and_closes_on_success,
     test_msui47_bottom_right_toast_shared_by_both_edit_subdomain_flows,
     test_msui48_deployed_solution_subdomain_save_now_closes_popup,
+    test_msui49_solution_type_tracks_mapped_external_url_and_hidden_flag,
+    test_msui50_iis_has_reverse_proxy_to_arbitrary_origin_helpers,
+    test_msui51_test_public_url_rejects_private_and_loopback_addresses,
+    test_msui52_map_subdomain_route_creates_dns_iis_and_optional_solution,
+    test_msui53_map_subdomain_rejects_taken_slugs_and_mounted_in_server,
+    test_msui54_cascade_delete_and_rename_branch_on_mapped_external_url,
+    test_msui55_repository_table_excludes_hidden_from_repository_solutions,
+    test_msui56_onboard_card_renamed_and_popup_has_two_panels,
+    test_msui57_map_subdomain_panel_locks_subdomain_until_url_tests_public,
+    test_msui58_map_subdomain_panel_has_repository_checkbox_ticked_by_default,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

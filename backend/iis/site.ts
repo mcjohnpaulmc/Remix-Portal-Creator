@@ -162,3 +162,63 @@ export async function removeStaticHtmlIisSite(slug: string): Promise<void> {
     logger.warn("IIS", `Could not remove static site "${siteName}": ${err?.message}`);
   }
 }
+
+function reverseProxyToOriginWebConfigXml(targetOrigin: string): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <system.webServer>
+    <rewrite>
+      <rules>
+        <rule name="ReverseProxy" stopProcessing="true">
+          <match url="(.*)" />
+          <action type="Rewrite" url="${targetOrigin}/{R:1}" />
+        </rule>
+      </rules>
+    </rewrite>
+  </system.webServer>
+</configuration>`;
+}
+
+/**
+ * Creates (or recreates) an IIS site that reverse-proxies a subdomain straight
+ * to an arbitrary external http(s) origin — used by "Map Subdomain" to point a
+ * new subdomain at an already-public app hosted elsewhere, as opposed to
+ * ensureIisSite (proxies to localhost:port for a portal process) or
+ * ensureStaticHtmlIisSite (serves a locally-stored file with no proxy at all).
+ */
+export async function ensureMappedUrlIisSite(slug: string, fqdn: string, targetOrigin: string): Promise<void> {
+  if (process.platform !== "win32") return;
+
+  const siteName = `mapurl-${slug}`;
+  const siteDir = path.join(IIS_PORTALS_DIR, siteName);
+
+  fs.mkdirSync(siteDir, { recursive: true });
+  fs.writeFileSync(path.join(siteDir, "web.config"), reverseProxyToOriginWebConfigXml(targetOrigin), "utf-8");
+
+  try {
+    const hasCert = await createOrRecreateWebsite(siteName, siteDir, fqdn);
+    logger.info("IIS", `Mapped-URL site "${siteName}" ready — ${fqdn} → ${targetOrigin} (SSL: ${hasCert ? "bound" : "no cert found"})`);
+  } catch (err: any) {
+    logger.error("IIS", `Failed to create mapped-URL site "${siteName}": ${err?.message}`);
+  }
+}
+
+/**
+ * Removes the IIS site for a "Map Subdomain" mapping and deletes its config directory.
+ */
+export async function removeMappedUrlIisSite(slug: string): Promise<void> {
+  if (process.platform !== "win32") return;
+
+  const siteName = `mapurl-${slug}`;
+  const siteDir = path.join(IIS_PORTALS_DIR, siteName);
+
+  try {
+    await removeWebsite(siteName);
+    if (fs.existsSync(siteDir)) {
+      fs.rmSync(siteDir, { recursive: true, force: true });
+    }
+    logger.info("IIS", `Mapped-URL site "${siteName}" removed`);
+  } catch (err: any) {
+    logger.warn("IIS", `Could not remove mapped-URL site "${siteName}": ${err?.message}`);
+  }
+}

@@ -8,7 +8,7 @@ import path from "path";
 import { DatabaseSchema } from "../storage/db";
 import { DEPLOYED_SOLUTIONS_DIR } from "../config";
 import { deleteDnsRecord } from "../dns/cloudflare";
-import { removeStaticHtmlIisSite } from "../iis/site";
+import { removeStaticHtmlIisSite, removeMappedUrlIisSite } from "../iis/site";
 import { logger } from "../logger";
 
 /**
@@ -33,13 +33,18 @@ export async function deleteSolutionCascade(
   if (target?.deployedSlug) {
     const deployedDomain = target.deployedDomain || "mobiusservices.io";
     await deleteDnsRecord(target.deployedSlug, deployedDomain).catch(() => {});
-    await removeStaticHtmlIisSite(target.deployedSlug).catch(() => {});
-    const solutionDir = path.join(DEPLOYED_SOLUTIONS_DIR, target.deployedSlug);
-    if (fs.existsSync(solutionDir)) {
-      try {
-        fs.rmSync(solutionDir, { recursive: true, force: true });
-      } catch (err: any) {
-        logger.warn(`deploy-solution-${target.deployedSlug}`, `Could not delete stored file: ${err?.message}`);
+    if (target.mappedExternalUrl) {
+      // "Map Subdomain" reverse-proxy — no locally-stored file to clean up.
+      await removeMappedUrlIisSite(target.deployedSlug).catch(() => {});
+    } else {
+      await removeStaticHtmlIisSite(target.deployedSlug).catch(() => {});
+      const solutionDir = path.join(DEPLOYED_SOLUTIONS_DIR, target.deployedSlug);
+      if (fs.existsSync(solutionDir)) {
+        try {
+          fs.rmSync(solutionDir, { recursive: true, force: true });
+        } catch (err: any) {
+          logger.warn(`deploy-solution-${target.deployedSlug}`, `Could not delete stored file: ${err?.message}`);
+        }
       }
     }
   }

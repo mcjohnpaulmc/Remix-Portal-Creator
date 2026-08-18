@@ -13,7 +13,7 @@ import { isSuperAdminRole } from "../auth";
 import { deleteSolutionCascade } from "../utils/solutionCascade";
 import { DEPLOYED_SOLUTIONS_DIR } from "../config";
 import { ensureDnsRecord, deleteDnsRecord } from "../dns/cloudflare";
-import { ensureStaticHtmlIisSite, removeStaticHtmlIisSite } from "../iis/site";
+import { ensureStaticHtmlIisSite, removeStaticHtmlIisSite, ensureMappedUrlIisSite, removeMappedUrlIisSite } from "../iis/site";
 import { logger } from "../logger";
 
 const router = Router();
@@ -113,18 +113,31 @@ router.post("/solutions", async (req, res) => {
       return res.status(400).json({ error: `Subdomain "${cleanSlug}.${domain}" is already in use.` });
     }
 
-    const contentDir = path.join(DEPLOYED_SOLUTIONS_DIR, oldSlug);
     const newFqdn = `${cleanSlug}.${domain}`;
 
     // Stand up the new subdomain before tearing down the old one, so a failure
-    // here leaves the app still reachable at its current address.
+    // here leaves the app still reachable at its current address. A "Map
+    // Subdomain" mapping reverse-proxies to its external origin; a real Deploy
+    // Solution upload serves its locally-stored file directly — different IIS
+    // site kinds, so branch on which one this solution actually is.
     const dnsOk = await ensureDnsRecord(cleanSlug, domain).catch(() => false);
-    await ensureStaticHtmlIisSite(cleanSlug, newFqdn, contentDir).catch(err =>
-      logger.error(`rename-subdomain-${cleanSlug}`, `IIS site creation failed: ${err?.message}`)
-    );
+    if (target.mappedExternalUrl) {
+      await ensureMappedUrlIisSite(cleanSlug, newFqdn, target.mappedExternalUrl).catch(err =>
+        logger.error(`rename-subdomain-${cleanSlug}`, `IIS site creation failed: ${err?.message}`)
+      );
+    } else {
+      const contentDir = path.join(DEPLOYED_SOLUTIONS_DIR, oldSlug);
+      await ensureStaticHtmlIisSite(cleanSlug, newFqdn, contentDir).catch(err =>
+        logger.error(`rename-subdomain-${cleanSlug}`, `IIS site creation failed: ${err?.message}`)
+      );
+    }
 
     // Now decommission the old address — it must stop resolving/serving entirely.
-    await removeStaticHtmlIisSite(oldSlug).catch(() => {});
+    if (target.mappedExternalUrl) {
+      await removeMappedUrlIisSite(oldSlug).catch(() => {});
+    } else {
+      await removeStaticHtmlIisSite(oldSlug).catch(() => {});
+    }
     await deleteDnsRecord(oldSlug, domain).catch(() => {});
 
     target.deployedSlug = cleanSlug;
