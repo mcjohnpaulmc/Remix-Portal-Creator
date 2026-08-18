@@ -300,12 +300,24 @@ export default function App() {
     window.addEventListener("popstate", handleUrlChange);
     handleUrlChange();
 
-    // Restore session from localStorage
+    // Restore session from localStorage — but only within the same calendar day
+    // it was created. The server-side JWT cookie can already be stale by the
+    // next visit; silently restoring the cached identity anyway made the UI
+    // look logged in while admin actions (e.g. Refresh DNS) failed with a
+    // confusing 401/timeout. Capping the cache to "today" forces a clean
+    // re-login the first time the app is opened each day instead.
     const cached = localStorage.getItem("mobius_work_email");
-    if (cached) {
+    const cachedLoginDate = localStorage.getItem("mobius_login_date");
+    const today = new Date().toDateString();
+    if (cached && cachedLoginDate === today) {
       setUserEmail(cached);
       setUserName(localStorage.getItem("mobius_user_name") || null);
       setUserRole(localStorage.getItem("mobius_user_role") || null);
+    } else if (cached) {
+      localStorage.removeItem("mobius_work_email");
+      localStorage.removeItem("mobius_user_name");
+      localStorage.removeItem("mobius_user_role");
+      localStorage.removeItem("mobius_login_date");
     }
 
     fetchPortalData();
@@ -412,6 +424,7 @@ export default function App() {
     localStorage.removeItem("mobius_work_email");
     localStorage.removeItem("mobius_user_name");
     localStorage.removeItem("mobius_user_role");
+    localStorage.removeItem("mobius_login_date");
     setUserEmail(null);
     setUserName(null);
     setUserRole(null);
@@ -2513,55 +2526,6 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Visual Footer — only shown to logged-in admin users */}
-      {userEmail && (userRole === "admin" || userRole === "superadmin") && isHub && <footer className="w-full h-12 bg-slate-900 flex items-center justify-between px-8 text-slate-400 shrink-0 font-mono text-[10px] border-t border-slate-850 relative z-30 mt-auto select-none">
-        <div className="flex items-center space-x-6">
-          <span className="text-[10px] font-medium tracking-widest uppercase text-slate-450 leading-none">
-            Host instance: {subdomain}.mobiusservices.io
-          </span>
-          <div className="hidden md:flex space-x-4 border-l border-slate-800 pl-6 leading-none">
-            <span className="text-[10px] flex items-center text-slate-400">
-              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full mr-2"></span> System Active
-            </span>
-            <span className="text-[10px] flex items-center text-slate-400">
-              <span className="w-1.5 h-1.5 bg-orange-500 rounded-full mr-2 animate-pulse"></span> Gemini AI Engine Connected
-            </span>
-          </div>
-        </div>
-        <div className="flex items-center space-x-4">
-          <button
-            onClick={() => {
-              if (viewMode === "admin") {
-                setViewMode("user");
-                window.location.hash = "";
-              } else {
-                setViewMode("admin");
-                window.location.hash = "/admin";
-                setAdminActiveTab("logs");
-              }
-            }}
-            className="text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-white transition-colors cursor-pointer"
-          >
-            User Activity Logs
-          </button>
-          {isHub && (
-            <button
-              onClick={() => {
-                if (viewMode === "user") {
-                  setViewMode("admin");
-                  window.location.hash = "/admin";
-                } else {
-                  setViewMode("user");
-                  window.location.hash = "";
-                }
-              }}
-              className="text-[10px] font-bold uppercase tracking-widest px-3 py-1 bg-slate-800 rounded border border-slate-750 hover:bg-slate-700 hover:text-white transition-all cursor-pointer"
-            >
-              {viewMode === "user" ? "Admin Console" : "Public Hub Portal"}
-            </button>
-          )}
-        </div>
-      </footer>}
     </div>
   );
 }

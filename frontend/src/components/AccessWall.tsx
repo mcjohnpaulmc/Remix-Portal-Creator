@@ -75,6 +75,7 @@ export function AccessWall({ onSuccess, onClose, solutions = [], targetSolutionI
         localStorage.setItem("mobius_work_email", data.email);
         localStorage.setItem("mobius_user_name", data.name || "");
         localStorage.setItem("mobius_user_role", data.role || "viewer");
+        localStorage.setItem("mobius_login_date", new Date().toDateString());
         onSuccess(data.email, data.name, data.role);
       }
     } catch {

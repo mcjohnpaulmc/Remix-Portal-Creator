@@ -3429,6 +3429,57 @@ def test_msui58_map_subdomain_panel_has_repository_checkbox_ticked_by_default():
         fail(name, str(e))
 
 
+# ── Feature — MSUI59: day-scoped session cache; MSUI61: bottom footer removed ──
+
+def test_msui59_login_writes_a_calendar_day_stamp():
+    name = "MSUI59 (static): AccessWall.tsx stamps mobius_login_date on successful login"
+    try:
+        src = read_file("frontend/src/components/AccessWall.tsx")
+        idx = src.index('localStorage.setItem("mobius_work_email", data.email);')
+        body = src[idx:idx + 300]
+        if 'localStorage.setItem("mobius_login_date", new Date().toDateString());' not in body:
+            fail(name, "login success does not stamp mobius_login_date"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui60_stale_cached_session_from_a_previous_day_is_not_restored():
+    name = "MSUI60 (static): App.tsx only restores the cached session if mobius_login_date matches today, and clears it otherwise"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        idx = src.index('const cached = localStorage.getItem("mobius_work_email");')
+        body = src[idx:idx + 900]
+        if 'const today = new Date().toDateString();' not in body:
+            fail(name, "no calendar-day comparison against today"); return
+        if "if (cached && cachedLoginDate === today)" not in body:
+            fail(name, "session restore is not gated on matching today's login date"); return
+        if 'localStorage.removeItem("mobius_login_date")' not in body:
+            fail(name, "stale (previous-day) cached session is not cleared, so it would linger unused"); return
+        signout_idx = src.index("const handleSignOut = async () => {")
+        signout_body = src[signout_idx:signout_idx + 500]
+        if 'localStorage.removeItem("mobius_login_date")' not in signout_body:
+            fail(name, "sign out does not clear mobius_login_date"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui61_bottom_visual_footer_removed_from_hub():
+    name = "MSUI61 (static): the bottom 'Host instance / System Active' footer bar is removed from App.tsx"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        if "Host instance:" in src:
+            fail(name, "footer's 'Host instance:' text is still present"); return
+        if "Gemini AI Engine Connected" in src:
+            fail(name, "footer's 'Gemini AI Engine Connected' text is still present"); return
+        if "Visual Footer" in src:
+            fail(name, "Visual Footer block/comment is still present"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 # ── run all tests ─────────────────────────────────────────────────────────────
 
 TESTS = [
@@ -3677,6 +3728,9 @@ TESTS = [
     test_msui56_onboard_card_renamed_and_popup_has_two_panels,
     test_msui57_map_subdomain_panel_locks_subdomain_until_url_tests_public,
     test_msui58_map_subdomain_panel_has_repository_checkbox_ticked_by_default,
+    test_msui59_login_writes_a_calendar_day_stamp,
+    test_msui60_stale_cached_session_from_a_previous_day_is_not_restored,
+    test_msui61_bottom_visual_footer_removed_from_hub,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]
