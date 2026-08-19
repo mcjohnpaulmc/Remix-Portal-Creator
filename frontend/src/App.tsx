@@ -59,26 +59,7 @@ import { CurrentProjectsDashboard } from "./components/CurrentProjectsDashboard"
 import { UpcomingProjectsDashboard } from "./components/UpcomingProjectsDashboard";
 import { HeroCarousel } from "./components/HeroCarousel";
 import { AdminUsers } from "./components/AdminUsers";
-
-// Collaterals Catalogue type filter — buckets every collateral's free-form
-// fileType/tag string into one of these four kinds (matches the "video, doc,
-// pptx, web sources/articles" taxonomy collaterals are actually imported as).
-type CollateralFilterType = "document" | "deck" | "video" | "webpage";
-
-const COLLATERAL_FILTER_OPTIONS: { value: CollateralFilterType; label: string }[] = [
-  { value: "document", label: "Document" },
-  { value: "deck", label: "Deck" },
-  { value: "video", label: "Video" },
-  { value: "webpage", label: "Web page" },
-];
-
-function classifyCollateralType(col: Collateral): CollateralFilterType {
-  const hay = `${col.fileType || ""} ${col.tag || ""}`.toLowerCase();
-  if (hay.includes("video") || hay.includes("demo")) return "video";
-  if (hay.includes("deck") || hay.includes("slide") || hay.includes("ppt") || hay.includes("presentation")) return "deck";
-  if (hay.includes("web") || hay.includes("article") || hay.includes("link") || hay.includes("source")) return "webpage";
-  return "document";
-}
+import { CollateralFilterType, COLLATERAL_FILTER_OPTIONS, classifyCollateralType } from "./utils/collateralType";
 
 export default function App() {
   // Global API states
@@ -1445,6 +1426,7 @@ export default function App() {
                                         src={col.thumbnail}
                                         alt={col.title}
                                         title={col.title}
+                                        kind={classifyCollateralType(col)}
                                         className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-500"
                                       />
                                       <div className="absolute top-1.5 right-1.5 bg-slate-900/65 backdrop-blur-xs px-1.5 py-0.5 rounded text-[7px] text-white font-mono uppercase tracking-widest font-bold select-none">

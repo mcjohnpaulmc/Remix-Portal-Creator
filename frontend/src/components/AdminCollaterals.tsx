@@ -7,6 +7,7 @@ import React, { useState } from "react";
 import { Plus, Edit2, X, Eye, EyeOff, Link, Tag, CheckCircle, Trash2, FolderOpen, Link2, Image, Upload, RefreshCw } from "lucide-react";
 import { Collateral } from "../../../shared/types";
 import { SafeImage } from "./SafeImage";
+import { classifyCollateralType } from "../utils/collateralType";
 
 interface AdminCollateralsProps {
   collaterals: Collateral[];
@@ -600,6 +601,7 @@ export function AdminCollaterals({
                     src={coll.thumbnail}
                     alt={coll.title}
                     title={coll.title}
+                    kind={classifyCollateralType(coll)}
                     className="w-full h-full object-cover"
                   />
                 </div>

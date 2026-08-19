@@ -954,28 +954,33 @@ def test_server_ts_backs_up_corrupted_db():
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# Security Fix S7 — bcrypt in portal-server.ts login
+# Security Fix S7 — portal-server.ts login proxies to the hub's live user list
+# (superseded design: it used to validate bcrypt hashes against a locally-
+# replicated, S3-synced copy of the users list, which could go stale/empty and
+# lock out valid — including newly-onboarded — users; see MSUI62/63 below)
 # ═════════════════════════════════════════════════════════════════════════════
 
-def test_portal_server_uses_verify_password():
-    name = "Sec-S7a: portal-server.ts /api/login uses verifyPassword (bcrypt-aware)"
+def test_portal_server_proxies_login_to_hub():
+    name = "Sec-S7a: portal-server.ts /api/login proxies the credential check to the hub instead of validating a local copy"
     try:
         src = read_file("backend/portal-server.ts")
-        if "verifyPassword" not in src:
-            fail(name, "verifyPassword not found in portal-server.ts"); return
-        if "hashPassword" in src and "function hashPassword" in src:
-            fail(name, "Old SHA-256 hashPassword still defined in portal-server.ts"); return
+        if "/api/internal/verify-credentials" not in src:
+            fail(name, "portal-server.ts does not proxy to the hub's internal verify-credentials endpoint"); return
+        if "bcryptjs" in src:
+            fail(name, "portal-server.ts still imports bcryptjs directly — password verification should live only on the hub"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
 
 
-def test_portal_server_imports_bcrypt():
-    name = "Sec-S7b: portal-server.ts imports bcryptjs"
+def test_hub_internal_verify_credentials_uses_bcrypt_aware_check():
+    name = "Sec-S7b: the hub's /api/internal/verify-credentials endpoint uses verifyPassword (bcrypt-aware)"
     try:
-        src = read_file("backend/portal-server.ts")
-        if "bcryptjs" not in src:
-            fail(name, "bcryptjs import not found in portal-server.ts"); return
+        src = read_file("backend/routes/auth.routes.ts")
+        idx = src.index('router.post("/api/internal/verify-credentials"')
+        body = src[idx:idx + 1200]
+        if "verifyPassword(" not in body:
+            fail(name, "verify-credentials endpoint does not use verifyPassword"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -2183,16 +2188,19 @@ def test_thumb5_collateral_attachment_download_uses_stored_url():
 # ── Feature — CFILTER: Collaterals Catalogue type filter; admin thumbnail fallback ─
 
 def test_cfilter1_type_filter_options_and_classifier_exist():
-    name = "CFILTER1 (static): App.tsx defines the All/Document/Deck/Video/Web page filter with a classifier"
+    name = "CFILTER1 (static): the shared collateralType util defines the All/Document/Deck/Video/Web page filter with a classifier, imported by App.tsx"
     try:
-        src = read_file("frontend/src/App.tsx")
-        if "COLLATERAL_FILTER_OPTIONS" not in src:
+        util_src = read_file("frontend/src/utils/collateralType.ts")
+        if "COLLATERAL_FILTER_OPTIONS" not in util_src:
             fail(name, "COLLATERAL_FILTER_OPTIONS not found"); return
         for label in ['"Document"', '"Deck"', '"Video"', '"Web page"']:
-            if label not in src:
+            if label not in util_src:
                 fail(name, f"filter option {label} not found"); return
-        if "function classifyCollateralType" not in src:
+        if "function classifyCollateralType" not in util_src:
             fail(name, "classifyCollateralType helper not found"); return
+        app_src = read_file("frontend/src/App.tsx")
+        if "from \"./utils/collateralType\"" not in app_src:
+            fail(name, "App.tsx does not import the shared collateralType util"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -3480,6 +3488,120 @@ def test_msui61_bottom_visual_footer_removed_from_hub():
         fail(name, str(e))
 
 
+# ── Feature — MSUI62: customer-portal login proxies to the hub ─────────────────
+
+def test_msui62_portal_login_proxy_uses_admin_token_and_hub_port():
+    name = "MSUI62 (static): portal-server.ts's /api/login proxy authenticates itself to the hub with ADMIN_TOKEN over loopback"
+    try:
+        src = read_file("backend/portal-server.ts")
+        idx = src.index('app.post("/api/login"')
+        body = src[idx:idx + 2000]
+        if 'hostname: "127.0.0.1"' not in body:
+            fail(name, "login proxy does not target the hub over loopback"); return
+        if '"X-Admin-Token": ADMIN_TOKEN' not in body:
+            fail(name, "login proxy does not authenticate with ADMIN_TOKEN"); return
+        if 'path: "/api/internal/verify-credentials"' not in body:
+            fail(name, "login proxy does not call the hub's internal verify-credentials endpoint"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui63_internal_verify_credentials_double_guarded():
+    name = "MSUI63 (static): /api/internal/verify-credentials is double-guarded (loopback IP AND ADMIN_TOKEN), same as /api/reload"
+    try:
+        src = read_file("backend/routes/auth.routes.ts")
+        idx = src.index('router.post("/api/internal/verify-credentials"')
+        body = src[idx:idx + 500]
+        if 'remote === "127.0.0.1"' not in body:
+            fail(name, "no loopback IP check"); return
+        if 'req.headers["x-admin-token"] !== effectiveAdminToken' not in body:
+            fail(name, "no ADMIN_TOKEN check"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui64_portal_server_no_longer_relies_on_local_users_replica():
+    name = "MSUI64 (static): portal-server.ts no longer fetches/merges a separate users.json — the hub is now the single source of truth for login"
+    try:
+        src = read_file("backend/portal-server.ts")
+        if "/users.json" in src:
+            fail(name, "portal-server.ts still fetches the separate users.json replica"); return
+        if "portalData.users" in src or "portalData?.users" in src:
+            fail(name, "portal-server.ts still reads a locally-replicated users list"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+# ── Feature — MSUI65: import password from Mobius/TechMobius ───────────────────
+
+def test_msui65_external_import_carries_password_prefill():
+    name = "MSUI65 (static): importing a solution from Mobius/TechMobius now populates passwordPrefill instead of hardcoding it empty"
+    try:
+        src = read_file("backend/routes/external-portals.routes.ts")
+        if 'passwordPrefill: "",' in src:
+            fail(name, "passwordPrefill is still hardcoded empty on import"); return
+        if 'passwordPrefill: pick(s, ["default_password"' not in src:
+            fail(name, "passwordPrefill is not resolved via the pick() fallback-candidate helper"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+# ── Feature — MSUI66: collateral thumbnails use type icons, not letters ────────
+
+def test_msui66_pattern_thumbnail_supports_kind_icon():
+    name = "MSUI66 (static): PatternThumbnail renders a type icon (video/document/deck/webpage) instead of a letter when a kind is given"
+    try:
+        src = read_file("frontend/src/components/PatternThumbnail.tsx")
+        if "KIND_ICONS" not in src:
+            fail(name, "no KIND_ICONS icon map"); return
+        for icon in ["Video", "FileText", "Presentation", "Globe"]:
+            if icon not in src:
+                fail(name, f"missing icon import/usage: {icon}"); return
+        if "kind?: CollateralFilterType" not in src:
+            fail(name, "PatternThumbnail does not accept an optional kind prop"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui67_safe_image_forwards_kind_to_pattern_thumbnail():
+    name = "MSUI67 (static): SafeImage accepts and forwards the kind prop to PatternThumbnail"
+    try:
+        src = read_file("frontend/src/components/SafeImage.tsx")
+        if "kind?: CollateralFilterType" not in src:
+            fail(name, "SafeImage does not accept a kind prop"); return
+        if "<PatternThumbnail title={title} kind={kind} />" not in src:
+            fail(name, "SafeImage does not forward kind to PatternThumbnail"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui68_collateral_thumbnails_pass_classified_kind_not_solutions():
+    name = "MSUI68 (static): collateral SafeImage call sites pass a classified kind; solution thumbnails are untouched (still letter-based)"
+    try:
+        app_src = read_file("frontend/src/App.tsx")
+        idx = app_src.index("src={col.thumbnail}")
+        body = app_src[idx:idx + 400]
+        if "kind={classifyCollateralType(col)}" not in body:
+            fail(name, "collateral tile SafeImage does not pass a classified kind"); return
+        # A solution thumbnail call site must NOT have a kind prop
+        sol_idx = app_src.index("src={sol.thumbnail}")
+        sol_body = app_src[sol_idx:sol_idx + 400]
+        if "kind=" in sol_body:
+            fail(name, "a solution thumbnail unexpectedly passes a kind prop"); return
+        admin_src = read_file("frontend/src/components/AdminCollaterals.tsx")
+        if "kind={classifyCollateralType(coll)}" not in admin_src:
+            fail(name, "AdminCollaterals.tsx thumbnail does not pass a classified kind"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 # ── run all tests ─────────────────────────────────────────────────────────────
 
 TESTS = [
@@ -3545,8 +3667,8 @@ TESTS = [
     # Security fixes — S6: corrupted DB preserved
     test_server_ts_backs_up_corrupted_db,
     # Security fixes — S7: bcrypt in portal-server
-    test_portal_server_uses_verify_password,
-    test_portal_server_imports_bcrypt,
+    test_portal_server_proxies_login_to_hub,
+    test_hub_internal_verify_credentials_uses_bcrypt_aware_check,
     # Security fixes — S8: no hardcoded admin password
     test_server_ts_no_hardcoded_admin_password,
     # Refactor — R1: modular backend
@@ -3731,6 +3853,13 @@ TESTS = [
     test_msui59_login_writes_a_calendar_day_stamp,
     test_msui60_stale_cached_session_from_a_previous_day_is_not_restored,
     test_msui61_bottom_visual_footer_removed_from_hub,
+    test_msui62_portal_login_proxy_uses_admin_token_and_hub_port,
+    test_msui63_internal_verify_credentials_double_guarded,
+    test_msui64_portal_server_no_longer_relies_on_local_users_replica,
+    test_msui65_external_import_carries_password_prefill,
+    test_msui66_pattern_thumbnail_supports_kind_icon,
+    test_msui67_safe_image_forwards_kind_to_pattern_thumbnail,
+    test_msui68_collateral_thumbnails_pass_classified_kind_not_solutions,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

@@ -4,9 +4,15 @@
  */
 
 import React from "react";
+import { FileText, Presentation, Video, Globe } from "lucide-react";
+import { CollateralFilterType } from "../utils/collateralType";
 
 interface PatternThumbnailProps {
   title: string;
+  // When provided (collaterals only), renders a type icon instead of the
+  // title-initial letter — a missing/broken thumbnail then reads as "this is
+  // a video/deck/document/web page" rather than a generic monogram.
+  kind?: CollateralFilterType;
 }
 
 const GRADIENTS: [string, string][] = [
@@ -16,6 +22,13 @@ const GRADIENTS: [string, string][] = [
   ["#431407", "#ea580c"],
 ];
 
+const KIND_ICONS: Record<CollateralFilterType, React.ComponentType<{ className?: string; strokeWidth?: number }>> = {
+  video: Video,
+  document: FileText,
+  deck: Presentation,
+  webpage: Globe,
+};
+
 function hashStr(s: string): number {
   let h = 0;
   for (let i = 0; i < s.length; i++) {
@@ -24,13 +37,14 @@ function hashStr(s: string): number {
   return h;
 }
 
-export function PatternThumbnail({ title }: PatternThumbnailProps) {
+export function PatternThumbnail({ title, kind }: PatternThumbnailProps) {
   const h = hashStr(title || "M");
   const [c1, c2] = GRADIENTS[h % GRADIENTS.length];
   const t = h % 4;
   const pid = `pp${h}`;
   const gid = `pg${h}`;
   const initial = (title || "M").trim().charAt(0).toUpperCase();
+  const KindIcon = kind ? KIND_ICONS[kind] : null;
 
   const pat =
     t === 0 ? (
@@ -53,28 +67,37 @@ export function PatternThumbnail({ title }: PatternThumbnailProps) {
     );
 
   return (
-    <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" className="absolute inset-0">
-      <defs>
-        <linearGradient id={gid} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor={c1} />
-          <stop offset="100%" stopColor={c2} />
-        </linearGradient>
-        {pat}
-      </defs>
-      <rect width="100%" height="100%" fill={`url(#${gid})`} />
-      <rect width="100%" height="100%" fill={`url(#${pid})`} />
-      <text
-        x="50%"
-        y="52%"
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fill="rgba(255,255,255,0.28)"
-        fontSize="36"
-        fontFamily="monospace"
-        fontWeight="bold"
-      >
-        {initial}
-      </text>
-    </svg>
+    <div className="absolute inset-0">
+      <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id={gid} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor={c1} />
+            <stop offset="100%" stopColor={c2} />
+          </linearGradient>
+          {pat}
+        </defs>
+        <rect width="100%" height="100%" fill={`url(#${gid})`} />
+        <rect width="100%" height="100%" fill={`url(#${pid})`} />
+        {!KindIcon && (
+          <text
+            x="50%"
+            y="52%"
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill="rgba(255,255,255,0.28)"
+            fontSize="36"
+            fontFamily="monospace"
+            fontWeight="bold"
+          >
+            {initial}
+          </text>
+        )}
+      </svg>
+      {KindIcon && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <KindIcon className="h-8 w-8 text-white/30" strokeWidth={1.75} />
+        </div>
+      )}
+    </div>
   );
 }

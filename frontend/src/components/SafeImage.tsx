@@ -5,19 +5,22 @@
 
 import React, { useState } from "react";
 import { PatternThumbnail } from "./PatternThumbnail";
+import { CollateralFilterType } from "../utils/collateralType";
 
 interface SafeImageProps {
   src: string;
   alt: string;
   title: string;
   className?: string;
+  // Collaterals only — see PatternThumbnail.
+  kind?: CollateralFilterType;
 }
 
-export function SafeImage({ src, alt, title, className }: SafeImageProps) {
+export function SafeImage({ src, alt, title, className, kind }: SafeImageProps) {
   const [failed, setFailed] = useState(false);
 
   if (!src || failed) {
-    return <PatternThumbnail title={title} />;
+    return <PatternThumbnail title={title} kind={kind} />;
   }
 
   return (

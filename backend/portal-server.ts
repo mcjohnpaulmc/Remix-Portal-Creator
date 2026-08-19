@@ -10,16 +10,8 @@ import rateLimit from "express-rate-limit";
 import path from "path";
 import fs from "fs";
 import http from "http";
-import { createHash } from "crypto";
-import bcrypt from "bcryptjs";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { publicDbProjection } from "./portal/snapshot";
-
-function verifyPassword(plain: string, stored: string): boolean {
-  if (stored.startsWith("$2")) return bcrypt.compareSync(plain, stored);
-  // Legacy SHA-256 fallback
-  return createHash("sha256").update(plain).digest("hex") === stored;
-}
 
 // --- CLI args / env ---
 const argv = process.argv.slice(2);
@@ -73,21 +65,9 @@ async function loadPortalData(): Promise<void> {
     }
   }
 
-  // Refresh the global users list (has passwordHash) from S3 in the background.
-  // This must not block the reload response — the portal reads portal.json from disk
-  // instantly and is ready to serve requests immediately after local load completes.
-  s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: `${S3_PREFIX}/users.json` }))
-    .then(async (uresp) => {
-      const ubody = await (uresp.Body as any).transformToString();
-      const { users } = JSON.parse(ubody);
-      if (Array.isArray(users) && portalData) {
-        portalData.users = users;
-        console.log(`[portal-${SLUG}] Refreshed ${users.length} users from global users.json`);
-      }
-    })
-    .catch(() => {
-      // users.json may not exist yet — users embedded in portal.json are used instead
-    });
+  // Login no longer depends on a locally-replicated users list (see /api/login
+  // below, which proxies credential checks to the hub) — no background users.json
+  // fetch needed here anymore.
 }
 
 function buildEmptyPortal() {
@@ -187,19 +167,62 @@ app.get("/api/database", (_req, res) => {
   res.json(publicDbProjection(data));
 });
 
-// Login — validates email + password against users deployed in portal.json
+// Login — proxies the credential check to the hub's live, authoritative user
+// list over loopback (same server-to-server pattern as /api/log below) instead
+// of validating against a locally-replicated copy. That replica previously
+// required a separate S3 users.json fetch to ever carry password hashes (the
+// portal.json snapshot deliberately excludes them), so it went stale or was
+// simply never populated whenever S3 hiccuped — a newly-onboarded user (or
+// anyone, really) could fail to log in indefinitely. Proxying means a portal
+// is only ever as correct as the hub itself.
 app.post("/api/login", loginLimiter, (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ error: "Email and password are required." });
   }
-  const normalized = email.trim().toLowerCase();
-  const users: any[] = portalData?.users || [];
-  const user = users.find(u => u.email === normalized && verifyPassword(password, u.passwordHash || ""));
-  if (!user) {
-    return res.status(401).json({ error: "Invalid email or password." });
-  }
-  res.json({ success: true, email: normalized, name: user.name, role: user.role });
+  const hubPort = parseInt(process.env.HUB_PORT || process.env.PORT || "3000", 10);
+  const body = JSON.stringify({ email, password });
+  const proxyReq = http.request(
+    {
+      hostname: "127.0.0.1",
+      port: hubPort,
+      path: "/api/internal/verify-credentials",
+      method: "POST",
+      timeout: 8000,
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(body),
+        "X-Admin-Token": ADMIN_TOKEN,
+      },
+    },
+    (hubRes) => {
+      let respBody = "";
+      hubRes.on("data", (chunk) => { respBody += chunk; });
+      hubRes.on("end", () => {
+        try {
+          const parsed = JSON.parse(respBody);
+          if (hubRes.statusCode === 200 && parsed.success) {
+            res.json({ success: true, email: parsed.email, name: parsed.name, role: parsed.role });
+          } else {
+            res.status(hubRes.statusCode === 401 ? 401 : hubRes.statusCode || 502).json({
+              error: parsed.error || "Invalid email or password.",
+            });
+          }
+        } catch {
+          res.status(502).json({ error: "Could not verify credentials right now — the hub is unreachable." });
+        }
+      });
+    }
+  );
+  proxyReq.on("error", () => {
+    res.status(502).json({ error: "Could not verify credentials right now — the hub is unreachable." });
+  });
+  proxyReq.on("timeout", () => {
+    proxyReq.destroy();
+    res.status(504).json({ error: "Login request timed out. Please try again." });
+  });
+  proxyReq.write(body);
+  proxyReq.end();
 });
 
 app.post("/api/email-login", (_req, res) => {

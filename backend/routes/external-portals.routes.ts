@@ -236,7 +236,7 @@ router.post("/external-portals/import", async (req, res) => {
       url: s.target_url || "",
       credentialsDescription: s.credentials_note || "",
       usernamePrefill: s.default_username || "",
-      passwordPrefill: "",
+      passwordPrefill: pick(s, ["default_password", "password", "default_pass", "credentials_password"]),
       tags,
       createdAt: new Date().toISOString(),
       enabled: true,

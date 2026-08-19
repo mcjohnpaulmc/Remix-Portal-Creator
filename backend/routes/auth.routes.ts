@@ -5,7 +5,7 @@
 
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
-import { getUsersCache, setUsersCache, verifyPassword, issueJwt } from "../auth";
+import { getUsersCache, setUsersCache, verifyPassword, issueJwt, effectiveAdminToken } from "../auth";
 import { readDatabase, writeDatabase, InternalUser } from "../storage/db";
 import { s3SyncUsers } from "../storage/s3";
 
@@ -99,6 +99,42 @@ router.post("/api/logout", (_req, res) => {
 // POST /api/email-login — kept for backward compatibility
 router.post("/api/email-login", (_req, res) => {
   res.status(410).json({ error: "Please use email and password to login." });
+});
+
+// POST /api/internal/verify-credentials — server-to-server only (loopback +
+// ADMIN_TOKEN). Customer portal processes proxy their gated-solution login here
+// instead of validating against a locally-replicated copy of the user list, so
+// a newly-onboarded (or just-changed) user can log in immediately everywhere
+// without waiting on — or being at the mercy of — an S3 replication round trip.
+// No session cookie is issued; this only confirms the credentials are valid.
+router.post("/api/internal/verify-credentials", (req, res) => {
+  const remote = req.socket.remoteAddress;
+  const isLocal = remote === "127.0.0.1" || remote === "::1" || remote === "::ffff:127.0.0.1";
+  if (!isLocal || !effectiveAdminToken || req.headers["x-admin-token"] !== effectiveAdminToken) {
+    return res.status(403).json({ error: "Forbidden." });
+  }
+
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: "Email and password are required." });
+  }
+  const normalized = email.trim().toLowerCase();
+
+  const users: InternalUser[] = getUsersCache() ?? (readDatabase().users || []);
+  const user = users.find(u => u.email === normalized && u.enabled !== false &&
+    verifyPassword(password, u.passwordHash || "", (newHash) => {
+      u.passwordHash = newHash;
+      const db = readDatabase();
+      const idx = (db.users || []).findIndex((x: InternalUser) => x.email === normalized);
+      if (idx !== -1) { db.users![idx].passwordHash = newHash; writeDatabase(db); }
+      s3SyncUsers(db.users || []).catch(() => {});
+    })
+  );
+
+  if (!user) {
+    return res.status(401).json({ error: "Invalid email or password." });
+  }
+  res.json({ success: true, email: normalized, name: user.name, role: user.role });
 });
 
 export default router;
