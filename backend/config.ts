@@ -14,6 +14,12 @@ export const DATA_DIR = path.join(process.cwd(), "data");
 export const DATA_FILE = path.join(DATA_DIR, "data-store.json");
 export const PORTALS_DIR = path.join(DATA_DIR, "portals");
 export const DEPLOYED_SOLUTIONS_DIR = path.join(DATA_DIR, "deployed-solutions");
+export const UPLOADS_DIR = path.join(DATA_DIR, "uploads");
+// "local" writes new uploads (thumbnails, logos, imported images) to disk instead
+// of S3 — a temporary switch for when S3 credentials are unavailable. Reads always
+// check both locations regardless of mode, so files saved while this was "local"
+// keep working after switching back to "s3" (the default).
+export const UPLOAD_STORAGE_MODE = (process.env.UPLOAD_STORAGE_MODE || "s3").toLowerCase();
 export const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "";
 export const JWT_SECRET = process.env.JWT_SECRET || "";
 export const SYSTEM_ADMIN_EMAIL = "eswar@xtract.io";

@@ -1736,8 +1736,8 @@ def test_imp3_import_rehosts_thumbnails_instead_of_https_only_filter():
             fail(name, "https-only thumbnail filter still present — would drop http/relative source URLs"); return
         if "function rehostImage" not in src:
             fail(name, "rehostImage helper not found"); return
-        if "s3PutUpload" not in src:
-            fail(name, "rehosted thumbnails are not persisted via s3PutUpload"); return
+        if "putUpload" not in src:
+            fail(name, "rehosted thumbnails are not persisted via putUpload"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -2846,6 +2846,58 @@ def test_msui71_solution_and_collateral_types_track_import_source():
         fail(name, str(e))
 
 
+def test_msui72_upload_storage_mode_is_configurable():
+    name = "MSUI72 (static): config.ts exposes an UPLOAD_STORAGE_MODE switch (env-driven, defaults to s3) plus a local uploads directory"
+    try:
+        src = read_file("backend/config.ts")
+        if 'UPLOAD_STORAGE_MODE = (process.env.UPLOAD_STORAGE_MODE || "s3")' not in src:
+            fail(name, "UPLOAD_STORAGE_MODE is not env-driven with a default of 's3'"); return
+        if "UPLOADS_DIR = path.join(DATA_DIR" not in src:
+            fail(name, "no local UPLOADS_DIR under DATA_DIR for the local storage mode"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui73_uploads_module_switches_backend_and_falls_back_on_read():
+    name = "MSUI73 (static): storage/uploads.ts writes to whichever backend UPLOAD_STORAGE_MODE selects, but reads check both — so switching back to s3 doesn't break files saved while in local mode"
+    try:
+        src = read_file("backend/storage/uploads.ts")
+        if 'UPLOAD_STORAGE_MODE === "local"' not in src:
+            fail(name, "putUpload/getUpload do not branch on UPLOAD_STORAGE_MODE"); return
+        put_idx = src.index("export async function putUpload")
+        put_body = src[put_idx:src.index("export async function getUpload")]
+        if "s3PutUpload" not in put_body or "putLocal" not in put_body:
+            fail(name, "putUpload does not cover both the S3 and local write paths"); return
+        get_idx = src.index("export async function getUpload")
+        get_body = src[get_idx:get_idx + 600]
+        if "getLocal" not in get_body or "s3GetUpload" not in get_body:
+            fail(name, "getUpload does not check both backends"); return
+        if "||" not in get_body:
+            fail(name, "getUpload does not fall back to the other backend when the primary one has nothing"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui74_upload_and_import_routes_use_the_switchable_storage_module():
+    name = "MSUI74 (static): both the admin upload route and the Mobius/TechMobius thumbnail re-hoster go through storage/uploads.ts, not the S3 helpers directly"
+    try:
+        upload_src = read_file("backend/routes/upload.routes.ts")
+        if 'from "../storage/uploads"' not in upload_src:
+            fail(name, "upload.routes.ts does not import from storage/uploads"); return
+        if "s3PutUpload" in upload_src or "s3GetUpload" in upload_src:
+            fail(name, "upload.routes.ts still calls the S3 helpers directly, bypassing the storage-mode switch"); return
+        external_src = read_file("backend/routes/external-portals.routes.ts")
+        if 'from "../storage/uploads"' not in external_src:
+            fail(name, "external-portals.routes.ts does not import from storage/uploads"); return
+        if "s3PutUpload" in external_src:
+            fail(name, "external-portals.routes.ts still calls s3PutUpload directly, bypassing the storage-mode switch"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 def test_msui22_external_import_empty_customer_names_means_unmapped_not_all():
     name = "MSUI22 (static): external-portals import no longer defaults an empty/missing customerNames to ['all']"
     try:
@@ -3912,6 +3964,9 @@ TESTS = [
     test_msui69_external_import_matches_existing_solution_by_source_not_title,
     test_msui70_external_import_deploys_updates_to_mapped_live_portals,
     test_msui71_solution_and_collateral_types_track_import_source,
+    test_msui72_upload_storage_mode_is_configurable,
+    test_msui73_uploads_module_switches_backend_and_falls_back_on_read,
+    test_msui74_upload_and_import_routes_use_the_switchable_storage_module,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

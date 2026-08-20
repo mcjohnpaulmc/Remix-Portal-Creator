@@ -6,7 +6,7 @@
 import { Router } from "express";
 import { Solution, Collateral } from "../../shared/types";
 import { readDatabase, writeDatabase } from "../storage/db";
-import { s3PutUpload } from "../storage/s3";
+import { putUpload } from "../storage/uploads";
 import { autoDeployLivePortals } from "../portal/deploy";
 import { buildAdminSafeDbView } from "../utils/dbView";
 import { isSuperAdminRole } from "../auth";
@@ -122,8 +122,9 @@ function sniffImageContentType(buf: Buffer): string | null {
   return null;
 }
 
-// Downloads an image from the source portal and re-hosts it in our own S3 uploads
-// bucket, returning a hub-served /api/download URL — the hub can reach the source
+// Downloads an image from the source portal and re-hosts it via putUpload (S3 or
+// local disk — see storage/uploads.ts), returning a hub-served /api/download URL
+// — the hub can reach the source
 // portal (it already does, to fetch /api/solutions), so it downloads the bytes
 // itself rather than trusting the admin's browser to load a URL that may be a
 // relative path or an internal 127.0.0.1 address it cannot reach.
@@ -147,7 +148,7 @@ async function rehostImage(absoluteUrl: string, hubOrigin: string): Promise<stri
     }
     const ext = contentType.split("/")[1] || "png";
     const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    await s3PutUpload("imports", filename, buf, contentType);
+    await putUpload("imports", filename, buf, contentType);
     // Absolute, not relative — this renders on customer-portal subdomains too,
     // which are served by a separate process with no /api/download route of
     // their own (see upload.routes.ts for the same fix and full rationale).
