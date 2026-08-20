@@ -629,12 +629,16 @@ def test_solution_card_uses_safe_image():
         fail(name, str(e))
 
 
-def test_auth_modal_is_horizontal_two_column():
-    name = "Fix-16c (static): AccessWall uses two-column horizontal grid layout"
+def test_auth_modal_is_single_column_with_no_demo_credentials_panel():
+    name = "Fix-16c (static): AccessWall is a single-column login card — the demo/guest credentials side panel was removed"
     try:
         src = read_file("frontend/src/components/AccessWall.tsx")
-        assert "grid-cols-2" in src or "md:grid-cols-2" in src, \
-            "AccessWall does not use two-column grid layout"
+        assert "md:grid-cols-2" not in src, \
+            "AccessWall still uses the old two-column grid layout"
+        assert "Demo / Guest Solution Credentials" not in src, \
+            "the demo/guest credentials panel is still present"
+        assert "credSolutions" not in src, \
+            "dead credSolutions logic from the removed panel is still present"
         assert "onClose" in src, "AccessWall does not accept onClose prop"
         assert 'key === "Escape"' not in src, \
             "ESC key for auth modal should be in App.tsx, not AccessWall"
@@ -3026,6 +3030,49 @@ def test_msui82_solution_card_thumbnail_and_description_sized_to_match_reference
         fail(name, str(e))
 
 
+def test_msui83_access_wall_has_abstract_orange_white_background():
+    name = "MSUI83 (static): AccessWall's login card has an abstract 3D-style backdrop in the white/orange palette, layered behind the form content"
+    try:
+        src = read_file("frontend/src/components/AccessWall.tsx")
+        if "pointer-events-none absolute inset-0 z-0" not in src:
+            fail(name, "no dedicated backdrop layer behind the form content"); return
+        if src.count("blur-3xl") + src.count("blur-2xl") < 2:
+            fail(name, "backdrop does not use soft blurred blobs to read as an abstract 3D-style background"); return
+        if "from-orange-" not in src:
+            fail(name, "backdrop is not in the orange palette"); return
+        if "relative z-10" not in src:
+            fail(name, "form content has no explicit stacking above the backdrop layer"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui84_access_wall_props_and_call_sites_no_longer_carry_removed_solutions_data():
+    name = "MSUI84 (static): AccessWall no longer accepts solutions/targetSolutionId (dead after removing the credentials panel), and App.tsx call sites don't pass them"
+    try:
+        src = read_file("frontend/src/components/AccessWall.tsx")
+        if "solutions?:" in src or "targetSolutionId" in src:
+            fail(name, "AccessWall still declares the removed solutions/targetSolutionId props"); return
+
+        app_src = read_file("frontend/src/App.tsx")
+        idx = 0
+        count = 0
+        while True:
+            idx = app_src.find("<AccessWall", idx)
+            if idx == -1:
+                break
+            call_body = app_src[idx:idx + 300]
+            if "solutions={solutions}" in call_body or "targetSolutionId=" in call_body:
+                fail(name, "an <AccessWall> call site still passes the removed solutions/targetSolutionId prop"); return
+            count += 1
+            idx += 1
+        if count < 3:
+            fail(name, f"expected 3 <AccessWall> call sites in App.tsx, found {count}"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 def test_msui80_no_featured_external_new_badges_on_solution_cards():
     name = "MSUI80 (static): solution cards do not show Featured/External/New style tags"
     try:
@@ -3885,7 +3932,7 @@ TESTS = [
     # Fix 16 — Pattern thumbnail, horizontal auth modal, full-screen collateral
     test_pattern_thumbnail_component_exists,
     test_solution_card_uses_safe_image,
-    test_auth_modal_is_horizontal_two_column,
+    test_auth_modal_is_single_column_with_no_demo_credentials_panel,
     test_auth_modal_esc_key_in_app,
     test_collateral_modal_is_full_screen,
     test_header_subdomain_filters_use_valid_tailwind_color,
@@ -4117,6 +4164,8 @@ TESTS = [
     test_msui80_no_featured_external_new_badges_on_solution_cards,
     test_msui81_login_rate_limit_raised_to_50_on_hub_and_portals,
     test_msui82_solution_card_thumbnail_and_description_sized_to_match_reference,
+    test_msui83_access_wall_has_abstract_orange_white_background,
+    test_msui84_access_wall_props_and_call_sites_no_longer_carry_removed_solutions_data,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

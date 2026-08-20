@@ -1000,12 +1000,11 @@ export default function App() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="w-full max-w-3xl"
+              className="w-full max-w-md"
             >
               <AccessWall
                 onSuccess={handleAuthSuccess}
                 onClose={() => setShowLoginModal(false)}
-                solutions={solutions}
               />
             </motion.div>
           </div>
@@ -1048,13 +1047,11 @@ export default function App() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="w-full max-w-3xl"
+              className="w-full max-w-md"
             >
               <AccessWall
                 onSuccess={handleAuthSuccess}
                 onClose={() => setAuthNeededItem(null)}
-                solutions={solutions}
-                targetSolutionId={authNeededItem && authNeededItem.type === "sol" ? authNeededItem.id : null}
               />
             </motion.div>
           </div>
@@ -1581,7 +1578,6 @@ export default function App() {
               </div>
               <AccessWall
                 onSuccess={handleAuthSuccess}
-                solutions={solutions}
               />
             </div>
           </div>
