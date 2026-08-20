@@ -52,6 +52,11 @@ export interface Solution {
   // the Onboard Solution page (the "Map to solution repository" checkbox was
   // left unticked) — it still exists as a normal solution everywhere else.
   hiddenFromRepository?: boolean;
+  // Set when this solution was imported from Mobius/TechMobius — lets the
+  // Repository "Update" button re-match it on a later sync (by source record,
+  // not by title) so an admin-side title edit doesn't cause a duplicate import.
+  sourcePortal?: "mobius" | "techmobius";
+  sourceExternalId?: string;
 }
 
 export interface Collateral {
@@ -70,6 +75,10 @@ export interface Collateral {
   fileType?: "google slide" | "google video" | "google doc" | "google sheet" | string;
   linkedSolutionId?: string; // id of the Solution this collateral belongs to (set on import; groups the Collaterals Catalogue by solution)
   createdBy?: string; // email of the admin who created this collateral; used for portal isolation
+  // Set when this collateral was imported from Mobius/TechMobius — see
+  // Solution.sourcePortal/sourceExternalId for why this exists.
+  sourcePortal?: "mobius" | "techmobius";
+  sourceExternalId?: string;
 }
 
 export interface UserLog {

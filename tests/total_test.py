@@ -1783,7 +1783,7 @@ def test_imp7_collateral_import_captures_resource_file_not_just_metadata():
     name = "IMP7 (static): collateral import captures the actual resource file (video/doc/pptx/article link), not just text metadata"
     try:
         src = read_file("backend/routes/external-portals.routes.ts")
-        if "uploadedFiles: resourceUrl" not in src:
+        if "const uploadedFiles = resourceUrl" not in src:
             fail(name, "collateral import still hardcodes uploadedFiles to an empty array"); return
         if "function pick(" not in src:
             fail(name, "no defensive multi-field lookup for the source's resource/kind fields"); return
@@ -1799,7 +1799,7 @@ def test_imp8_collateral_import_sets_linked_solution_id():
         if "linkedSolutionId" not in types_src:
             fail(name, "Collateral type has no linkedSolutionId field"); return
         routes_src = read_file("backend/routes/external-portals.routes.ts")
-        if "linkedSolutionId: newSol.id" not in routes_src:
+        if "linkedSolutionId: sol.id" not in routes_src:
             fail(name, "import handler does not stamp linkedSolutionId on imported collaterals"); return
         ok(name)
     except Exception as e:
@@ -2772,26 +2772,75 @@ def test_msui20_solution_repository_section_below_cards():
         fail(name, str(e))
 
 
-def test_msui21_repository_update_button_dedupes_from_both_portals():
-    name = "MSUI21 (static): the Solution Repository 'Update' button bulk-imports from Mobius+TechMobius with title-based dedup, landing new items unmapped"
+def test_msui21_repository_update_button_syncs_from_both_portals():
+    name = "MSUI21 (static): the Solution Repository 'Update' button syncs from Mobius+TechMobius — new items land unmapped, existing ones are refreshed in place"
     try:
         src = read_file("frontend/src/components/AdminOnboardSolutionPage.tsx")
         idx = src.index("const handleUpdateRepository")
         body = src[idx:idx + 2500]
         if '"/api/admin/external-portals/solutions"' not in body:
             fail(name, "does not fetch the combined Mobius/TechMobius solutions list"); return
-        if "existingTitles.has" not in body:
-            fail(name, "does not dedupe against solutions already in the repository by title"); return
+        if "existingTitles" in body:
+            fail(name, "still pre-filters by title client-side instead of letting the server match-or-update by source record"); return
         if '"mobius", "techmobius"' not in body:
             fail(name, "does not pull from both mobius and techmobius"); return
         if '"/api/admin/external-portals/import"' not in body:
             fail(name, "does not call the server-side import endpoint"); return
         if "customerNames: []" not in body:
             fail(name, "imported solutions are not left unmapped (Hub Repository) by default"); return
+        if "data.updatedSolutions" not in body:
+            fail(name, "does not surface how many existing solutions were refreshed"); return
         button_idx = src.index("Solution Repository")
         button_body = src[button_idx:button_idx + 3000]
         if "onClick={handleUpdateRepository}" not in button_body:
             fail(name, "no Update button wired to handleUpdateRepository near the Solution Repository header"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui69_external_import_matches_existing_solution_by_source_not_title():
+    name = "MSUI69 (static): re-syncing an already-imported solution updates it in place (matched by sourcePortal+sourceExternalId, falling back to title) instead of skipping or duplicating it"
+    try:
+        src = read_file("backend/routes/external-portals.routes.ts")
+        if "solutionsByExternalId" not in src or "solutionsByTitle" not in src:
+            fail(name, "import route does not build both a source-id and a title lookup for matching existing solutions"); return
+        if "existingSol.sourcePortal = portal" not in src:
+            fail(name, "matched solutions do not get sourcePortal/sourceExternalId backfilled for future re-syncs"); return
+        if "existingSol.credentialsDescription = credentialsDescription" not in src:
+            fail(name, "matched solutions do not have their credentials refreshed from the source on re-sync"); return
+        if "existingSol.customerNames" in src or "existingSol.enabled" in src or "existingSol.createdBy" in src:
+            fail(name, "re-sync touches portal-mapping/enabled/createdBy — it must only refresh content fields"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui70_external_import_deploys_updates_to_mapped_live_portals():
+    name = "MSUI70 (static): after syncing updated content from Mobius/TechMobius, the import route redeploys to every live portal the solution is mapped to"
+    try:
+        src = read_file("backend/routes/external-portals.routes.ts")
+        idx = src.index("writeDatabase(db);")
+        body = src[idx:idx + 200]
+        if "autoDeployLivePortals(db)" not in body:
+            fail(name, "does not push the refreshed data out to live portals after a sync"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui71_solution_and_collateral_types_track_import_source():
+    name = "MSUI71 (static): Solution and Collateral both carry sourcePortal/sourceExternalId so a later re-sync can find them by origin, not by title"
+    try:
+        src = read_file("shared/types.ts")
+        sol_idx = src.index("export interface Solution")
+        sol_body = src[sol_idx:src.index("export interface", sol_idx + 10)]
+        if "sourcePortal?:" not in sol_body or "sourceExternalId?:" not in sol_body:
+            fail(name, "Solution does not declare sourcePortal/sourceExternalId"); return
+        col_idx = src.index("export interface Collateral")
+        col_body = src[col_idx:src.index("export interface", col_idx + 10)]
+        if "sourcePortal?:" not in col_body or "sourceExternalId?:" not in col_body:
+            fail(name, "Collateral does not declare sourcePortal/sourceExternalId"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -3543,7 +3592,7 @@ def test_msui65_external_import_carries_password_prefill():
         src = read_file("backend/routes/external-portals.routes.ts")
         if 'passwordPrefill: "",' in src:
             fail(name, "passwordPrefill is still hardcoded empty on import"); return
-        if 'passwordPrefill: pick(s, ["default_password"' not in src:
+        if 'pick(s, ["default_password"' not in src:
             fail(name, "passwordPrefill is not resolved via the pick() fallback-candidate helper"); return
         ok(name)
     except Exception as e:
@@ -3812,7 +3861,7 @@ TESTS = [
     test_msui18_view_popup_shares_layoutid_with_its_row_for_seamless_transition,
     test_msui19_onboard_deploy_cards_are_shorter,
     test_msui20_solution_repository_section_below_cards,
-    test_msui21_repository_update_button_dedupes_from_both_portals,
+    test_msui21_repository_update_button_syncs_from_both_portals,
     test_msui22_external_import_empty_customer_names_means_unmapped_not_all,
     test_msui23_map_solution_popup_has_checkbox_column_and_is_larger,
     test_msui24_map_solution_popup_preticks_already_mapped_solutions,
@@ -3860,6 +3909,9 @@ TESTS = [
     test_msui66_pattern_thumbnail_supports_kind_icon,
     test_msui67_safe_image_forwards_kind_to_pattern_thumbnail,
     test_msui68_collateral_thumbnails_pass_classified_kind_not_solutions,
+    test_msui69_external_import_matches_existing_solution_by_source_not_title,
+    test_msui70_external_import_deploys_updates_to_mapped_live_portals,
+    test_msui71_solution_and_collateral_types_track_import_source,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

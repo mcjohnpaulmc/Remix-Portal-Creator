@@ -57,10 +57,12 @@ export function AdminOnboardSolutionPage({
     return true;
   });
 
-  // Pulls every solution from Mobius + TechMobius that isn't already in the hub
-  // (deduped by title) and lands them in the Hub Repository, unmapped — the same
-  // dedup + collateral-import behavior as the "Import from Portal" pickers, just
-  // bulk and source-wide instead of a manual selection.
+  // Pulls every solution from Mobius + TechMobius: brand-new ones land in the Hub
+  // Repository unmapped, and ones already imported here get their thumbnail,
+  // description, and credentials refreshed in place from the source (matched by
+  // the original import record, not by title, so a local rename doesn't cause a
+  // duplicate). Refreshed solutions auto-deploy to every live portal they're
+  // already mapped to, same as any other content edit.
   const handleUpdateRepository = async () => {
     setUpdatingRepo(true);
     try {
@@ -70,24 +72,22 @@ export function AdminOnboardSolutionPage({
         return;
       }
       const portalSolutions: { mobius: { id: string; title: string }[]; techmobius: { id: string; title: string }[] } = await res.json();
-      const existingTitles = new Set(solutions.map((s) => s.title.toLowerCase().trim()));
 
       const jobs: { portal: "mobius" | "techmobius"; solutionIds: string[] }[] = [];
       for (const portal of ["mobius", "techmobius"] as const) {
-        const ids = (portalSolutions[portal] ?? [])
-          .filter((s) => !existingTitles.has((s.title || "").toLowerCase().trim()))
-          .map((s) => s.id);
+        const ids = (portalSolutions[portal] ?? []).map((s) => s.id);
         if (ids.length > 0) jobs.push({ portal, solutionIds: ids });
       }
 
       if (jobs.length === 0) {
-        alert("Everything from Mobius and TechMobius is already in the repository — nothing to update.");
+        alert("Could not reach Mobius/TechMobius, or both portals have nothing to sync.");
         return;
       }
 
-      let totalSolutions = 0;
-      let totalCollaterals = 0;
-      let totalSkipped = 0;
+      let totalNewSolutions = 0;
+      let totalUpdatedSolutions = 0;
+      let totalNewCollaterals = 0;
+      let totalUpdatedCollaterals = 0;
       const errors: string[] = [];
 
       for (const job of jobs) {
@@ -100,21 +100,23 @@ export function AdminOnboardSolutionPage({
           });
           const data = await importRes.json();
           if (!importRes.ok) {
-            errors.push(data.error || `Import from ${job.portal} failed.`);
+            errors.push(data.error || `Sync from ${job.portal} failed.`);
             continue;
           }
-          totalSolutions += data.importedSolutions || 0;
-          totalCollaterals += data.importedCollaterals || 0;
-          totalSkipped += data.skippedSolutions || 0;
+          totalNewSolutions += data.importedSolutions || 0;
+          totalUpdatedSolutions += data.updatedSolutions || 0;
+          totalNewCollaterals += data.importedCollaterals || 0;
+          totalUpdatedCollaterals += data.updatedCollaterals || 0;
         } catch {
-          errors.push(`Import from ${job.portal} failed — server unreachable.`);
+          errors.push(`Sync from ${job.portal} failed — server unreachable.`);
         }
       }
 
       await onReload?.();
 
-      const summary = `Added ${totalSolutions} new solution(s) and ${totalCollaterals} linked collateral(s) to the repository.` +
-        (totalSkipped > 0 ? ` Skipped ${totalSkipped} duplicate(s).` : "");
+      const summary = `Added ${totalNewSolutions} new solution(s) and refreshed ${totalUpdatedSolutions} existing one(s). ` +
+        `Collaterals: ${totalNewCollaterals} new, ${totalUpdatedCollaterals} refreshed. ` +
+        `Changes are now live on every portal they're mapped to.`;
       alert(errors.length > 0 ? `${summary}\n\n${errors.join("\n")}` : summary);
     } catch {
       alert("Server error updating the repository.");
@@ -223,7 +225,7 @@ export function AdminOnboardSolutionPage({
               onClick={handleUpdateRepository}
               disabled={updatingRepo}
               className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50 shrink-0"
-              title="Import every new solution from Mobius and TechMobius (duplicates skipped)"
+              title="Import new solutions and refresh existing ones (thumbnail, description, credentials) from Mobius and TechMobius"
             >
               <Download className={`h-3.5 w-3.5 ${updatingRepo ? "animate-pulse" : ""}`} />
               {updatingRepo ? "Updating…" : "Update"}

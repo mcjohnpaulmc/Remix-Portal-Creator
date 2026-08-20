@@ -205,56 +205,93 @@ router.post("/external-portals/import", async (req, res) => {
 
   const db = readDatabase();
   if (!db.collaterals) db.collaterals = [];
-  const existingSolutionTitles = new Set((db.solutions || []).map(s => s.title.toLowerCase().trim()));
-  const existingCollateralTitles = new Set((db.collaterals || []).map(c => c.title.toLowerCase().trim()));
+
+  // Matched first by (sourcePortal, sourceExternalId) — stable across local title
+  // edits — then by title, for solutions imported before this tracking existed.
+  const solutionsByExternalId = new Map<string, Solution>();
+  const solutionsByTitle = new Map<string, Solution>();
+  for (const existing of db.solutions || []) {
+    if (existing.sourcePortal === portal && existing.sourceExternalId) {
+      solutionsByExternalId.set(existing.sourceExternalId, existing);
+    }
+    solutionsByTitle.set(existing.title.toLowerCase().trim(), existing);
+  }
+  const collateralsByExternalId = new Map<string, Collateral>();
+  const collateralsByTitleAndSolution = new Map<string, Collateral>();
+  for (const existing of db.collaterals) {
+    if (existing.sourcePortal === portal && existing.sourceExternalId) {
+      collateralsByExternalId.set(existing.sourceExternalId, existing);
+    }
+    collateralsByTitleAndSolution.set(`${existing.linkedSolutionId || ""}::${existing.title.toLowerCase().trim()}`, existing);
+  }
 
   let importedSolutions = 0;
+  let updatedSolutions = 0;
   let importedCollaterals = 0;
-  let skippedSolutions = 0;
-  let skippedCollaterals = 0;
+  let updatedCollaterals = 0;
 
   for (const extId of solutionIds) {
     const s = rawSolutions.find((x: any) => x.id === extId);
     if (!s) continue;
 
     const title: string = s.title || "";
-    if (!title || existingSolutionTitles.has(title.toLowerCase().trim())) {
-      skippedSolutions++;
-      continue;
-    }
+    if (!title) continue;
 
     const tags: string[] = [];
     if (s.practice) tags.push(s.practice);
     if (s.solution_type) tags.push(s.solution_type);
 
     const thumbnail = await resolveThumbnail(base, s.thumbnail_url || "", hubOrigin);
+    const credentialsDescription = s.credentials_note || "";
+    const usernamePrefill = s.default_username || "";
+    const passwordPrefill = pick(s, ["default_password", "password", "default_pass", "credentials_password"]);
+    const url = s.target_url || "";
 
-    const newSol: Solution = {
-      id: `sol-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      title,
-      thumbnail,
-      url: s.target_url || "",
-      credentialsDescription: s.credentials_note || "",
-      usernamePrefill: s.default_username || "",
-      passwordPrefill: pick(s, ["default_password", "password", "default_pass", "credentials_password"]),
-      tags,
-      createdAt: new Date().toISOString(),
-      enabled: true,
-      customerName: targetCustomerNames[0] || "",
-      customerNames: targetCustomerNames,
-      createdBy: adminEmail || undefined,
-    };
-    db.solutions.unshift(newSol);
-    existingSolutionTitles.add(title.toLowerCase().trim());
-    importedSolutions++;
+    const existingSol = solutionsByExternalId.get(extId) || solutionsByTitle.get(title.toLowerCase().trim());
+    let sol: Solution;
+    if (existingSol) {
+      // Refresh content only — never touch id/createdAt/createdBy/portal-mapping/enabled,
+      // so a re-sync can't silently unmap or hide a solution an admin has since configured.
+      existingSol.title = title;
+      if (thumbnail) existingSol.thumbnail = thumbnail;
+      existingSol.credentialsDescription = credentialsDescription;
+      existingSol.usernamePrefill = usernamePrefill;
+      existingSol.passwordPrefill = passwordPrefill;
+      existingSol.tags = tags;
+      existingSol.url = url;
+      existingSol.sourcePortal = portal;
+      existingSol.sourceExternalId = extId;
+      sol = existingSol;
+      solutionsByExternalId.set(extId, sol);
+      updatedSolutions++;
+    } else {
+      sol = {
+        id: `sol-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        title,
+        thumbnail,
+        url,
+        credentialsDescription,
+        usernamePrefill,
+        passwordPrefill,
+        tags,
+        createdAt: new Date().toISOString(),
+        enabled: true,
+        customerName: targetCustomerNames[0] || "",
+        customerNames: targetCustomerNames,
+        createdBy: adminEmail || undefined,
+        sourcePortal: portal,
+        sourceExternalId: extId,
+      };
+      db.solutions.unshift(sol);
+      solutionsByExternalId.set(extId, sol);
+      solutionsByTitle.set(title.toLowerCase().trim(), sol);
+      importedSolutions++;
+    }
 
     const linkedCollaterals = rawCollaterals.filter((c: any) => c.linked_solution_id === extId);
     for (const c of linkedCollaterals) {
+      const colExtId: string = c.id != null ? String(c.id) : "";
       const colTitle: string = c.title || title;
-      if (existingCollateralTitles.has(colTitle.toLowerCase().trim())) {
-        skippedCollaterals++;
-        continue;
-      }
 
       // The source distinguishes different kinds of collateral (video, doc, pptx,
       // web article/source) — field names for the resource link and its kind
@@ -265,38 +302,60 @@ router.post("/external-portals/import", async (req, res) => {
       ]));
       const kind = pick(c, ["type", "resource_type", "file_type", "kind", "category"]).toLowerCase();
       const driveUrl = pick(c, ["google_drive_url", "drive_url", "gdrive_url"]);
-
       const colThumbnail = await resolveThumbnail(base, c.thumbnail_url || "", hubOrigin);
+      const generatedContent = c.generated_content || c.content || c.description || "";
+      const uploadedFiles = resourceUrl && !driveUrl
+        ? [{ name: colTitle, size: "", type: kind || "file", url: resourceUrl }]
+        : [];
 
-      const newCol: Collateral = {
-        id: `col-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        title: colTitle,
-        thumbnail: colThumbnail,
-        prompt: c.prompt || "",
-        generatedContent: c.generated_content || c.content || c.description || "",
-        uploadedFiles: resourceUrl && !driveUrl
-          ? [{ name: colTitle, size: "", type: kind || "file", url: resourceUrl }]
-          : [],
-        createdAt: new Date().toISOString(),
-        enabled: true,
-        customerName: targetCustomerNames[0] || "",
-        customerNames: targetCustomerNames,
-        googleDriveUrl: driveUrl,
-        tag: c.tag || c.category || kind || undefined,
-        fileType: c.file_type || kind || undefined,
-        linkedSolutionId: newSol.id,
-        createdBy: adminEmail || undefined,
-      };
-      db.collaterals.unshift(newCol);
-      existingCollateralTitles.add(colTitle.toLowerCase().trim());
-      importedCollaterals++;
+      const existingCol = (colExtId && collateralsByExternalId.get(colExtId)) ||
+        collateralsByTitleAndSolution.get(`${sol.id}::${colTitle.toLowerCase().trim()}`);
+
+      if (existingCol) {
+        existingCol.title = colTitle;
+        if (colThumbnail) existingCol.thumbnail = colThumbnail;
+        existingCol.generatedContent = generatedContent;
+        existingCol.uploadedFiles = uploadedFiles;
+        existingCol.googleDriveUrl = driveUrl;
+        existingCol.tag = c.tag || c.category || kind || undefined;
+        existingCol.fileType = c.file_type || kind || undefined;
+        existingCol.linkedSolutionId = sol.id;
+        existingCol.sourcePortal = portal;
+        existingCol.sourceExternalId = colExtId || existingCol.sourceExternalId;
+        if (colExtId) collateralsByExternalId.set(colExtId, existingCol);
+        updatedCollaterals++;
+      } else {
+        const newCol: Collateral = {
+          id: `col-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          title: colTitle,
+          thumbnail: colThumbnail,
+          prompt: c.prompt || "",
+          generatedContent,
+          uploadedFiles,
+          createdAt: new Date().toISOString(),
+          enabled: true,
+          customerName: targetCustomerNames[0] || "",
+          customerNames: targetCustomerNames,
+          googleDriveUrl: driveUrl,
+          tag: c.tag || c.category || kind || undefined,
+          fileType: c.file_type || kind || undefined,
+          linkedSolutionId: sol.id,
+          createdBy: adminEmail || undefined,
+          sourcePortal: portal,
+          sourceExternalId: colExtId || undefined,
+        };
+        db.collaterals.unshift(newCol);
+        if (colExtId) collateralsByExternalId.set(colExtId, newCol);
+        collateralsByTitleAndSolution.set(`${sol.id}::${colTitle.toLowerCase().trim()}`, newCol);
+        importedCollaterals++;
+      }
     }
 
     db.userLogs.unshift({
       id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       email: adminEmail || "admin@mobiusservices.co.in",
-      action: "Solution Imported",
-      details: `Imported "${title}" from ${portal} with ${linkedCollaterals.length} linked collateral(s).`,
+      action: existingSol ? "Solution Synced" : "Solution Imported",
+      details: `${existingSol ? "Synced" : "Imported"} "${title}" from ${portal} with ${linkedCollaterals.length} linked collateral(s).`,
       date: new Date().toISOString(),
     });
   }
@@ -307,9 +366,9 @@ router.post("/external-portals/import", async (req, res) => {
   res.json({
     success: true,
     importedSolutions,
+    updatedSolutions,
     importedCollaterals,
-    skippedSolutions,
-    skippedCollaterals,
+    updatedCollaterals,
     database: buildAdminSafeDbView(db, adminEmail, isSuperAdmin),
   });
 });
