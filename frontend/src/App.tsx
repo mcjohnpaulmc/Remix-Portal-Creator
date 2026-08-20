@@ -1198,7 +1198,7 @@ export default function App() {
                         className="group bg-white rounded-xl border border-slate-200 p-5 flex flex-col hover:border-orange-400 transition-all cursor-pointer shadow-xs hover:shadow-md hover:-translate-y-0.5 duration-205 justify-between"
                       >
                         {/* Visual Image */}
-                        <div className="w-full h-32 bg-slate-50 rounded-lg mb-4 overflow-hidden border border-slate-150 relative shrink-0">
+                        <div className="w-full aspect-[4/3] bg-slate-50 rounded-lg mb-4 overflow-hidden border border-slate-150 relative shrink-0">
                           <SafeImage
                             src={sol.thumbnail}
                             alt={sol.title}
@@ -1216,7 +1216,7 @@ export default function App() {
                             <h3 className="font-bold text-slate-800 text-sm tracking-tight leading-snug group-hover:text-orange-600 transition-colors">
                               {sol.title}
                             </h3>
-                            <p className="text-xs text-slate-500 leading-relaxed line-clamp-2">
+                            <p className="text-xs text-slate-500 leading-relaxed line-clamp-3">
                               {sol.description || sol.credentialsDescription || "Gated enterprise intelligence hub."}
                             </p>
 

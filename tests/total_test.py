@@ -3011,6 +3011,21 @@ def test_msui81_login_rate_limit_raised_to_50_on_hub_and_portals():
         fail(name, str(e))
 
 
+def test_msui82_solution_card_thumbnail_and_description_sized_to_match_reference():
+    name = "MSUI82 (static): solution card thumbnail uses a fixed 4:3 aspect box (not a short fixed height) and the description shows up to 3 lines before truncating"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        card_idx = src.index('id={`sol-card-${sol.id}`}')
+        card_body = src[card_idx:card_idx + 2000]
+        if "aspect-[4/3]" not in card_body:
+            fail(name, "solution card thumbnail is not sized with a 4:3 aspect ratio"); return
+        if "line-clamp-3" not in card_body:
+            fail(name, "solution card description does not allow up to 3 lines before truncating"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 def test_msui80_no_featured_external_new_badges_on_solution_cards():
     name = "MSUI80 (static): solution cards do not show Featured/External/New style tags"
     try:
@@ -4101,6 +4116,7 @@ TESTS = [
     test_msui79_view_collaterals_scrolls_to_and_highlights_the_solutions_row,
     test_msui80_no_featured_external_new_badges_on_solution_cards,
     test_msui81_login_rate_limit_raised_to_50_on_hub_and_portals,
+    test_msui82_solution_card_thumbnail_and_description_sized_to_match_reference,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]
