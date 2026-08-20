@@ -13,6 +13,18 @@ const router = Router();
 
 const VALID_ROLES = new Set(["admin", "viewer", "superadmin"]);
 
+// Role hierarchy: a Super Admin can grant any role (admin, viewer, or another
+// superadmin); a regular admin can only onboard/promote viewers — granting
+// "admin" or "superadmin" is reserved for superadmins, otherwise any admin
+// could create peer admins or escalate themselves/others to full access.
+function roleGrantError(requestedRole: string, requesterIsSuperAdmin: boolean): string | null {
+  if (requestedRole === "viewer") return null;
+  if (requesterIsSuperAdmin) return null;
+  return requestedRole === "superadmin"
+    ? "Only a Super Admin can grant the Super Admin role."
+    : "Only a Super Admin can grant the Admin role — regular admins can only onboard viewers.";
+}
+
 // POST /users — mounted at /api/admin, so full path is /api/admin/users
 router.post("/users", (req, res) => {
   const { action, user } = req.body;
@@ -32,10 +44,9 @@ router.post("/users", (req, res) => {
     if (!VALID_ROLES.has(requestedRole)) {
       return res.status(400).json({ error: `Invalid role "${requestedRole}".` });
     }
-    // Only an existing superadmin can grant the superadmin role — otherwise any
-    // admin could self-escalate (or escalate someone else) to full cross-account access.
-    if (requestedRole === "superadmin" && !requesterIsSuperAdmin) {
-      return res.status(403).json({ error: "Only a Super Admin can grant the Super Admin role." });
+    const grantError = roleGrantError(requestedRole, requesterIsSuperAdmin);
+    if (grantError) {
+      return res.status(403).json({ error: grantError });
     }
     const newUser: InternalUser = {
       id: `user-${Date.now()}`,
@@ -60,13 +71,13 @@ router.post("/users", (req, res) => {
     if (target?.isSystem) {
       return res.status(403).json({ error: "System accounts cannot be modified." });
     }
-    if (user.role !== undefined) {
+    if (user.role !== undefined && user.role !== target?.role) {
       if (!VALID_ROLES.has(user.role)) {
         return res.status(400).json({ error: `Invalid role "${user.role}".` });
       }
-      const grantingSuperAdmin = user.role === "superadmin" && target?.role !== "superadmin";
-      if (grantingSuperAdmin && !requesterIsSuperAdmin) {
-        return res.status(403).json({ error: "Only a Super Admin can grant the Super Admin role." });
+      const grantError = roleGrantError(user.role, requesterIsSuperAdmin);
+      if (grantError) {
+        return res.status(403).json({ error: grantError });
       }
     }
     db.users = db.users.map(u => {

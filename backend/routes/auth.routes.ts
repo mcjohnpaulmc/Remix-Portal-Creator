@@ -70,6 +70,14 @@ router.post("/api/login", loginLimiter, (req, res) => {
     return res.status(401).json({ error: "Invalid email or password." });
   }
 
+  // The hub admin console is for admins/superadmins only — viewers have no
+  // business here at all and never receive a hub session, not even one that
+  // would just hit "Access Denied" post-login. Their login happens on the
+  // customer portal itself (proxied to /api/internal/verify-credentials below).
+  if (user.role === "viewer") {
+    return res.status(403).json({ error: "Viewer accounts cannot access the hub. Please log in from your assigned portal instead." });
+  }
+
   // Log to local DB (non-blocking)
   const db = readDatabase();
   db.userLogs.unshift({

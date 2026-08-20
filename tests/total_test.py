@@ -3209,6 +3209,61 @@ def test_msui93_tenant_context_filter_bar_removed_everywhere():
         fail(name, str(e))
 
 
+def test_msui94_hub_login_rejects_viewer_role():
+    name = "MSUI94 (static): the hub's own /api/login rejects viewer-role users outright — they never get a hub session at all"
+    try:
+        src = read_file("backend/routes/auth.routes.ts")
+        login_idx = src.index('router.post("/api/login"')
+        internal_idx = src.index('router.post("/api/internal/verify-credentials"')
+        body = src[login_idx:internal_idx]
+        if 'user.role === "viewer"' not in body:
+            fail(name, "hub /api/login has no viewer-role rejection"); return
+        if "res.status(403)" not in body:
+            fail(name, "viewer rejection does not return a 403"); return
+        # Must reject BEFORE issuing the session cookie/JWT, not after.
+        reject_idx = body.index('user.role === "viewer"')
+        cookie_idx = body.index("setSessionCookie(res")
+        if reject_idx > cookie_idx:
+            fail(name, "viewer rejection happens after the session cookie is already issued"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui95_only_superadmin_can_grant_admin_role():
+    name = "MSUI95 (static): a regular admin can only onboard/promote viewers — granting the admin role (not just superadmin) now requires an existing Super Admin, on both create and role-change"
+    try:
+        src = read_file("backend/routes/users.routes.ts")
+        if "function roleGrantError" not in src:
+            fail(name, "no shared role-grant permission helper"); return
+        fn_idx = src.index("function roleGrantError")
+        fn_body = src[fn_idx:fn_idx + 500]
+        if 'requestedRole === "viewer"' not in fn_body:
+            fail(name, "granting 'viewer' is not always allowed"); return
+        if "requesterIsSuperAdmin" not in fn_body:
+            fail(name, "role-grant permission does not check requesterIsSuperAdmin"); return
+        if src.count("roleGrantError(") < 3:
+            fail(name, "roleGrantError is not called on both the create and update paths"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui96_admin_users_ui_only_offers_viewer_role_to_regular_admins():
+    name = "MSUI96 (static): AdminUsers.tsx only offers the viewer role to a regular admin — admin/superadmin are Super-Admin-only options"
+    try:
+        src = read_file("frontend/src/components/AdminUsers.tsx")
+        idx = src.index("const availableRoles: UserRole[] = currentUserRole")
+        body = src[idx:idx + 250]
+        if '["viewer"]' not in body:
+            fail(name, "non-superadmin availableRoles is not restricted to just ['viewer']"); return
+        if '["viewer", "admin", "superadmin"]' not in body:
+            fail(name, "superadmin availableRoles does not include admin/superadmin"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 def test_msui80_no_featured_external_new_badges_on_solution_cards():
     name = "MSUI80 (static): solution cards do not show Featured/External/New style tags"
     try:
@@ -4311,6 +4366,9 @@ TESTS = [
     test_msui91_admin_users_has_allowed_portals_checkbox_grid_in_both_forms,
     test_msui92_app_tsx_passes_subdomains_to_admin_users,
     test_msui93_tenant_context_filter_bar_removed_everywhere,
+    test_msui94_hub_login_rejects_viewer_role,
+    test_msui95_only_superadmin_can_grant_admin_role,
+    test_msui96_admin_users_ui_only_offers_viewer_role_to_regular_admins,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

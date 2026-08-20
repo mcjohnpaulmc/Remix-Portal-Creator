@@ -20,11 +20,12 @@ const ROLE_BADGE: Record<string, string> = {
 };
 
 export function AdminUsers({ users, adminFetch, onRefresh, currentUserRole, subdomains = [] }: AdminUsersProps) {
-  // Only a Super Admin can grant the Super Admin role — regular admins don't even
-  // see it as an option (the backend also enforces this, so this is UX only).
+  // Role hierarchy: Super Admin can grant any role; a regular admin can only
+  // onboard/promote viewers (never a peer admin or a superadmin). The backend
+  // also enforces this — hiding the options here is just UX, not the real gate.
   const availableRoles: UserRole[] = currentUserRole === "superadmin"
     ? ["viewer", "admin", "superadmin"]
-    : ["viewer", "admin"];
+    : ["viewer"];
 
   const [form, setForm] = useState({ email: "", name: "", password: "", role: "viewer" as UserRole, allowedPortals: ["all"] as string[] });
   const [showFormPw, setShowFormPw] = useState(false);
@@ -133,7 +134,10 @@ export function AdminUsers({ users, adminFetch, onRefresh, currentUserRole, subd
             User Management
           </h3>
           <p className="text-xs text-slate-500 mt-1">
-            Onboard portal users who can log in to view solutions and collaterals. Roles: <strong>viewer</strong> (read-only access) · <strong>admin</strong> (full access).
+            Onboard portal users. <strong>Viewers</strong> can only log into their assigned portal(s) to view solutions/collaterals — they never get hub access.
+            {currentUserRole === "superadmin"
+              ? <> As Super Admin, you can also onboard <strong>admins</strong>, who can onboard further viewers.</>
+              : <> You can onboard viewers; only a Super Admin can onboard another admin.</>}
           </p>
         </div>
         <button
@@ -292,12 +296,12 @@ export function AdminUsers({ users, adminFetch, onRefresh, currentUserRole, subd
                         <select
                           value={editForm.role}
                           onChange={e => setEditForm(f => ({ ...f, role: e.target.value as UserRole }))}
-                          className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-orange-500"
+                          disabled={!availableRoles.includes(editForm.role)}
+                          title={!availableRoles.includes(editForm.role) ? "Only a Super Admin can change this user's role." : undefined}
+                          className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-orange-500 disabled:opacity-60 disabled:cursor-not-allowed"
                         >
-                          {(editForm.role === "superadmin" && !availableRoles.includes("superadmin")
-                            ? [...availableRoles, "superadmin" as UserRole]
-                            : availableRoles
-                          ).map(r => <option key={r} value={r}>{r === "superadmin" ? "Super Admin" : r}</option>)}
+                          {(availableRoles.includes(editForm.role) ? availableRoles : [...availableRoles, editForm.role])
+                            .map(r => <option key={r} value={r}>{r === "superadmin" ? "Super Admin" : r}</option>)}
                         </select>
                         <div className="relative">
                           <input
@@ -418,7 +422,7 @@ export function AdminUsers({ users, adminFetch, onRefresh, currentUserRole, subd
 
       <div className="text-[10px] text-slate-400 leading-relaxed p-3 bg-slate-50 rounded-xl border border-slate-100">
         <Shield className="h-3 w-3 inline mr-1 text-orange-400" />
-        <strong>Permissions:</strong> Viewer users can log in and view solutions/collaterals. Admin users can create and manage their own portals, solutions, and collaterals. Super Admins can additionally view and edit every admin's portals, solutions, and collaterals — only an existing Super Admin can grant that role. Passwords are stored as SHA-256 hashes. After creating or updating users, use <strong>Deploy</strong> on the Portal Domains page so that portal instances pick up the new credentials.
+        <strong>Permissions:</strong> Viewer users can only log into the portal(s) they're allowed on to view solutions/collaterals — they have no hub access at all, and cannot onboard anyone. Admin users can manage their own portals, solutions, and collaterals, and can onboard viewers (but not other admins). Super Admins can additionally view and edit every admin's portals, solutions, and collaterals, and are the only role that can onboard another admin or superadmin. Passwords are stored as bcrypt hashes.
       </div>
     </div>
   );
