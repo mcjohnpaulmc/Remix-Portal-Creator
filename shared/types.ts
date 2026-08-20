@@ -171,6 +171,11 @@ export interface PortalUser {
   createdAt: string;
   enabled?: boolean;
   isSystem?: boolean; // true = cannot be deleted, edited, or disabled
+  // Which customer portals this user may log into (AccessWall on that portal's
+  // subdomain). Undefined/empty or ["all"] means unrestricted — every existing
+  // user predates this field and must keep working exactly as before. Has no
+  // effect on hub admin-console access, which is gated by role, not portal.
+  allowedPortals?: string[];
 }
 
 export interface AppState {

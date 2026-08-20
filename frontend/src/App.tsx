@@ -1062,6 +1062,21 @@ export default function App() {
       <main className="flex-1 w-full relative z-10 flex flex-col">
 
         {viewMode === "user" ? (
+          !isHub && !userEmail ? (
+            // ============================== PORTAL LOGIN GATE ==============================
+            // Customer portals require sign-in up front — visitors no longer browse the
+            // catalogue anonymously and only get gated when opening a specific item.
+            <div className="flex-1 flex items-center justify-center p-8">
+              <div className="max-w-md w-full space-y-4">
+                <div className="text-center space-y-1">
+                  <ShieldCheck className="h-10 w-10 text-orange-600 mx-auto" />
+                  <h2 className="text-lg font-bold text-slate-900">Sign In Required</h2>
+                  <p className="text-xs text-slate-500">Please log in with your registered credentials to access this portal.</p>
+                </div>
+                <AccessWall onSuccess={handleAuthSuccess} />
+              </div>
+            </div>
+          ) : (
           // ============================== PUBLIC VISITOR VIEW ==============================
           <div className="max-w-7xl mx-auto w-full px-6 py-10 space-y-6 flex-1 flex flex-col justify-between">
             {/* Spotlight Carousel */}
@@ -1567,6 +1582,7 @@ export default function App() {
               </AnimatePresence>
             </div>
           </div>
+          )
         ) : !userEmail ? (
           // ============================== ADMIN LOGIN GATE ==============================
           <div className="flex-1 flex items-center justify-center p-8">
@@ -2364,6 +2380,7 @@ export default function App() {
                       adminFetch={adminFetch}
                       onRefresh={fetchPortalData}
                       currentUserRole={userRole}
+                      subdomains={subdomainsList}
                     />
                   )}
                   {adminActiveTab === "logs" && (

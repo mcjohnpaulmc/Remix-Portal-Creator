@@ -114,7 +114,7 @@ router.post("/api/internal/verify-credentials", (req, res) => {
     return res.status(403).json({ error: "Forbidden." });
   }
 
-  const { email, password } = req.body;
+  const { email, password, portal } = req.body;
   if (!email || !password) {
     return res.status(400).json({ error: "Email and password are required." });
   }
@@ -134,6 +134,15 @@ router.post("/api/internal/verify-credentials", (req, res) => {
   if (!user) {
     return res.status(401).json({ error: "Invalid email or password." });
   }
+
+  // A non-empty allowedPortals restricts which customer portal this user may sign
+  // into — undefined/empty/["all"] stays unrestricted (every pre-existing user).
+  const restricted = Array.isArray(user.allowedPortals) && user.allowedPortals.length > 0 &&
+    !user.allowedPortals.includes("all");
+  if (restricted && portal && !user.allowedPortals!.includes(portal)) {
+    return res.status(403).json({ error: "Your account is not authorized to access this portal." });
+  }
+
   res.json({ success: true, email: normalized, name: user.name, role: user.role });
 });
 

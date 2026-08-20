@@ -45,6 +45,7 @@ router.post("/users", (req, res) => {
       role: requestedRole,
       enabled: true,
       createdAt: new Date().toISOString(),
+      allowedPortals: Array.isArray(user.allowedPortals) ? user.allowedPortals : undefined,
     };
     db.users.unshift(newUser);
     db.userLogs.unshift({
@@ -75,6 +76,9 @@ router.post("/users", (req, res) => {
         name: user.name ?? u.name,
         role: user.role ?? u.role,
         enabled: user.enabled ?? u.enabled,
+        allowedPortals: user.allowedPortals !== undefined
+          ? (Array.isArray(user.allowedPortals) ? user.allowedPortals : undefined)
+          : u.allowedPortals,
         ...(user.password ? { passwordHash: hashPassword(user.password) } : {}),
       };
     });

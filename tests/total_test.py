@@ -3066,8 +3066,131 @@ def test_msui84_access_wall_props_and_call_sites_no_longer_carry_removed_solutio
                 fail(name, "an <AccessWall> call site still passes the removed solutions/targetSolutionId prop"); return
             count += 1
             idx += 1
-        if count < 3:
-            fail(name, f"expected 3 <AccessWall> call sites in App.tsx, found {count}"); return
+        if count < 4:
+            fail(name, f"expected at least 4 <AccessWall> call sites in App.tsx, found {count}"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui85_customer_portal_requires_login_before_browsing():
+    name = "MSUI85 (static): a customer portal visitor with no session sees a full-page login gate instead of the catalogue — browsing is no longer public by default"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        idx = src.index('{viewMode === "user" ? (')
+        body = src[idx:idx + 900]
+        if "!isHub && !userEmail ? (" not in body:
+            fail(name, "the public-visitor branch does not gate on isHub/userEmail before showing content"); return
+        if "PORTAL LOGIN GATE" not in body:
+            fail(name, "no dedicated portal login gate branch"); return
+        if "<AccessWall onSuccess={handleAuthSuccess} />" not in body:
+            fail(name, "the portal login gate does not render AccessWall"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui86_portal_login_gate_does_not_affect_hub_admin_preview():
+    name = "MSUI86 (static): the new portal login gate only applies to real customer portals (isHub===false) — a logged-in hub admin previewing the visitor view is unaffected since userEmail is already set"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        # The gate must check BOTH !isHub and !userEmail (not just one), so an
+        # authenticated hub admin toggling to "Exit Admin Console" preview still
+        # sees the real catalogue instead of being asked to log in again.
+        if "!isHub && !userEmail ? (" not in src:
+            fail(name, "gate condition does not require both !isHub and !userEmail"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui87_portal_user_type_carries_allowed_portals():
+    name = "MSUI87 (static): PortalUser declares an optional allowedPortals list, unrestricted by default so every pre-existing user keeps working unchanged"
+    try:
+        src = read_file("shared/types.ts")
+        idx = src.index("export interface PortalUser")
+        body = src[idx:src.index("export interface", idx + 10)]
+        if "allowedPortals?:" not in body:
+            fail(name, "PortalUser does not declare allowedPortals"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui88_users_route_stores_allowed_portals_on_create_and_update():
+    name = "MSUI88 (static): /api/admin/users persists allowedPortals on both create and update"
+    try:
+        src = read_file("backend/routes/users.routes.ts")
+        if "allowedPortals: Array.isArray(user.allowedPortals) ? user.allowedPortals : undefined," not in src:
+            fail(name, "create does not persist allowedPortals"); return
+        if "allowedPortals: user.allowedPortals !== undefined" not in src:
+            fail(name, "update does not persist allowedPortals"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui89_internal_verify_credentials_enforces_allowed_portals():
+    name = "MSUI89 (static): /api/internal/verify-credentials rejects a login for a portal outside the user's allowedPortals, but stays unrestricted when allowedPortals is unset/empty/['all']"
+    try:
+        src = read_file("backend/routes/auth.routes.ts")
+        idx = src.index('router.post("/api/internal/verify-credentials"')
+        body = src[idx:idx + 2000]
+        if "user.allowedPortals" not in body:
+            fail(name, "no allowedPortals check in verify-credentials"); return
+        if '!user.allowedPortals!.includes(portal)' not in body:
+            fail(name, "does not reject a portal not in the user's allowedPortals"); return
+        if 'user.allowedPortals.includes("all")' not in body:
+            fail(name, "an explicit ['all'] entry is not treated as unrestricted"); return
+        if "user.allowedPortals.length > 0" not in body:
+            fail(name, "an empty allowedPortals array is not treated as unrestricted"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui90_portal_login_proxy_identifies_its_own_portal():
+    name = "MSUI90 (static): portal-server.ts's /api/login proxy tells the hub which portal is asking, so per-user portal restrictions can be enforced"
+    try:
+        src = read_file("backend/portal-server.ts")
+        idx = src.index('app.post("/api/login"')
+        body = src[idx:idx + 1200]
+        if "portalData?.subdomain || SLUG" not in body:
+            fail(name, "login proxy does not resolve the portal's current public name"); return
+        if 'JSON.stringify({ email, password, portal: portalName })' not in body:
+            fail(name, "login proxy does not send the portal identity to the hub"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui91_admin_users_has_allowed_portals_checkbox_grid_in_both_forms():
+    name = "MSUI91 (static): AdminUsers.tsx has an Allowed Portals checkbox grid in both the onboard-new-user form and the inline edit row"
+    try:
+        src = read_file("frontend/src/components/AdminUsers.tsx")
+        if "subdomains?:" not in src:
+            fail(name, "AdminUsers does not accept a subdomains prop"); return
+        if src.count("Allowed Portals") < 2:
+            fail(name, "expected an Allowed Portals checkbox grid in both the create and edit forms"); return
+        if "togglePortal" not in src:
+            fail(name, "no shared toggle logic for the portal checkbox grid"); return
+        if "allowedPortals: form.allowedPortals" not in src and '"create", user: form' not in src:
+            fail(name, "create submission does not carry allowedPortals"); return
+        if "allowedPortals: editForm.allowedPortals" not in src:
+            fail(name, "update submission does not carry allowedPortals"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui92_app_tsx_passes_subdomains_to_admin_users():
+    name = "MSUI92 (static): App.tsx passes the live subdomains list into AdminUsers so the Allowed Portals checkboxes have real portals to show"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        idx = src.index("<AdminUsers")
+        body = src[idx:idx + 300]
+        if "subdomains={subdomainsList}" not in body:
+            fail(name, "AdminUsers is not given the live subdomains list"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -4166,6 +4289,14 @@ TESTS = [
     test_msui82_solution_card_thumbnail_and_description_sized_to_match_reference,
     test_msui83_access_wall_has_abstract_orange_white_background,
     test_msui84_access_wall_props_and_call_sites_no_longer_carry_removed_solutions_data,
+    test_msui85_customer_portal_requires_login_before_browsing,
+    test_msui86_portal_login_gate_does_not_affect_hub_admin_preview,
+    test_msui87_portal_user_type_carries_allowed_portals,
+    test_msui88_users_route_stores_allowed_portals_on_create_and_update,
+    test_msui89_internal_verify_credentials_enforces_allowed_portals,
+    test_msui90_portal_login_proxy_identifies_its_own_portal,
+    test_msui91_admin_users_has_allowed_portals_checkbox_grid_in_both_forms,
+    test_msui92_app_tsx_passes_subdomains_to_admin_users,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

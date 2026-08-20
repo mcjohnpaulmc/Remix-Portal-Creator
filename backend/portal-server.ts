@@ -181,7 +181,11 @@ app.post("/api/login", loginLimiter, (req, res) => {
     return res.status(400).json({ error: "Email and password are required." });
   }
   const hubPort = parseInt(process.env.HUB_PORT || process.env.PORT || "3000", 10);
-  const body = JSON.stringify({ email, password });
+  // The portal's current public name (not the permanent processId SLUG) — this is
+  // what admins pick from in the user's "allowed portals" checkboxes, and what a
+  // renamed portal is actually known as today.
+  const portalName = portalData?.subdomain || SLUG;
+  const body = JSON.stringify({ email, password, portal: portalName });
   const proxyReq = http.request(
     {
       hostname: "127.0.0.1",

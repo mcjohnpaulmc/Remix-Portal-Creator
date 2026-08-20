@@ -8,6 +8,7 @@ interface AdminUsersProps {
   adminFetch: (url: string, init?: RequestInit) => Promise<Response>;
   onRefresh: () => void | Promise<void>;
   currentUserRole?: string | null;
+  subdomains?: { id: string; name: string; displayName: string }[];
 }
 
 type UserRole = "viewer" | "admin" | "superadmin";
@@ -18,14 +19,14 @@ const ROLE_BADGE: Record<string, string> = {
   superadmin: "bg-purple-100 text-purple-700 border-purple-200",
 };
 
-export function AdminUsers({ users, adminFetch, onRefresh, currentUserRole }: AdminUsersProps) {
+export function AdminUsers({ users, adminFetch, onRefresh, currentUserRole, subdomains = [] }: AdminUsersProps) {
   // Only a Super Admin can grant the Super Admin role — regular admins don't even
   // see it as an option (the backend also enforces this, so this is UX only).
   const availableRoles: UserRole[] = currentUserRole === "superadmin"
     ? ["viewer", "admin", "superadmin"]
     : ["viewer", "admin"];
 
-  const [form, setForm] = useState({ email: "", name: "", password: "", role: "viewer" as UserRole });
+  const [form, setForm] = useState({ email: "", name: "", password: "", role: "viewer" as UserRole, allowedPortals: ["all"] as string[] });
   const [showFormPw, setShowFormPw] = useState(false);
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState("");
@@ -34,8 +35,19 @@ export function AdminUsers({ users, adminFetch, onRefresh, currentUserRole }: Ad
 
   // Edit state
   const [editId, setEditId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", role: "viewer" as UserRole, password: "" });
+  const [editForm, setEditForm] = useState({ name: "", role: "viewer" as UserRole, password: "", allowedPortals: ["all"] as string[] });
   const [showEditPw, setShowEditPw] = useState(false);
+
+  // Shared toggle logic for the "which portals can this user log into" checkbox
+  // grid — checking "All" clears everything else; checking a specific portal
+  // clears "All" and toggles just that one, matching the pattern used for
+  // collateral/project subdomain visibility elsewhere in the admin console.
+  const togglePortal = (current: string[], name: string): string[] => {
+    if (name === "all") return ["all"];
+    let updated = current.filter((n) => n !== "all");
+    updated = updated.includes(name) ? updated.filter((n) => n !== name) : [...updated, name];
+    return updated.length === 0 ? ["all"] : updated;
+  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,7 +68,7 @@ export function AdminUsers({ users, adminFetch, onRefresh, currentUserRole }: Ad
         setFormError(data.error || "Failed to create user.");
       } else {
         setFormSuccess(`User "${form.name}" created.`);
-        setForm({ email: "", name: "", password: "", role: "viewer" });
+        setForm({ email: "", name: "", password: "", role: "viewer", allowedPortals: ["all"] });
         onRefresh();
         setTimeout(() => setFormSuccess(""), 3000);
       }
@@ -72,7 +84,13 @@ export function AdminUsers({ users, adminFetch, onRefresh, currentUserRole }: Ad
       method: "POST",
       body: JSON.stringify({
         action: "update",
-        user: { id, name: editForm.name, role: editForm.role, ...(editForm.password ? { password: editForm.password } : {}) },
+        user: {
+          id,
+          name: editForm.name,
+          role: editForm.role,
+          allowedPortals: editForm.allowedPortals,
+          ...(editForm.password ? { password: editForm.password } : {}),
+        },
       }),
     });
     if (res.ok) { setEditId(null); onRefresh(); }
@@ -97,7 +115,12 @@ export function AdminUsers({ users, adminFetch, onRefresh, currentUserRole }: Ad
 
   const startEdit = (user: PortalUser) => {
     setEditId(user.id);
-    setEditForm({ name: user.name, role: user.role, password: "" });
+    setEditForm({
+      name: user.name,
+      role: user.role,
+      password: "",
+      allowedPortals: user.allowedPortals && user.allowedPortals.length > 0 ? user.allowedPortals : ["all"],
+    });
     setShowEditPw(false);
   };
 
@@ -183,6 +206,33 @@ export function AdminUsers({ users, adminFetch, onRefresh, currentUserRole }: Ad
             </select>
           </div>
 
+          <div className="sm:col-span-2 space-y-1.5">
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Allowed Portals</label>
+            <div className="p-3 bg-slate-50 border border-slate-205 rounded-xl grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+              <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={form.allowedPortals.includes("all")}
+                  onChange={() => setForm(f => ({ ...f, allowedPortals: togglePortal(f.allowedPortals, "all") }))}
+                  className="h-3.5 w-3.5 accent-orange-600 rounded border-slate-350"
+                />
+                <span className="text-slate-900 font-mono font-bold">All Portals</span>
+              </label>
+              {subdomains.map((sub) => (
+                <label key={sub.id} className="flex items-center gap-2 text-xs cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={form.allowedPortals.includes(sub.name)}
+                    onChange={() => setForm(f => ({ ...f, allowedPortals: togglePortal(f.allowedPortals, sub.name) }))}
+                    className="h-3.5 w-3.5 accent-orange-600 rounded border-slate-350"
+                  />
+                  <span className="text-slate-700 font-mono text-[11px]">{sub.displayName}</span>
+                </label>
+              ))}
+            </div>
+            <p className="text-[10px] text-slate-400">Which customer portals this user is allowed to log into. Doesn't affect hub admin-console access.</p>
+          </div>
+
           {formError && (
             <div className="sm:col-span-2 text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
               {formError}
@@ -231,41 +281,69 @@ export function AdminUsers({ users, adminFetch, onRefresh, currentUserRole }: Ad
                 >
                   {editId === user.id ? (
                     // Inline edit row
-                    <div className="flex flex-wrap items-center gap-2">
-                      <input
-                        type="text"
-                        value={editForm.name}
-                        onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
-                        className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold w-36 focus:outline-none focus:ring-1 focus:ring-orange-500"
-                      />
-                      <select
-                        value={editForm.role}
-                        onChange={e => setEditForm(f => ({ ...f, role: e.target.value as UserRole }))}
-                        className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-orange-500"
-                      >
-                        {(editForm.role === "superadmin" && !availableRoles.includes("superadmin")
-                          ? [...availableRoles, "superadmin" as UserRole]
-                          : availableRoles
-                        ).map(r => <option key={r} value={r}>{r === "superadmin" ? "Super Admin" : r}</option>)}
-                      </select>
-                      <div className="relative">
+                    <div className="space-y-2.5">
+                      <div className="flex flex-wrap items-center gap-2">
                         <input
-                          type={showEditPw ? "text" : "password"}
-                          placeholder="New password (optional)"
-                          value={editForm.password}
-                          onChange={e => setEditForm(f => ({ ...f, password: e.target.value }))}
-                          className="px-2.5 py-1.5 pr-8 border border-slate-200 rounded-lg text-xs w-44 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                          type="text"
+                          value={editForm.name}
+                          onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                          className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold w-36 focus:outline-none focus:ring-1 focus:ring-orange-500"
                         />
-                        <button type="button" onClick={() => setShowEditPw(p => !p)} className="absolute right-2 top-1.5 text-slate-400" tabIndex={-1}>
-                          {showEditPw ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                        <select
+                          value={editForm.role}
+                          onChange={e => setEditForm(f => ({ ...f, role: e.target.value as UserRole }))}
+                          className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-orange-500"
+                        >
+                          {(editForm.role === "superadmin" && !availableRoles.includes("superadmin")
+                            ? [...availableRoles, "superadmin" as UserRole]
+                            : availableRoles
+                          ).map(r => <option key={r} value={r}>{r === "superadmin" ? "Super Admin" : r}</option>)}
+                        </select>
+                        <div className="relative">
+                          <input
+                            type={showEditPw ? "text" : "password"}
+                            placeholder="New password (optional)"
+                            value={editForm.password}
+                            onChange={e => setEditForm(f => ({ ...f, password: e.target.value }))}
+                            className="px-2.5 py-1.5 pr-8 border border-slate-200 rounded-lg text-xs w-44 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                          />
+                          <button type="button" onClick={() => setShowEditPw(p => !p)} className="absolute right-2 top-1.5 text-slate-400" tabIndex={-1}>
+                            {showEditPw ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                          </button>
+                        </div>
+                        <button onClick={() => handleUpdate(user.id)} className="px-3 py-1.5 bg-orange-600 text-white text-xs font-bold rounded-lg hover:bg-orange-500 transition-colors flex items-center gap-1">
+                          <Check className="h-3 w-3" /> Save
+                        </button>
+                        <button onClick={() => setEditId(null)} className="px-3 py-1.5 bg-slate-100 text-slate-600 text-xs font-bold rounded-lg hover:bg-slate-200 transition-colors">
+                          Cancel
                         </button>
                       </div>
-                      <button onClick={() => handleUpdate(user.id)} className="px-3 py-1.5 bg-orange-600 text-white text-xs font-bold rounded-lg hover:bg-orange-500 transition-colors flex items-center gap-1">
-                        <Check className="h-3 w-3" /> Save
-                      </button>
-                      <button onClick={() => setEditId(null)} className="px-3 py-1.5 bg-slate-100 text-slate-600 text-xs font-bold rounded-lg hover:bg-slate-200 transition-colors">
-                        Cancel
-                      </button>
+
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Allowed Portals</label>
+                        <div className="p-3 bg-slate-50 border border-slate-205 rounded-xl grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                          <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={editForm.allowedPortals.includes("all")}
+                              onChange={() => setEditForm(f => ({ ...f, allowedPortals: togglePortal(f.allowedPortals, "all") }))}
+                              className="h-3.5 w-3.5 accent-orange-600 rounded border-slate-350"
+                            />
+                            <span className="text-slate-900 font-mono font-bold">All Portals</span>
+                          </label>
+                          {subdomains.map((sub) => (
+                            <label key={sub.id} className="flex items-center gap-2 text-xs cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={editForm.allowedPortals.includes(sub.name)}
+                                onChange={() => setEditForm(f => ({ ...f, allowedPortals: togglePortal(f.allowedPortals, sub.name) }))}
+                                className="h-3.5 w-3.5 accent-orange-600 rounded border-slate-350"
+                              />
+                              <span className="text-slate-700 font-mono text-[11px]">{sub.displayName}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   ) : (
                     <div className="flex items-center justify-between gap-3">
@@ -282,6 +360,14 @@ export function AdminUsers({ users, adminFetch, onRefresh, currentUserRole }: Ad
                             {user.isSystem && (
                               <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider bg-slate-100 text-slate-500 border-slate-200 flex items-center gap-0.5">
                                 <Shield className="h-2.5 w-2.5 inline" /> System
+                              </span>
+                            )}
+                            {user.allowedPortals && user.allowedPortals.length > 0 && !user.allowedPortals.includes("all") && (
+                              <span
+                                className="text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider bg-amber-50 text-amber-700 border-amber-200"
+                                title={`Can only log into: ${user.allowedPortals.join(", ")}`}
+                              >
+                                {user.allowedPortals.length} portal{user.allowedPortals.length !== 1 ? "s" : ""} only
                               </span>
                             )}
                           </div>
