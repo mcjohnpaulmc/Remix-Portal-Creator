@@ -2925,6 +2925,90 @@ def test_msui75_external_import_captures_solution_description_separately_from_cr
         fail(name, str(e))
 
 
+def test_msui76_verified_node_ingress_replaced_with_solutions_search():
+    name = "MSUI76 (static): the decorative 'Verified Node Ingress' label is replaced with a functional search input that filters the Solutions Hub grid"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        if "Verified Node Ingress" in src:
+            fail(name, "the decorative 'Verified Node Ingress' label is still present"); return
+        if "solutionSearch" not in src or "setSolutionSearch" not in src:
+            fail(name, "no solutionSearch state backing a search input"); return
+        if "searchedSolutions" not in src:
+            fail(name, "no derived searchedSolutions list filtering the grid by search text"); return
+        if "{searchedSolutions.map((sol) =>" not in src:
+            fail(name, "the solutions grid does not render from the search-filtered list"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui77_solution_search_does_not_affect_collateral_grouping():
+    name = "MSUI77 (static): the Solutions Hub search only narrows the solutions grid — the Collaterals Catalogue's per-solution grouping still uses the full visibleSolutions list"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        idx = src.index("const linkedSolutionIds = new Set(visibleSolutions.map((s) => s.id));")
+        body = src[idx:idx + 400]
+        if "visibleSolutions" not in body:
+            fail(name, "collateral row grouping no longer iterates visibleSolutions"); return
+        if "searchedSolutions" in body:
+            fail(name, "collateral row grouping was accidentally narrowed by the solutions search text"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui78_solution_card_shows_collateral_icons_with_hover_view_button():
+    name = "MSUI78 (static): each solution card with linked collaterals shows a per-type icon row that swaps to a 'View Collaterals' button on hover"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        if "KIND_ICONS[classifyCollateralType(col)]" not in src:
+            fail(name, "solution card does not render a per-collateral type icon"); return
+        if "group/collaterals" not in src:
+            fail(name, "no dedicated hover group scoping the icon-row/button swap (would conflict with the card's own hover group)"); return
+        if "View Collaterals" not in src:
+            fail(name, "no 'View Collaterals' button"); return
+        if "group-hover/collaterals:opacity-100" not in src or "group-hover/collaterals:opacity-0" not in src:
+            fail(name, "icon row and button do not swap visibility on hover"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui79_view_collaterals_scrolls_to_and_highlights_the_solutions_row():
+    name = "MSUI79 (static): clicking 'View Collaterals' switches to the Collaterals Catalogue tab and scrolls/highlights that solution's own row"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        if "const handleViewCollaterals = (solId: string) => (e: React.MouseEvent) => {" not in src:
+            fail(name, "no handleViewCollaterals handler"); return
+        handler_idx = src.index("const handleViewCollaterals")
+        handler_body = src[handler_idx:handler_idx + 300]
+        if "e.stopPropagation()" not in handler_body:
+            fail(name, "handleViewCollaterals does not stop propagation, so it would also trigger the card's own click-to-open"); return
+        if 'setCurrentTab("collaterals")' not in handler_body:
+            fail(name, "handleViewCollaterals does not switch to the Collaterals Catalogue tab"); return
+        if "id={`collateral-row-${row.key}`}" not in src:
+            fail(name, "collateral rows have no scroll-target id matching handleViewCollaterals' target"); return
+        if "highlightedCollateralRow === row.key" not in src:
+            fail(name, "the target row is not visually highlighted after navigating to it"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui80_no_featured_external_new_badges_on_solution_cards():
+    name = "MSUI80 (static): solution cards do not show Featured/External/New style tags"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        card_idx = src.index('id={`sol-card-${sol.id}`}')
+        card_body = src[card_idx:card_idx + 6000]
+        for banned in ["Featured", ">External<", ">NEW<", ">New<"]:
+            if banned in card_body:
+                fail(name, f"solution card contains a disallowed tag-like label: {banned}"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 def test_msui22_external_import_empty_customer_names_means_unmapped_not_all():
     name = "MSUI22 (static): external-portals import no longer defaults an empty/missing customerNames to ['all']"
     try:
@@ -3995,6 +4079,11 @@ TESTS = [
     test_msui73_uploads_module_switches_backend_and_falls_back_on_read,
     test_msui74_upload_and_import_routes_use_the_switchable_storage_module,
     test_msui75_external_import_captures_solution_description_separately_from_credentials_note,
+    test_msui76_verified_node_ingress_replaced_with_solutions_search,
+    test_msui77_solution_search_does_not_affect_collateral_grouping,
+    test_msui78_solution_card_shows_collateral_icons_with_hover_view_button,
+    test_msui79_view_collaterals_scrolls_to_and_highlights_the_solutions_row,
+    test_msui80_no_featured_external_new_badges_on_solution_cards,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

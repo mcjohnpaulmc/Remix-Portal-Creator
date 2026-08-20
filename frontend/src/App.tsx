@@ -48,6 +48,7 @@ import { adminFetch } from "./api/client";
 // Import custom parts
 import { AccessWall } from "./components/AccessWall";
 import { SafeImage } from "./components/SafeImage";
+import { KIND_ICONS } from "./components/PatternThumbnail";
 import { SolutionLaunchModal } from "./components/SolutionLaunchModal";
 import { CollateralDetailModal } from "./components/CollateralDetailModal";
 import { AdminMapSolutions } from "./components/AdminMapSolutions";
@@ -175,6 +176,41 @@ export default function App() {
   const [cardUnmaskedCreds, setCardUnmaskedCreds] = useState<Record<string, boolean>>({});
   const [copiedCardUser, setCopiedCardUser] = useState<Record<string, boolean>>({});
   const [copiedCardPass, setCopiedCardPass] = useState<Record<string, boolean>>({});
+
+  // Solutions Hub search — filters the solutions grid only; collaterals grouping
+  // below still needs every visible solution regardless of the search text.
+  const [solutionSearch, setSolutionSearch] = useState("");
+  const searchedSolutions = solutionSearch.trim()
+    ? visibleSolutions.filter((sol) => {
+        const q = solutionSearch.trim().toLowerCase();
+        return sol.title.toLowerCase().includes(q) ||
+          (sol.description || "").toLowerCase().includes(q) ||
+          (sol.tags || []).some((t) => t.toLowerCase().includes(q));
+      })
+    : visibleSolutions;
+
+  // "View Collaterals" on a solution card jumps to the Collaterals Catalogue tab
+  // and scrolls/highlights that solution's row once it's rendered there.
+  const [pendingCollateralScrollId, setPendingCollateralScrollId] = useState<string | null>(null);
+  const [highlightedCollateralRow, setHighlightedCollateralRow] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (currentTab !== "collaterals" || !pendingCollateralScrollId) return;
+    const targetId = pendingCollateralScrollId;
+    const timer = setTimeout(() => {
+      document.getElementById(`collateral-row-${targetId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlightedCollateralRow(targetId);
+      setPendingCollateralScrollId(null);
+      setTimeout(() => setHighlightedCollateralRow((cur) => (cur === targetId ? null : cur)), 1800);
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [currentTab, pendingCollateralScrollId]);
+
+  const handleViewCollaterals = (solId: string) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setPendingCollateralScrollId(solId);
+    setCurrentTab("collaterals");
+  };
 
   const handleCopyCardCred = (text: string, solId: string, type: "user" | "pass") => {
     if (!text) return;
@@ -1130,9 +1166,18 @@ export default function App() {
                 </button>
               </nav>
 
-              <span className="hidden md:inline-flex items-center text-[10px] uppercase tracking-wider font-mono text-slate-400 gap-1.5 font-bold">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Verified Node Ingress
-              </span>
+              {currentTab === "solutions" && (
+                <div className="relative w-full md:w-60">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={solutionSearch}
+                    onChange={(e) => setSolutionSearch(e.target.value)}
+                    placeholder="Search solutions..."
+                    className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-orange-400 focus:border-orange-400"
+                  />
+                </div>
+              )}
             </div>             {/* Grid Container */}
             <div className="flex-1 pt-4 text-left">
               <AnimatePresence mode="wait">
@@ -1145,7 +1190,7 @@ export default function App() {
                     exit={{ opacity: 0, y: -15 }}
                     className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
                   >
-                    {visibleSolutions.map((sol) => (
+                    {searchedSolutions.map((sol) => (
                       <div
                         key={sol.id}
                         id={`sol-card-${sol.id}`}
@@ -1247,6 +1292,44 @@ export default function App() {
                                 )}
                               </div>
                             )}
+
+                            {(() => {
+                              const linkedCols = visibleCollaterals.filter((c) => c.linkedSolutionId === sol.id);
+                              if (linkedCols.length === 0) return null;
+                              return (
+                                <div className="mt-3 pt-3 border-t border-slate-100">
+                                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
+                                    Relevant Collaterals
+                                  </span>
+                                  <div
+                                    onClick={handleViewCollaterals(sol.id)}
+                                    className="group/collaterals relative h-7 flex items-center cursor-pointer"
+                                  >
+                                    <div className="flex items-center gap-1.5 flex-wrap group-hover/collaterals:opacity-0 transition-opacity duration-150">
+                                      {linkedCols.map((col) => {
+                                        const Icon = KIND_ICONS[classifyCollateralType(col)];
+                                        return (
+                                          <span
+                                            key={col.id}
+                                            title={col.title}
+                                            className="h-5 w-5 rounded bg-slate-100 flex items-center justify-center shrink-0"
+                                          >
+                                            <Icon className="h-3 w-3 text-slate-500" strokeWidth={2} />
+                                          </span>
+                                        );
+                                      })}
+                                    </div>
+                                    <button
+                                      type="button"
+                                      className="absolute inset-0 flex items-center justify-center gap-1.5 bg-orange-50 hover:bg-orange-100 text-orange-700 text-[11px] font-bold rounded-lg opacity-0 group-hover/collaterals:opacity-100 transition-opacity duration-150"
+                                    >
+                                      <BookOpen className="h-3.5 w-3.5" />
+                                      View Collaterals
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </div>
 
                           <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between">
@@ -1261,11 +1344,15 @@ export default function App() {
                         </div>
                       </div>
                     ))}
-                    {visibleSolutions.length === 0 && (
+                    {searchedSolutions.length === 0 && (
                       <div className="md:col-span-3 text-center p-12 bg-white rounded-xl border border-dashed border-slate-350 shadow-2xs">
                         <Compass className="h-10 w-10 text-slate-300 mx-auto mb-3" />
-                        <h4 className="font-bold text-slate-700 text-sm">No solutions onboarded</h4>
-                        <p className="text-slate-400 text-xs mt-1">Visit the administrator dashboard to build out the app catalog.</p>
+                        <h4 className="font-bold text-slate-700 text-sm">
+                          {solutionSearch.trim() ? "No solutions match your search" : "No solutions onboarded"}
+                        </h4>
+                        <p className="text-slate-400 text-xs mt-1">
+                          {solutionSearch.trim() ? "Try a different search term." : "Visit the administrator dashboard to build out the app catalog."}
+                        </p>
                       </div>
                     )}
                   </motion.div>
@@ -1386,7 +1473,13 @@ export default function App() {
                           )}
 
                           {rows.map((row) => (
-                            <div key={row.key} className="bg-slate-50/50 p-4.5 rounded-2xl border border-slate-200">
+                            <div
+                              key={row.key}
+                              id={`collateral-row-${row.key}`}
+                              className={`bg-slate-50/50 p-4.5 rounded-2xl border transition-colors duration-500 ${
+                                highlightedCollateralRow === row.key ? "border-orange-400 ring-2 ring-orange-300" : "border-slate-200"
+                              }`}
+                            >
                               {/* Row header */}
                               <div className="border-b border-slate-105 pb-3 mb-4 flex items-center justify-between gap-3">
                                 <div className="flex items-center gap-3 min-w-0">

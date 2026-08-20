@@ -22,7 +22,7 @@ const GRADIENTS: [string, string][] = [
   ["#431407", "#ea580c"],
 ];
 
-const KIND_ICONS: Record<CollateralFilterType, React.ComponentType<{ className?: string; strokeWidth?: number }>> = {
+export const KIND_ICONS: Record<CollateralFilterType, React.ComponentType<{ className?: string; strokeWidth?: number }>> = {
   video: Video,
   document: FileText,
   deck: Presentation,
