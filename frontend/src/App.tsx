@@ -1172,7 +1172,7 @@ export default function App() {
                               {sol.title}
                             </h3>
                             <p className="text-xs text-slate-500 leading-relaxed line-clamp-2">
-                              {sol.credentialsDescription || "Gated enterprise intelligence hub."}
+                              {sol.description || sol.credentialsDescription || "Gated enterprise intelligence hub."}
                             </p>
 
                             {/* Card Credentials Panel */}

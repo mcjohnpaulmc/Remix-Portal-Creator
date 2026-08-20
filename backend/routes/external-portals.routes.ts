@@ -243,6 +243,7 @@ router.post("/external-portals/import", async (req, res) => {
     if (s.solution_type) tags.push(s.solution_type);
 
     const thumbnail = await resolveThumbnail(base, s.thumbnail_url || "", hubOrigin);
+    const description = s.description || "";
     const credentialsDescription = s.credentials_note || "";
     const usernamePrefill = s.default_username || "";
     const passwordPrefill = pick(s, ["default_password", "password", "default_pass", "credentials_password"]);
@@ -255,6 +256,7 @@ router.post("/external-portals/import", async (req, res) => {
       // so a re-sync can't silently unmap or hide a solution an admin has since configured.
       existingSol.title = title;
       if (thumbnail) existingSol.thumbnail = thumbnail;
+      existingSol.description = description;
       existingSol.credentialsDescription = credentialsDescription;
       existingSol.usernamePrefill = usernamePrefill;
       existingSol.passwordPrefill = passwordPrefill;
@@ -271,6 +273,7 @@ router.post("/external-portals/import", async (req, res) => {
         title,
         thumbnail,
         url,
+        description,
         credentialsDescription,
         usernamePrefill,
         passwordPrefill,

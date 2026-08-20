@@ -2898,6 +2898,33 @@ def test_msui74_upload_and_import_routes_use_the_switchable_storage_module():
         fail(name, str(e))
 
 
+def test_msui75_external_import_captures_solution_description_separately_from_credentials_note():
+    name = "MSUI75 (static): import carries the source's actual 'description' field (not just credentials_note) into a dedicated Solution.description, shown on the catalogue card and launch modal"
+    try:
+        types_src = read_file("shared/types.ts")
+        sol_idx = types_src.index("export interface Solution")
+        sol_body = types_src[sol_idx:types_src.index("export interface", sol_idx + 10)]
+        if "description?:" not in sol_body:
+            fail(name, "Solution has no dedicated description field distinct from credentialsDescription"); return
+
+        routes_src = read_file("backend/routes/external-portals.routes.ts")
+        if 'const description = s.description || "";' not in routes_src:
+            fail(name, "import does not read the source's own 'description' field"); return
+        if "existingSol.description = description;" not in routes_src:
+            fail(name, "re-syncing an existing solution does not refresh its description"); return
+
+        app_src = read_file("frontend/src/App.tsx")
+        if "sol.description || sol.credentialsDescription" not in app_src:
+            fail(name, "solution catalogue card does not prefer the real description over the credentials note"); return
+
+        modal_src = read_file("frontend/src/components/SolutionLaunchModal.tsx")
+        if "solution.description || solution.credentialsDescription" not in modal_src:
+            fail(name, "solution launch modal does not prefer the real description over the credentials note"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 def test_msui22_external_import_empty_customer_names_means_unmapped_not_all():
     name = "MSUI22 (static): external-portals import no longer defaults an empty/missing customerNames to ['all']"
     try:
@@ -3967,6 +3994,7 @@ TESTS = [
     test_msui72_upload_storage_mode_is_configurable,
     test_msui73_uploads_module_switches_backend_and_falls_back_on_read,
     test_msui74_upload_and_import_routes_use_the_switchable_storage_module,
+    test_msui75_external_import_captures_solution_description_separately_from_credentials_note,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

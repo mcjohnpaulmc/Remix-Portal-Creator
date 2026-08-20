@@ -27,6 +27,10 @@ export interface Solution {
   title: string;
   thumbnail: string;
   url: string;
+  // What the solution actually does — shown on its catalogue card/launch modal.
+  // Distinct from credentialsDescription, which is a note about the login
+  // credentials themselves (shown on the access-wall/credentials panel).
+  description?: string;
   credentialsDescription: string;
   usernamePrefill?: string;
   passwordPrefill?: string;

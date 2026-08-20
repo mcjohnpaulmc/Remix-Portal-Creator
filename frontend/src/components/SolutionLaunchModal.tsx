@@ -68,7 +68,7 @@ export function SolutionLaunchModal({ solution, onClose }: SolutionLaunchModalPr
           <div className="flex items-start gap-2.5 p-3.5 bg-slate-50 border border-slate-100 rounded-xl">
             <Info className="h-4.5 w-4.5 text-slate-500 mt-0.5 shrink-0" />
             <p className="text-xs text-slate-600 leading-relaxed">
-              {solution.credentialsDescription || "Authentication elements are automatically populated code parameters. Ready to bypass manual gatekeeping dashboards."}
+              {solution.description || solution.credentialsDescription || "Authentication elements are automatically populated code parameters. Ready to bypass manual gatekeeping dashboards."}
             </p>
           </div>
 
