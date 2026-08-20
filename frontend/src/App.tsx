@@ -1672,55 +1672,6 @@ export default function App() {
 
              {/* Central console body */}
             <div className="flex-1 flex flex-col overflow-hidden bg-slate-50/40">
-              {/* Horizontal Subdomain Switcher tabs bar — kept outside the scroll area so it never scrolls off-screen.
-                  Hidden on the Portal Domains tab itself: "Step 2" below already lists every portal,
-                  so showing the same list twice was redundant there. Also hidden on Onboard Solution
-                  and Map Solutions: neither page scopes its content by a single selected portal anymore
-                  (Map Solutions shows every portal as its own row; Onboard Solution has no portal context). */}
-              {adminActiveTab !== "subdomain" && adminActiveTab !== "solutions" && adminActiveTab !== "onboardSolution" && (
-              <div className="px-6 md:px-8 pt-6 md:pt-8 shrink-0">
-              <div className="mb-6 bg-white p-4 rounded-2xl border border-slate-200 shadow-3xs text-left animate-fade-in relative overflow-hidden">
-                <div className="absolute top-0 right-0 h-12 w-12 bg-orange-50/50 rounded-full blur-xl pointer-events-none" />
-                <span className="text-[10px] font-mono font-bold tracking-wider text-slate-400 uppercase block mb-2.5">
-                  🌍 ACTIVE TENANT PORTAL CONTEXT FILTER (CLICK SUBDOMAIN CARD TO FILTER ASSETS)
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedAdminSubdomain("all");
-                      setPrefilledSubdomain(null);
-                    }}
-                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      selectedAdminSubdomain === "all"
-                        ? "bg-orange-600 text-white shadow-xs border-b border-orange-700 font-sans"
-                        : "bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-205 font-sans"
-                    }`}
-                  >
-                    All Portals & Assets (Global View)
-                  </button>
-                  {subdomainsList.map((sub) => (
-                    <button
-                      key={sub.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedAdminSubdomain(sub.name);
-                        setPrefilledSubdomain(sub.name);
-                      }}
-                      className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 font-sans ${
-                        selectedAdminSubdomain === sub.name
-                          ? "bg-slate-900 text-white shadow-xs border-b border-slate-950"
-                          : "bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-205"
-                      }`}
-                    >
-                      <span className="h-1.5 w-1.5 rounded-full bg-orange-550" />
-                      {sub.displayName} ({sub.name})
-                    </button>
-                  ))}
-                </div>
-              </div>
-              </div>
-              )}{/* end non-scrolling header */}
 
               <div className="flex-1 px-6 md:px-8 pb-6 md:pb-8 overflow-y-auto custom-scroll">
               <AnimatePresence mode="wait">

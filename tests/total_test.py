@@ -1548,17 +1548,17 @@ def test_pi7_db_view_helper_filters_legacy_safely():
 
 
 # ── Bug fixes — UI1: Portal Domains page load ───────────────────────────────────
-# The "ACTIVE TENANT PORTAL CONTEXT FILTER" section and Step 2 must show the
-# portal list on first render, not only after clicking "Refresh DNS".
+# Step 2 must show the portal list on first render, not only after clicking
+# "Refresh DNS". The "ACTIVE TENANT PORTAL CONTEXT FILTER" chip bar that used to
+# sit above every admin tab (guarded to skip the subdomain tab) was removed
+# outright — see MSUI93.
 
 def test_ui1_domains_tab_hides_duplicate_filter_section():
-    name = "UI1a (static): App.tsx hides the tenant filter chips on the Portal Domains tab"
+    name = "UI1a (static): the tenant context filter chip bar is removed entirely, not just hidden on one tab"
     try:
         src = read_file("frontend/src/App.tsx")
-        idx = src.index("ACTIVE TENANT PORTAL CONTEXT FILTER")
-        preceding = src[max(0, idx - 800):idx]
-        if 'adminActiveTab !== "subdomain"' not in preceding:
-            fail(name, "filter section is not guarded to skip the subdomain tab"); return
+        if "ACTIVE TENANT PORTAL CONTEXT FILTER" in src:
+            fail(name, "the tenant context filter chip bar is still present in App.tsx"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -2486,16 +2486,14 @@ def test_msui2_nav_has_onboard_and_map_solutions_tabs():
 
 
 def test_msui3_map_solutions_page_has_no_onboard_deploy_buttons_or_filter_bar():
-    name = "MSUI3 (static): Map Solutions page has no Onboard/Deploy buttons and the tenant context filter bar is hidden there"
+    name = "MSUI3 (static): Map Solutions page has no Onboard/Deploy buttons, and the tenant context filter bar is gone from App.tsx entirely"
     try:
         map_src = read_file("frontend/src/components/AdminMapSolutions.tsx")
         if "Onboard New Solution" in map_src or "Deploy Solution" in map_src:
             fail(name, "AdminMapSolutions.tsx still renders an Onboard/Deploy trigger button"); return
         app_src = read_file("frontend/src/App.tsx")
-        idx = app_src.index("ACTIVE TENANT PORTAL CONTEXT FILTER")
-        guard = app_src[max(0, idx - 900):idx]
-        if 'adminActiveTab !== "solutions"' not in guard or 'adminActiveTab !== "onboardSolution"' not in guard:
-            fail(name, "context filter bar guard does not exclude the solutions/onboardSolution tabs"); return
+        if "ACTIVE TENANT PORTAL CONTEXT FILTER" in app_src:
+            fail(name, "the tenant context filter chip bar is still present in App.tsx"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -3191,6 +3189,21 @@ def test_msui92_app_tsx_passes_subdomains_to_admin_users():
         body = src[idx:idx + 300]
         if "subdomains={subdomainsList}" not in body:
             fail(name, "AdminUsers is not given the live subdomains list"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui93_tenant_context_filter_bar_removed_everywhere():
+    name = "MSUI93 (static): the 'ACTIVE TENANT PORTAL CONTEXT FILTER' chip bar is removed from every admin page, not just hidden on some tabs"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        if "ACTIVE TENANT PORTAL CONTEXT FILTER" in src:
+            fail(name, "the tenant context filter chip bar text is still present"); return
+        if "All Portals & Assets (Global View)" in src:
+            fail(name, "the filter bar's 'All Portals' chip button is still present"); return
+        if "end non-scrolling header" in src:
+            fail(name, "leftover marker comment from the removed filter bar block is still present"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -4297,6 +4310,7 @@ TESTS = [
     test_msui90_portal_login_proxy_identifies_its_own_portal,
     test_msui91_admin_users_has_allowed_portals_checkbox_grid_in_both_forms,
     test_msui92_app_tsx_passes_subdomains_to_admin_users,
+    test_msui93_tenant_context_filter_bar_removed_everywhere,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]
