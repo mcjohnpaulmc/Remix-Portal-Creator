@@ -1352,15 +1352,15 @@ def test_ms4_portal_login_has_rate_limiter():
 
 
 def test_ms4_hub_login_returns_429_after_limit():
-    name = "SecFix-MS4c (server): /api/login returns 429 after 5 failed attempts"
+    name = "SecFix-MS4c (server): /api/login returns 429 after 50 failed attempts"
     if not SERVER_UP:
         skip(name, "server not running"); return
     try:
-        for _ in range(5):
+        for _ in range(50):
             server_post("/api/login", {"email": "nobody@test.invalid", "password": "wrong"})
         r = server_post("/api/login", {"email": "nobody@test.invalid", "password": "wrong"})
         if r.status_code != 429:
-            fail(name, f"Expected 429 after 5 attempts, got {r.status_code}"); return
+            fail(name, f"Expected 429 after 50 attempts, got {r.status_code}"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -2995,6 +2995,22 @@ def test_msui79_view_collaterals_scrolls_to_and_highlights_the_solutions_row():
         fail(name, str(e))
 
 
+def test_msui81_login_rate_limit_raised_to_50_on_hub_and_portals():
+    name = "MSUI81 (static): the login rate limiter allows 50 attempts per 15 minutes (raised from 5) on both the hub and every customer portal, not removed entirely"
+    try:
+        for path in ["backend/routes/auth.routes.ts", "backend/portal-server.ts"]:
+            src = read_file(path)
+            if "rateLimit(" not in src or "loginLimiter" not in src:
+                fail(name, f"{path} no longer rate-limits login at all — brute-force protection was removed"); return
+            idx = src.index("const loginLimiter = rateLimit(")
+            body = src[idx:idx + 250]
+            if "max: 50" not in body:
+                fail(name, f"{path}'s loginLimiter is not set to max: 50"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 def test_msui80_no_featured_external_new_badges_on_solution_cards():
     name = "MSUI80 (static): solution cards do not show Featured/External/New style tags"
     try:
@@ -4084,6 +4100,7 @@ TESTS = [
     test_msui78_solution_card_shows_collateral_icons_with_hover_view_button,
     test_msui79_view_collaterals_scrolls_to_and_highlights_the_solutions_row,
     test_msui80_no_featured_external_new_badges_on_solution_cards,
+    test_msui81_login_rate_limit_raised_to_50_on_hub_and_portals,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]
