@@ -1518,13 +1518,13 @@ def test_pi5_admin_responses_use_safe_db_view():
 
 
 def test_pi6_refresh_dns_filters_by_ownership():
-    name = "PI6 (static): POST /refresh-dns only returns/re-checks the requesting admin's own portals"
+    name = "PI6 (static): POST /refresh-dns only returns/re-checks portals the requesting admin can access"
     try:
         src = read_file("backend/routes/subdomains.routes.ts")
         start = src.index('router.post("/refresh-dns"')
         body = src[start:start + 1500]
-        if "createdBy" not in body:
-            fail(name, "refresh-dns handler no longer filters pendingPortals/response by createdBy"); return
+        if "canAccessPortal(" not in body:
+            fail(name, "refresh-dns handler no longer filters pendingPortals/response by portal access"); return
         if "safeView" not in body:
             fail(name, "refresh-dns response is not built from a filtered safe view"); return
         ok(name)
@@ -1533,15 +1533,17 @@ def test_pi6_refresh_dns_filters_by_ownership():
 
 
 def test_pi7_db_view_helper_filters_legacy_safely():
-    name = "PI7 (static): buildAdminSafeDbView strips secrets and filters subdomains by createdBy"
+    name = "PI7 (static): buildAdminSafeDbView strips secrets and filters subdomains via canAccessPortal (createdBy, legacy-no-owner, or Super-Admin-mapped)"
     try:
         src = read_file("backend/utils/dbView.ts")
         if "passwordHash" not in src:
             fail(name, "buildAdminSafeDbView does not strip passwordHash"); return
         if "portAssignments" not in src:
             fail(name, "buildAdminSafeDbView does not strip portAssignments"); return
-        if "s.createdBy === adminEmail" not in src:
-            fail(name, "buildAdminSafeDbView does not filter subdomains by createdBy === adminEmail"); return
+        if "portal.createdBy === adminEmail" not in src:
+            fail(name, "canAccessPortal does not check createdBy === adminEmail"); return
+        if "canAccessPortal(s, adminEmail, isSuperAdmin)" not in src:
+            fail(name, "buildAdminSafeDbView does not filter subdomains via canAccessPortal"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -3264,6 +3266,107 @@ def test_msui96_admin_users_ui_only_offers_viewer_role_to_regular_admins():
         fail(name, str(e))
 
 
+def test_msui97_subdomain_portal_type_carries_mapped_admins():
+    name = "MSUI97 (static): SubdomainPortal declares an optional mappedAdmins list for Super-Admin-granted portal access"
+    try:
+        src = read_file("shared/types.ts")
+        idx = src.index("export interface SubdomainPortal")
+        body = src[idx:src.index("export interface", idx + 10)]
+        if "mappedAdmins?:" not in body:
+            fail(name, "SubdomainPortal does not declare mappedAdmins"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui98_can_access_portal_helper_covers_owner_legacy_superadmin_and_mapped():
+    name = "MSUI98 (static): canAccessPortal grants access for the actual owner, legacy no-owner portals, any superadmin, and Super-Admin-mapped admins — nobody else"
+    try:
+        src = read_file("backend/utils/dbView.ts")
+        idx = src.index("export function canAccessPortal")
+        body = src[idx:idx + 700]
+        if "if (isSuperAdmin) return true;" not in body:
+            fail(name, "superadmin does not always pass"); return
+        if "if (!portal.createdBy) return true;" not in body:
+            fail(name, "legacy no-owner portals are not always visible"); return
+        if "if (portal.createdBy === adminEmail) return true;" not in body:
+            fail(name, "the actual owner does not pass"); return
+        if "(portal.mappedAdmins || []).includes(adminEmail)" not in body:
+            fail(name, "a Super-Admin-mapped admin does not pass"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui99_subdomain_action_checks_use_shared_canAccessPortal_helper():
+    name = "MSUI99 (static): every per-portal ownership check in subdomains.routes.ts (update/rename/toggle/delete) uses the shared canAccessPortal helper, not a one-off createdBy comparison"
+    try:
+        src = read_file("backend/routes/subdomains.routes.ts")
+        if 'from "../utils/dbView"' not in src or "canAccessPortal" not in src:
+            fail(name, "subdomains.routes.ts does not import canAccessPortal"); return
+        if src.count("canAccessPortal(") < 5:
+            fail(name, "expected canAccessPortal to be used in update/rename/toggle/delete/refresh-dns (at least 5 call sites)"); return
+        if "createdBy !== adminEmail && !isSuperAdmin" in src or "createdBy !== (req as any).adminEmail && !isSuperAdmin" in src:
+            fail(name, "a one-off createdBy ownership check still exists instead of using canAccessPortal"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui100_only_superadmin_can_set_mapped_admins():
+    name = "MSUI100 (static): the portal update route rejects mappedAdmins changes from anyone but a Super Admin"
+    try:
+        src = read_file("backend/routes/subdomains.routes.ts")
+        idx = src.index("req.body.mappedAdmins !== undefined")
+        body = src[idx:idx + 300]
+        if "!isSuperAdmin" not in body:
+            fail(name, "mappedAdmins update does not check isSuperAdmin"); return
+        if "res.status(403)" not in body:
+            fail(name, "mappedAdmins update does not reject non-superadmins with 403"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui101_deploy_solution_portal_mapping_respects_mapped_admins():
+    name = "MSUI101 (static): deploy-solution.routes.ts lets a regular admin map to a portal they're Super-Admin-mapped onto, not just ones they created"
+    try:
+        src = read_file("backend/routes/deploy-solution.routes.ts")
+        if "canAccessPortal(s, adminEmail, isSuperAdmin)" not in src:
+            fail(name, "deploy-solution's portal-mapping check does not use canAccessPortal"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui102_portal_snapshot_shows_mapped_admins_content():
+    name = "MSUI102 (static): buildPortalSnapshot shows content created by a Super-Admin-mapped admin on that portal, not just content from the portal's actual creator"
+    try:
+        src = read_file("backend/portal/snapshot.ts")
+        if "portalMappedAdmins" not in src:
+            fail(name, "buildPortalSnapshot does not read the portal's mappedAdmins"); return
+        if "portalMappedAdmins.includes(item.createdBy)" not in src:
+            fail(name, "isOwnedByPortalCreator does not admit content created by a mapped admin"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui103_portal_settings_modal_has_superadmin_only_mapped_admins_ui():
+    name = "MSUI103 (static): the Portal Settings modal shows a Mapped Admins checkbox list only to a Super Admin, and omits mappedAdmins from the save payload for everyone else"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        if 'userRole === "superadmin" && (' not in src or "Mapped Admins" not in src:
+            fail(name, "no Super-Admin-only Mapped Admins section in the Portal Settings modal"); return
+        idx = src.index("const handleSavePortalSettings")
+        body = src[idx:idx + 900]
+        if 'userRole === "superadmin" ? { mappedAdmins: settingsMappedAdmins }' not in body:
+            fail(name, "save handler does not conditionally include mappedAdmins only for a superadmin"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 def test_msui80_no_featured_external_new_badges_on_solution_cards():
     name = "MSUI80 (static): solution cards do not show Featured/External/New style tags"
     try:
@@ -4369,6 +4472,13 @@ TESTS = [
     test_msui94_hub_login_rejects_viewer_role,
     test_msui95_only_superadmin_can_grant_admin_role,
     test_msui96_admin_users_ui_only_offers_viewer_role_to_regular_admins,
+    test_msui97_subdomain_portal_type_carries_mapped_admins,
+    test_msui98_can_access_portal_helper_covers_owner_legacy_superadmin_and_mapped,
+    test_msui99_subdomain_action_checks_use_shared_canAccessPortal_helper,
+    test_msui100_only_superadmin_can_set_mapped_admins,
+    test_msui101_deploy_solution_portal_mapping_respects_mapped_admins,
+    test_msui102_portal_snapshot_shows_mapped_admins_content,
+    test_msui103_portal_settings_modal_has_superadmin_only_mapped_admins_ui,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

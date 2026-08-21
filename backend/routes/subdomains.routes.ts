@@ -15,7 +15,7 @@ import { deployPortalInProcess, buildDefaultPortalJson } from "../portal/deploy"
 import { ensureDnsRecord, deleteDnsRecord, checkDnsRecord } from "../dns/cloudflare";
 import { ensureIisSite, removeIisSite } from "../iis/site";
 import { logger } from "../logger";
-import { buildAdminSafeDbView } from "../utils/dbView";
+import { buildAdminSafeDbView, canAccessPortal } from "../utils/dbView";
 import { isSuperAdminRole } from "../auth";
 import { deleteSolutionCascade } from "../utils/solutionCascade";
 
@@ -61,10 +61,19 @@ router.post("/subdomains", async (req, res) => {
     const targetId = id || resolvedName;
     const portal = (db.subdomains || []).find(s => s.id === targetId);
     if (!portal) return res.status(404).json({ error: "Portal not found." });
-    if (portal.createdBy && portal.createdBy !== adminEmail && !isSuperAdmin) {
+    if (!canAccessPortal(portal, adminEmail, isSuperAdmin)) {
       return res.status(403).json({ error: "You do not have permission to modify this portal." });
     }
     if (req.body.displayName !== undefined) portal.displayName = req.body.displayName.trim();
+    // Only a Super Admin can change which other admins are mapped onto this
+    // portal — a regular admin (even one already mapped here) can't grant
+    // themselves or anyone else that access.
+    if (req.body.mappedAdmins !== undefined) {
+      if (!isSuperAdmin) {
+        return res.status(403).json({ error: "Only a Super Admin can change which admins are mapped to a portal." });
+      }
+      portal.mappedAdmins = Array.isArray(req.body.mappedAdmins) ? req.body.mappedAdmins : [];
+    }
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
       email: (req as any).adminEmail || "admin@mobiusservices.co.in",
@@ -86,7 +95,7 @@ router.post("/subdomains", async (req, res) => {
     if (!targetId) return res.status(400).json({ error: "Portal id is required." });
     const portal = (db.subdomains || []).find(s => s.id === targetId);
     if (!portal) return res.status(404).json({ error: "Portal not found." });
-    if (portal.createdBy && portal.createdBy !== adminEmail && !isSuperAdmin) {
+    if (!canAccessPortal(portal, adminEmail, isSuperAdmin)) {
       return res.status(403).json({ error: "You do not have permission to modify this portal." });
     }
     if (portal.isDummy) {
@@ -276,7 +285,7 @@ router.post("/subdomains", async (req, res) => {
     if (!portal) {
       return res.status(404).json({ error: `Portal "${targetId}" not found.` });
     }
-    if (portal.createdBy && portal.createdBy !== (req as any).adminEmail && !isSuperAdmin) {
+    if (!canAccessPortal(portal, (req as any).adminEmail, isSuperAdmin)) {
       return res.status(403).json({ error: "You do not have permission to modify this portal." });
     }
 
@@ -329,7 +338,7 @@ router.post("/subdomains", async (req, res) => {
     }
     // Capture portal info BEFORE removing from list (needed for DNS cleanup and ownership check)
     const deletedPortal = (db.subdomains || []).find(s => s.id === targetId || s.name === targetId);
-    if (deletedPortal?.createdBy && deletedPortal.createdBy !== (req as any).adminEmail && !isSuperAdmin) {
+    if (deletedPortal && !canAccessPortal(deletedPortal, (req as any).adminEmail, isSuperAdmin)) {
       return res.status(403).json({ error: "You do not have permission to delete this portal." });
     }
 
@@ -423,11 +432,11 @@ router.post("/refresh-dns", async (req, res) => {
   const db = readDatabase();
   const adminEmail = (req as any).adminEmail;
   const isSuperAdmin = isSuperAdminRole((req as any).userRole);
-  // Superadmins re-check every pending portal; regular admins only their own —
-  // matches the ownership scope every other portal-list response applies
-  // (see buildAdminSafeDbView).
+  // Superadmins re-check every pending portal; regular admins only ones they
+  // can access — matches the ownership scope every other portal-list response
+  // applies (see buildAdminSafeDbView / canAccessPortal).
   const pendingPortals = (db.subdomains || []).filter(
-    s => !s.isDummy && s.domain && s.dnsStatus === "pending" && (isSuperAdmin || !s.createdBy || s.createdBy === adminEmail)
+    s => !s.isDummy && s.domain && s.dnsStatus === "pending" && canAccessPortal(s, adminEmail, isSuperAdmin)
   );
 
   let updated = 0;

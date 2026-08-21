@@ -8,6 +8,7 @@ import rateLimit from "express-rate-limit";
 import { PortalUser, UserLog } from "../../shared/types";
 import { readDatabase, writeDatabase } from "../storage/db";
 import { requireAnyAuth, isSuperAdminRole } from "../auth";
+import { canAccessPortal } from "../utils/dbView";
 
 const router = Router();
 
@@ -24,9 +25,9 @@ const logLimiter = rateLimit({
 });
 
 // GET /api/database — requires any valid session; strips passwordHash and portAssignments.
-// Portals are filtered by ownership: admins only see portals they created.
-// Legacy portals without a createdBy are visible to all admins for backward compatibility.
-// Superadmins see every portal, regardless of who created it.
+// Portals are filtered by canAccessPortal: admins see portals they created or a Super
+// Admin has mapped them onto (plus legacy portals with no createdBy). Superadmins see
+// every portal. Viewers never need portal management data, so they receive an empty list.
 router.get("/api/database", requireAnyAuth, (req, res) => {
   const db = readDatabase();
   const { portAssignments: _pa, ...safeDb } = db as any;
@@ -34,15 +35,11 @@ router.get("/api/database", requireAnyAuth, (req, res) => {
 
   const userEmail: string | undefined = (req as any).userEmail;
   const userRole: string | undefined = (req as any).userRole;
+  const isSuperAdmin = isSuperAdminRole(userRole);
 
-  // Superadmins see every portal. Admins see only their own portals (plus legacy
-  // portals with no createdBy). Viewers never need portal management data, so
-  // they receive an empty list.
-  const filteredSubdomains = isSuperAdminRole(userRole)
-    ? (safeDb.subdomains || [])
-    : userRole === "admin"
-      ? (safeDb.subdomains || []).filter((s: any) => !s.createdBy || s.createdBy === userEmail)
-      : [];
+  const filteredSubdomains = (isSuperAdmin || userRole === "admin")
+    ? (safeDb.subdomains || []).filter((s: any) => canAccessPortal(s, userEmail, isSuperAdmin))
+    : [];
 
   res.json({ ...safeDb, users: safeUsers, subdomains: filteredSubdomains });
 });

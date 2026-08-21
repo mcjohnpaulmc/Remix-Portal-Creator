@@ -15,14 +15,15 @@ export function buildPortalSnapshot(
   subdomainInfo: any
 ): object {
   const portalOwner: string | undefined = subdomainInfo?.createdBy;
+  const portalMappedAdmins: string[] = subdomainInfo?.mappedAdmins || [];
 
   // An item's owner and the portal's owner must agree before the item can appear on
   // that portal — this holds even for a "map to all portals" selection, so "all" only
-  // ever broadcasts within the creator's own portals, never into another admin's.
-  // Items or portals with no owner (pre-isolation legacy data) stay visible to everyone,
-  // matching the existing backward-compat behavior for legacy portals.
+  // ever broadcasts within the creator's own portals (or a Super-Admin-mapped admin's),
+  // never into another admin's. Items or portals with no owner (pre-isolation legacy
+  // data) stay visible to everyone, matching the existing backward-compat behavior.
   const isOwnedByPortalCreator = (item: any) =>
-    !item.createdBy || !portalOwner || item.createdBy === portalOwner;
+    !item.createdBy || !portalOwner || item.createdBy === portalOwner || portalMappedAdmins.includes(item.createdBy);
 
   const matchesSlug = (item: any, names: string[]) =>
     (names.includes(slug) || names.includes("all")) && isOwnedByPortalCreator(item);

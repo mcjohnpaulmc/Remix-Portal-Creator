@@ -13,7 +13,7 @@ import { readDatabase, writeDatabase } from "../storage/db";
 import { autoDeployLivePortals } from "../portal/deploy";
 import { ensureDnsRecord } from "../dns/cloudflare";
 import { ensureStaticHtmlIisSite } from "../iis/site";
-import { buildAdminSafeDbView } from "../utils/dbView";
+import { buildAdminSafeDbView, canAccessPortal } from "../utils/dbView";
 import { isSuperAdminRole } from "../auth";
 import { logger } from "../logger";
 
@@ -99,15 +99,15 @@ router.post("/deploy-solution", (req: any, res: any, next: any) => {
     cleanSlug = candidate;
   }
 
-  // Regular admins may only map to portals they own (or the legacy/no-owner
-  // ones) — mirrors the ownership rule enforced everywhere else. Superadmins
-  // and the "all" sentinel (already scoped per-owner at deploy time downstream
-  // in buildPortalSnapshot) bypass this.
+  // Regular admins may only map to portals they can access (owned, legacy/no-owner,
+  // or explicitly mapped to them by a Super Admin) — mirrors the access rule
+  // enforced everywhere else. Superadmins and the "all" sentinel (already scoped
+  // per-owner at deploy time downstream in buildPortalSnapshot) bypass this.
   if (!isSuperAdmin) {
-    const ownPortalNames = new Set(
-      (db.subdomains || []).filter(s => !s.createdBy || s.createdBy === adminEmail).map(s => s.name)
+    const accessiblePortalNames = new Set(
+      (db.subdomains || []).filter(s => canAccessPortal(s, adminEmail, isSuperAdmin)).map(s => s.name)
     );
-    const disallowed = customerNames.filter(n => n !== "all" && !ownPortalNames.has(n));
+    const disallowed = customerNames.filter(n => n !== "all" && !accessiblePortalNames.has(n));
     if (disallowed.length > 0) {
       return res.status(403).json({ error: `You do not have permission to map to: ${disallowed.join(", ")}` });
     }

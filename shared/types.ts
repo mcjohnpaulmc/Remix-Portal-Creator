@@ -20,6 +20,10 @@ export interface SubdomainPortal {
   isDummy?: boolean;  // true = localhost-only dev portal, no subdomain/domain
   status?: "live" | "sleep"; // "live" = PM2 process running, "sleep" = stopped (port still reserved)
   dnsStatus?: "pending" | "active" | "not_required"; // Cloudflare DNS assignment state
+  // Admin emails a Super Admin has explicitly granted access to this portal,
+  // beyond its actual creator — settable only by a Super Admin. Grants the same
+  // visibility/management rights as ownership (see backend/utils/dbView.ts).
+  mappedAdmins?: string[];
 }
 
 export interface Solution {

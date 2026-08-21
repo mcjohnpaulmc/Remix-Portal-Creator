@@ -777,6 +777,7 @@ export default function App() {
   // Portal Settings modal
   const [portalSettingsTarget, setPortalSettingsTarget] = useState<SubdomainPortal | null>(null);
   const [settingsDisplayName, setSettingsDisplayName] = useState("");
+  const [settingsMappedAdmins, setSettingsMappedAdmins] = useState<string[]>([]);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
 
@@ -807,6 +808,10 @@ export default function App() {
           action: "update",
           id: portalSettingsTarget.id,
           displayName: settingsDisplayName,
+          // Only a Super Admin can grant portal access to other admins — the
+          // backend rejects the whole request if a non-superadmin sends this
+          // field at all, so it must be omitted entirely for anyone else.
+          ...(userRole === "superadmin" ? { mappedAdmins: settingsMappedAdmins } : {}),
         }),
       });
       const data = await res.json();
@@ -1981,6 +1986,7 @@ export default function App() {
                                       onClick={() => {
                                         setPortalSettingsTarget(portal);
                                         setSettingsDisplayName(portal.displayName);
+                                        setSettingsMappedAdmins(portal.mappedAdmins || []);
                                         setSettingsSaved(false);
                                         setSubdomainEditing(false);
                                         setSubdomainSlug(portal.name);
@@ -2504,6 +2510,36 @@ export default function App() {
                     </div>
                   );
                 })()}
+
+                {/* Mapped Admins — Super Admin only. Grants a non-owning admin the same
+                    visibility/management rights on this portal as its actual creator. */}
+                {userRole === "superadmin" && (
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-semibold text-slate-700">Mapped Admins</label>
+                    <div className="p-3 bg-slate-50 border border-slate-205 rounded-xl grid grid-cols-2 gap-2.5 max-h-32 overflow-y-auto">
+                      {portalUsers.filter((u) => u.role === "admin").length === 0 ? (
+                        <span className="text-[10.5px] text-slate-400 col-span-2">No other admins to map — onboard one from User Management first.</span>
+                      ) : (
+                        portalUsers.filter((u) => u.role === "admin").map((u) => (
+                          <label key={u.id} className="flex items-center gap-2 text-xs cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={settingsMappedAdmins.includes(u.email)}
+                              onChange={() =>
+                                setSettingsMappedAdmins((prev) =>
+                                  prev.includes(u.email) ? prev.filter((e) => e !== u.email) : [...prev, u.email]
+                                )
+                              }
+                              className="h-3.5 w-3.5 accent-orange-600 rounded border-slate-350"
+                            />
+                            <span className="text-slate-700 truncate">{u.name}</span>
+                          </label>
+                        ))
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-400">Admins checked here can view and manage this portal even though they didn't create it.</p>
+                  </div>
+                )}
 
                 {/* Onboard Assets shortcut */}
                 <div className="pt-1 border-t border-slate-100">
