@@ -416,7 +416,15 @@ export default function App() {
     setUserRole(role || null);
     setShowLoginModal(false);
     logUserAction("User Login", `User "${name || email}" authenticated successfully.`);
-    
+
+    // Re-fetch scoped data (portals, users) under the newly authenticated session.
+    // Without this, a browser tab that already loaded data under a different
+    // session (e.g. superadmin, or no session at all) keeps rendering that stale,
+    // possibly over-privileged data after logging in as someone else — the admin
+    // console would show portals/users belonging to the previous session, even
+    // though the server itself is already scoping every response correctly.
+    if (isHub) fetchPortalData();
+
     // Resume opening previously blocked resource
     if (authNeededItem) {
       if (authNeededItem.type === "sol") {

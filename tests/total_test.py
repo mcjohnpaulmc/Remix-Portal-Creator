@@ -3426,6 +3426,21 @@ def test_msui107_database_endpoints_filter_users_by_role():
         fail(name, str(e))
 
 
+def test_msui108_login_refetches_scoped_data_for_the_new_session():
+    name = "MSUI108 (static): logging in re-fetches /api/database under the new session — a browser tab that already loaded data under a different (possibly more privileged) session must not keep rendering it after switching accounts"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        idx = src.index("const handleAuthSuccess = (email: string, name?: string, role?: string) => {")
+        body = src[idx:idx + 1000]
+        if "fetchPortalData()" not in body:
+            fail(name, "handleAuthSuccess does not re-fetch scoped portal data after login"); return
+        if "if (isHub) fetchPortalData();" not in body:
+            fail(name, "the re-fetch is not gated to hub sessions (portal logins don't need it — their /api/database isn't role-scoped)"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 def test_msui80_no_featured_external_new_badges_on_solution_cards():
     name = "MSUI80 (static): solution cards do not show Featured/External/New style tags"
     try:
@@ -4542,6 +4557,7 @@ TESTS = [
     test_msui105_can_manage_user_blocks_admin_from_acting_on_non_viewers,
     test_msui106_users_route_uses_visibility_and_manage_guards_everywhere,
     test_msui107_database_endpoints_filter_users_by_role,
+    test_msui108_login_refetches_scoped_data_for_the_new_session,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]
