@@ -3367,6 +3367,65 @@ def test_msui103_portal_settings_modal_has_superadmin_only_mapped_admins_ui():
         fail(name, str(e))
 
 
+def test_msui104_visible_users_for_role_hides_admins_from_regular_admins():
+    name = "MSUI104 (static): visibleUsersForRole shows a regular admin only viewer-role users — never other admins or superadmins, not even themselves"
+    try:
+        src = read_file("backend/utils/dbView.ts")
+        idx = src.index("export function visibleUsersForRole")
+        body = src[idx:idx + 300]
+        if 'isSuperAdmin ? users : users.filter(u => u.role === "viewer")' not in body:
+            fail(name, "visibleUsersForRole does not restrict non-superadmins to viewer-role users only"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui105_can_manage_user_blocks_admin_from_acting_on_non_viewers():
+    name = "MSUI105 (static): canManageUser refuses a regular admin acting on any user that isn't a viewer, even by a known/guessed id"
+    try:
+        src = read_file("backend/utils/dbView.ts")
+        idx = src.index("export function canManageUser")
+        body = src[idx:idx + 300]
+        if "if (isSuperAdmin) return true;" not in body:
+            fail(name, "superadmin does not always pass canManageUser"); return
+        if 'target?.role === "viewer"' not in body:
+            fail(name, "canManageUser does not restrict non-superadmins to viewer targets"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui106_users_route_uses_visibility_and_manage_guards_everywhere():
+    name = "MSUI106 (static): /api/admin/users applies visibleUsersForRole to its own response and canManageUser on both update and delete"
+    try:
+        src = read_file("backend/routes/users.routes.ts")
+        if 'from "../utils/dbView"' not in src:
+            fail(name, "users.routes.ts does not import the shared visibility/manage helpers"); return
+        if src.count("canManageUser(") < 2:
+            fail(name, "canManageUser is not enforced on both update and delete"); return
+        if "visibleUsersForRole(" not in src:
+            fail(name, "the route's own response is not filtered through visibleUsersForRole"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui107_database_endpoints_filter_users_by_role():
+    name = "MSUI107 (static): both GET /api/database and buildAdminSafeDbView filter the users list through visibleUsersForRole, not just buildAdminSafeDbView alone"
+    try:
+        public_src = read_file("backend/routes/public.routes.ts")
+        if "visibleUsersForRole(" not in public_src:
+            fail(name, "GET /api/database does not filter users by role"); return
+        dbview_src = read_file("backend/utils/dbView.ts")
+        idx = dbview_src.index("export function buildAdminSafeDbView")
+        body = dbview_src[idx:idx + 700]
+        if "visibleUsersForRole(" not in body:
+            fail(name, "buildAdminSafeDbView does not filter users by role"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 def test_msui80_no_featured_external_new_badges_on_solution_cards():
     name = "MSUI80 (static): solution cards do not show Featured/External/New style tags"
     try:
@@ -4479,6 +4538,10 @@ TESTS = [
     test_msui101_deploy_solution_portal_mapping_respects_mapped_admins,
     test_msui102_portal_snapshot_shows_mapped_admins_content,
     test_msui103_portal_settings_modal_has_superadmin_only_mapped_admins_ui,
+    test_msui104_visible_users_for_role_hides_admins_from_regular_admins,
+    test_msui105_can_manage_user_blocks_admin_from_acting_on_non_viewers,
+    test_msui106_users_route_uses_visibility_and_manage_guards_everywhere,
+    test_msui107_database_endpoints_filter_users_by_role,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

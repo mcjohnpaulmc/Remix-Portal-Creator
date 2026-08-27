@@ -8,6 +8,7 @@ import { PortalUser } from "../../shared/types";
 import { hashPassword, setUsersCache, isSuperAdminRole } from "../auth";
 import { readDatabase, writeDatabase, InternalUser } from "../storage/db";
 import { s3SyncUsers } from "../storage/s3";
+import { visibleUsersForRole, canManageUser } from "../utils/dbView";
 
 const router = Router();
 
@@ -71,6 +72,12 @@ router.post("/users", (req, res) => {
     if (target?.isSystem) {
       return res.status(403).json({ error: "System accounts cannot be modified." });
     }
+    // A regular admin may only ever act on viewers — never another admin or
+    // superadmin, even one they somehow got the id for (an old cached page,
+    // a log entry, etc.) — mirrors what they're allowed to even see in the list.
+    if (!canManageUser(target, requesterIsSuperAdmin)) {
+      return res.status(403).json({ error: "You do not have permission to modify this account." });
+    }
     if (user.role !== undefined && user.role !== target?.role) {
       if (!VALID_ROLES.has(user.role)) {
         return res.status(400).json({ error: `Invalid role "${user.role}".` });
@@ -105,6 +112,9 @@ router.post("/users", (req, res) => {
     if (delTarget?.isSystem) {
       return res.status(403).json({ error: "System accounts cannot be deleted." });
     }
+    if (!canManageUser(delTarget, requesterIsSuperAdmin)) {
+      return res.status(403).json({ error: "You do not have permission to delete this account." });
+    }
     db.users = db.users.filter(u => u.id !== user.id);
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
@@ -123,7 +133,10 @@ router.post("/users", (req, res) => {
   // Sync to S3 (fire-and-forget — don't block the HTTP response)
   s3SyncUsers(db.users || []).catch(() => {});
 
-  const safeUsers: PortalUser[] = (db.users || []).map(({ passwordHash: _ph, ...safe }) => safe);
+  const safeUsers: PortalUser[] = visibleUsersForRole(
+    (db.users || []).map(({ passwordHash: _ph, ...safe }) => safe),
+    requesterIsSuperAdmin
+  );
   res.json({ success: true, users: safeUsers });
 });
 
