@@ -26,8 +26,9 @@ const logLimiter = rateLimit({
 
 // GET /api/database — requires any valid session; strips passwordHash and portAssignments.
 // Portals are filtered by canAccessPortal: admins see portals they created or a Super
-// Admin has mapped them onto (plus legacy portals with no createdBy). Superadmins see
-// every portal. Viewers never need portal management data, so they receive an empty list.
+// Admin has granted them extra access to via their own allowedPortals (plus legacy
+// portals with no createdBy). Superadmins see every portal. Viewers never need portal
+// management data, so they receive an empty list.
 // Users are filtered by visibleUsersForRole: a regular admin only ever sees viewers —
 // they must not learn who else administers the system.
 router.get("/api/database", requireAnyAuth, (req, res) => {
@@ -44,7 +45,7 @@ router.get("/api/database", requireAnyAuth, (req, res) => {
   );
 
   const filteredSubdomains = (isSuperAdmin || userRole === "admin")
-    ? (safeDb.subdomains || []).filter((s: any) => canAccessPortal(s, userEmail, isSuperAdmin))
+    ? (safeDb.subdomains || []).filter((s: any) => canAccessPortal(s, userEmail, isSuperAdmin, safeDb.users || []))
     : [];
 
   res.json({ ...safeDb, users: safeUsers, subdomains: filteredSubdomains });

@@ -15,15 +15,21 @@ export function buildPortalSnapshot(
   subdomainInfo: any
 ): object {
   const portalOwner: string | undefined = subdomainInfo?.createdBy;
-  const portalMappedAdmins: string[] = subdomainInfo?.mappedAdmins || [];
+  const allowedPortalsByEmail = new Map(
+    (db.users || []).map(u => [u.email, u.allowedPortals || []] as const)
+  );
 
   // An item's owner and the portal's owner must agree before the item can appear on
   // that portal — this holds even for a "map to all portals" selection, so "all" only
-  // ever broadcasts within the creator's own portals (or a Super-Admin-mapped admin's),
-  // never into another admin's. Items or portals with no owner (pre-isolation legacy
-  // data) stay visible to everyone, matching the existing backward-compat behavior.
-  const isOwnedByPortalCreator = (item: any) =>
-    !item.createdBy || !portalOwner || item.createdBy === portalOwner || portalMappedAdmins.includes(item.createdBy);
+  // ever broadcasts within the creator's own portals (or one a Super Admin granted
+  // them via their own allowedPortals), never into another admin's. Items or portals
+  // with no owner (pre-isolation legacy data) stay visible to everyone, matching the
+  // existing backward-compat behavior.
+  const isOwnedByPortalCreator = (item: any) => {
+    if (!item.createdBy || !portalOwner || item.createdBy === portalOwner) return true;
+    const granted = allowedPortalsByEmail.get(item.createdBy) || [];
+    return granted.includes("all") || granted.includes(slug);
+  };
 
   const matchesSlug = (item: any, names: string[]) =>
     (names.includes(slug) || names.includes("all")) && isOwnedByPortalCreator(item);

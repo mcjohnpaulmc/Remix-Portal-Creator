@@ -20,10 +20,6 @@ export interface SubdomainPortal {
   isDummy?: boolean;  // true = localhost-only dev portal, no subdomain/domain
   status?: "live" | "sleep"; // "live" = PM2 process running, "sleep" = stopped (port still reserved)
   dnsStatus?: "pending" | "active" | "not_required"; // Cloudflare DNS assignment state
-  // Admin emails a Super Admin has explicitly granted access to this portal,
-  // beyond its actual creator — settable only by a Super Admin. Grants the same
-  // visibility/management rights as ownership (see backend/utils/dbView.ts).
-  mappedAdmins?: string[];
 }
 
 export interface Solution {
@@ -175,10 +171,17 @@ export interface PortalUser {
   createdAt: string;
   enabled?: boolean;
   isSystem?: boolean; // true = cannot be deleted, edited, or disabled
-  // Which customer portals this user may log into (AccessWall on that portal's
-  // subdomain). Undefined/empty or ["all"] means unrestricted — every existing
-  // user predates this field and must keep working exactly as before. Has no
-  // effect on hub admin-console access, which is gated by role, not portal.
+  // Dual purpose, depending on role:
+  //  - viewer: which customer portals this user may log into (AccessWall on that
+  //    portal's subdomain). Undefined/empty or ["all"] means unrestricted — every
+  //    pre-existing viewer predates this field and must keep working unchanged.
+  //  - admin: which *additional* portals (beyond ones they personally created)
+  //    a Super Admin has granted them visibility/management of in the hub admin
+  //    console. Here undefined/empty means NO extra access (the opposite default
+  //    from the viewer case — see canAccessPortal in backend/utils/dbView.ts for
+  //    why), and ["all"] grants every portal.
+  // Has no effect on whether a user can reach the hub admin console at all — that
+  // is gated by role alone (viewers can never log into the hub, see auth.routes.ts).
   allowedPortals?: string[];
 }
 

@@ -8,20 +8,34 @@ import { DatabaseSchema } from "../storage/db";
 /**
  * canAccessPortal — the single source of truth for whether a given admin may
  * see/manage a given portal: they created it, it's a legacy portal with no
- * owner, a Super Admin explicitly mapped them onto it, or they're a Super
- * Admin themselves (who can access every portal). Used consistently by every
- * portal-list filter and per-portal action check across the backend so none
- * of them can drift out of sync with each other.
+ * owner, a Super Admin granted them extra access to it via their own
+ * allowedPortals (the same field that restricts a viewer's portal login —
+ * for an admin it instead grants access beyond what they personally created),
+ * or they're a Super Admin themselves (who can access every portal). Used
+ * consistently by every portal-list filter and per-portal action check across
+ * the backend so none of them can drift out of sync with each other.
+ *
+ * Unlike the viewer-login check (verify-credentials), an EMPTY allowedPortals
+ * here grants NO extra access — an admin only sees their own portals until a
+ * Super Admin explicitly adds more. This is the opposite default from the
+ * viewer case (where empty means unrestricted), because the two are opposite
+ * risk directions: an unrestricted viewer login is the safe default (they
+ * still can't do anything without also having a solution's credentials), but
+ * an admin seeing every portal by default would defeat portal isolation.
  */
 export function canAccessPortal(
-  portal: { createdBy?: string; mappedAdmins?: string[] },
+  portal: { createdBy?: string; name?: string; id?: string },
   adminEmail: string | undefined,
-  isSuperAdmin: boolean
+  isSuperAdmin: boolean,
+  users: { email: string; allowedPortals?: string[] }[] = []
 ): boolean {
   if (isSuperAdmin) return true;
   if (!portal.createdBy) return true;
   if (portal.createdBy === adminEmail) return true;
-  return !!adminEmail && (portal.mappedAdmins || []).includes(adminEmail);
+  if (!adminEmail) return false;
+  const granted = users.find(u => u.email === adminEmail)?.allowedPortals || [];
+  if (granted.length === 0) return false;
+  return granted.includes("all") || granted.includes(portal.name || "") || granted.includes(portal.id || "");
 }
 
 /**
@@ -70,6 +84,6 @@ export function buildAdminSafeDbView(
     (safeDb.users || []).map(({ passwordHash: _ph, ...safe }: any) => safe),
     isSuperAdmin
   );
-  const filteredSubdomains = (safeDb.subdomains || []).filter((s: any) => canAccessPortal(s, adminEmail, isSuperAdmin));
+  const filteredSubdomains = (safeDb.subdomains || []).filter((s: any) => canAccessPortal(s, adminEmail, isSuperAdmin, safeDb.users || []));
   return { ...safeDb, users: safeUsers, subdomains: filteredSubdomains };
 }

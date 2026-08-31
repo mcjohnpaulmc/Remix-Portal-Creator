@@ -100,12 +100,12 @@ router.post("/deploy-solution", (req: any, res: any, next: any) => {
   }
 
   // Regular admins may only map to portals they can access (owned, legacy/no-owner,
-  // or explicitly mapped to them by a Super Admin) — mirrors the access rule
-  // enforced everywhere else. Superadmins and the "all" sentinel (already scoped
-  // per-owner at deploy time downstream in buildPortalSnapshot) bypass this.
+  // or granted via their own allowedPortals by a Super Admin) — mirrors the access
+  // rule enforced everywhere else. Superadmins and the "all" sentinel (already
+  // scoped per-owner at deploy time downstream in buildPortalSnapshot) bypass this.
   if (!isSuperAdmin) {
     const accessiblePortalNames = new Set(
-      (db.subdomains || []).filter(s => canAccessPortal(s, adminEmail, isSuperAdmin)).map(s => s.name)
+      (db.subdomains || []).filter(s => canAccessPortal(s, adminEmail, isSuperAdmin, db.users || [])).map(s => s.name)
     );
     const disallowed = customerNames.filter(n => n !== "all" && !accessiblePortalNames.has(n));
     if (disallowed.length > 0) {

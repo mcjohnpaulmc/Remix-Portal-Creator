@@ -27,7 +27,7 @@ export function AdminUsers({ users, adminFetch, onRefresh, currentUserRole, subd
     ? ["viewer", "admin", "superadmin"]
     : ["viewer"];
 
-  const [form, setForm] = useState({ email: "", name: "", password: "", role: "viewer" as UserRole, allowedPortals: ["all"] as string[] });
+  const [form, setForm] = useState({ email: "", name: "", password: "", role: "viewer" as UserRole, allowedPortals: [] as string[] });
   const [showFormPw, setShowFormPw] = useState(false);
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState("");
@@ -36,18 +36,26 @@ export function AdminUsers({ users, adminFetch, onRefresh, currentUserRole, subd
 
   // Edit state
   const [editId, setEditId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", role: "viewer" as UserRole, password: "", allowedPortals: ["all"] as string[] });
+  const [editForm, setEditForm] = useState({ name: "", role: "viewer" as UserRole, password: "", allowedPortals: [] as string[] });
   const [showEditPw, setShowEditPw] = useState(false);
 
-  // Shared toggle logic for the "which portals can this user log into" checkbox
-  // grid — checking "All" clears everything else; checking a specific portal
-  // clears "All" and toggles just that one, matching the pattern used for
-  // collateral/project subdomain visibility elsewhere in the admin console.
+  // Shared toggle logic for the Allowed Portals checkbox grid — checking "All"
+  // clears everything else; checking a specific portal clears "All" and toggles
+  // just that one, matching the pattern used for collateral/project subdomain
+  // visibility elsewhere in the admin console. Unlike those, leaving every box
+  // unchecked is a valid (and the default) state here — see allowedPortalsHint.
   const togglePortal = (current: string[], name: string): string[] => {
-    if (name === "all") return ["all"];
-    let updated = current.filter((n) => n !== "all");
-    updated = updated.includes(name) ? updated.filter((n) => n !== name) : [...updated, name];
-    return updated.length === 0 ? ["all"] : updated;
+    if (name === "all") return current.includes("all") ? [] : ["all"];
+    const updated = current.filter((n) => n !== "all");
+    return updated.includes(name) ? updated.filter((n) => n !== name) : [...updated, name];
+  };
+
+  // Allowed Portals means something different depending on the role it's set
+  // on — this explains which, right where the checkboxes are.
+  const allowedPortalsHint = (role: UserRole): string => {
+    if (role === "superadmin") return "Super Admins always have full access to every portal — this has no effect for this role.";
+    if (role === "viewer") return "Which customer portals this viewer may log into. Leave everything unchecked for unrestricted login access.";
+    return "Which portals this admin can additionally see/manage in the admin console, beyond ones they create themselves. Leave unchecked to grant no extra access.";
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -69,7 +77,7 @@ export function AdminUsers({ users, adminFetch, onRefresh, currentUserRole, subd
         setFormError(data.error || "Failed to create user.");
       } else {
         setFormSuccess(`User "${form.name}" created.`);
-        setForm({ email: "", name: "", password: "", role: "viewer", allowedPortals: ["all"] });
+        setForm({ email: "", name: "", password: "", role: "viewer", allowedPortals: [] });
         onRefresh();
         setTimeout(() => setFormSuccess(""), 3000);
       }
@@ -120,7 +128,7 @@ export function AdminUsers({ users, adminFetch, onRefresh, currentUserRole, subd
       name: user.name,
       role: user.role,
       password: "",
-      allowedPortals: user.allowedPortals && user.allowedPortals.length > 0 ? user.allowedPortals : ["all"],
+      allowedPortals: user.allowedPortals || [],
     });
     setShowEditPw(false);
   };
@@ -234,7 +242,7 @@ export function AdminUsers({ users, adminFetch, onRefresh, currentUserRole, subd
                 </label>
               ))}
             </div>
-            <p className="text-[10px] text-slate-400">Which customer portals this user is allowed to log into. Doesn't affect hub admin-console access.</p>
+            <p className="text-[10px] text-slate-400">{allowedPortalsHint(form.role)}</p>
           </div>
 
           {formError && (
@@ -347,6 +355,7 @@ export function AdminUsers({ users, adminFetch, onRefresh, currentUserRole, subd
                             </label>
                           ))}
                         </div>
+                        <p className="text-[10px] text-slate-400">{allowedPortalsHint(editForm.role)}</p>
                       </div>
                     </div>
                   ) : (
@@ -366,12 +375,26 @@ export function AdminUsers({ users, adminFetch, onRefresh, currentUserRole, subd
                                 <Shield className="h-2.5 w-2.5 inline" /> System
                               </span>
                             )}
-                            {user.allowedPortals && user.allowedPortals.length > 0 && !user.allowedPortals.includes("all") && (
+                            {/* allowedPortals reads as a login restriction for viewers, but as an
+                                extra-access grant for admins — the badge frames it accordingly. */}
+                            {user.role === "viewer" && user.allowedPortals && user.allowedPortals.length > 0 && !user.allowedPortals.includes("all") && (
                               <span
                                 className="text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider bg-amber-50 text-amber-700 border-amber-200"
                                 title={`Can only log into: ${user.allowedPortals.join(", ")}`}
                               >
                                 {user.allowedPortals.length} portal{user.allowedPortals.length !== 1 ? "s" : ""} only
+                              </span>
+                            )}
+                            {user.role === "admin" && user.allowedPortals && user.allowedPortals.length > 0 && (
+                              <span
+                                className="text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider bg-sky-50 text-sky-700 border-sky-200"
+                                title={user.allowedPortals.includes("all")
+                                  ? "Can additionally see/manage every portal"
+                                  : `Can additionally see/manage: ${user.allowedPortals.join(", ")}`}
+                              >
+                                {user.allowedPortals.includes("all")
+                                  ? "+ all portals"
+                                  : `+${user.allowedPortals.length} portal${user.allowedPortals.length !== 1 ? "s" : ""}`}
                               </span>
                             )}
                           </div>
@@ -422,7 +445,7 @@ export function AdminUsers({ users, adminFetch, onRefresh, currentUserRole, subd
 
       <div className="text-[10px] text-slate-400 leading-relaxed p-3 bg-slate-50 rounded-xl border border-slate-100">
         <Shield className="h-3 w-3 inline mr-1 text-orange-400" />
-        <strong>Permissions:</strong> Viewer users can only log into the portal(s) they're allowed on to view solutions/collaterals — they have no hub access at all, and cannot onboard anyone. Admin users can manage their own portals, solutions, and collaterals, and can onboard viewers (but not other admins). Super Admins can additionally view and edit every admin's portals, solutions, and collaterals, and are the only role that can onboard another admin or superadmin. Passwords are stored as bcrypt hashes.
+        <strong>Permissions:</strong> Viewer users can only log into the portal(s) they're allowed on to view solutions/collaterals — they have no hub access at all, and cannot onboard anyone. Admin users can manage the portals they create, plus any extra ones a Super Admin grants them via that same <strong>Allowed Portals</strong> setting, and can onboard viewers (but not other admins). Super Admins can additionally view and edit every admin's portals, solutions, and collaterals, and are the only role that can onboard another admin or superadmin, or grant an admin extra portal access. Passwords are stored as bcrypt hashes.
       </div>
     </div>
   );
