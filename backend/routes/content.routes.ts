@@ -8,7 +8,7 @@ import { Router } from "express";
 import { Solution, Collateral, CurrentProject, UpcomingProject } from "../../shared/types";
 import { readDatabase, writeDatabase } from "../storage/db";
 import { autoDeployLivePortals } from "../portal/deploy";
-import { buildAdminSafeDbView } from "../utils/dbView";
+import { buildAdminSafeDbView, canAccessPortal } from "../utils/dbView";
 import { isSuperAdminRole } from "../auth";
 import { deleteSolutionCascade } from "../utils/solutionCascade";
 import { DEPLOYED_SOLUTIONS_DIR } from "../config";
@@ -17,6 +17,38 @@ import { ensureStaticHtmlIisSite, removeStaticHtmlIisSite, ensureMappedUrlIisSit
 import { logger } from "../logger";
 
 const router = Router();
+
+// Whether `incoming` only changes customerNames/customerName relative to `existing` —
+// distinguishes "map this onto my portal" (Map Solutions page, or the analogous
+// collateral flow) from an actual content edit (title/url/credentials/etc.), since
+// the two are governed by different permissions: mapping by portal access below,
+// content edits by item ownership (unchanged, existing behavior).
+function isMappingOnlyChange(incoming: any, existing: any): boolean {
+  return Object.keys(incoming).every(key => {
+    if (key === "id" || key === "customerNames" || key === "customerName") return true;
+    return JSON.stringify(incoming[key]) === JSON.stringify(existing?.[key]);
+  });
+}
+
+// Whether adminEmail may add/remove the named portal from a mapping. "all" broadcasts
+// across every admin's portals, so it's reserved for superadmins. A name that doesn't
+// match any known portal (stale/renamed reference) is let through rather than blocked,
+// matching canAccessPortal's own leniency toward legacy/unrecognized data.
+function canMapToPortalName(name: string, db: any, adminEmail: string | undefined, isSuperAdmin: boolean): boolean {
+  if (name === "all") return isSuperAdmin;
+  const portal = (db.subdomains || []).find((p: any) => p.name === name);
+  return portal ? canAccessPortal(portal, adminEmail, isSuperAdmin, db.users || []) : true;
+}
+
+// Returns an error message if the requesting admin can't apply this mapping-only
+// change (missing access to a portal being added or removed), else null.
+function mappingPermissionError(incoming: any, existing: any, db: any, adminEmail: string | undefined, isSuperAdmin: boolean): string | null {
+  const oldNames: string[] = existing.customerNames || (existing.customerName ? [existing.customerName] : []);
+  const newNames: string[] = incoming.customerNames || (incoming.customerName ? [incoming.customerName] : []);
+  const touched = [...new Set([...oldNames, ...newNames])].filter(n => oldNames.includes(n) !== newNames.includes(n));
+  const forbidden = touched.find(n => !canMapToPortalName(n, db, adminEmail, isSuperAdmin));
+  return forbidden ? `You do not have permission to map this to "${forbidden}".` : null;
+}
 
 // POST /solutions — mounted at /api/admin
 router.post("/solutions", async (req, res) => {
@@ -42,7 +74,13 @@ router.post("/solutions", async (req, res) => {
     });
   } else if (action === "update") {
     const target = db.solutions.find(s => s.id === solution.id);
-    if (target?.createdBy && target.createdBy !== adminEmail && !isSuperAdmin) {
+    if (!target) {
+      return res.status(404).json({ error: "Solution not found." });
+    }
+    if (isMappingOnlyChange(solution, target)) {
+      const mapError = mappingPermissionError(solution, target, db, adminEmail, isSuperAdmin);
+      if (mapError) return res.status(403).json({ error: mapError });
+    } else if (target.createdBy && target.createdBy !== adminEmail && !isSuperAdmin) {
       return res.status(403).json({ error: "You do not have permission to modify this solution." });
     }
     db.solutions = db.solutions.map(s => s.id === solution.id ? { ...s, ...solution, createdBy: s.createdBy } : s);
@@ -181,7 +219,13 @@ router.post("/collaterals", async (req, res) => {
     });
   } else if (action === "update") {
     const target = db.collaterals.find(c => c.id === collateral.id);
-    if (target?.createdBy && target.createdBy !== adminEmail && !isSuperAdmin) {
+    if (!target) {
+      return res.status(404).json({ error: "Collateral not found." });
+    }
+    if (isMappingOnlyChange(collateral, target)) {
+      const mapError = mappingPermissionError(collateral, target, db, adminEmail, isSuperAdmin);
+      if (mapError) return res.status(403).json({ error: mapError });
+    } else if (target.createdBy && target.createdBy !== adminEmail && !isSuperAdmin) {
       return res.status(403).json({ error: "You do not have permission to modify this collateral." });
     }
     db.collaterals = db.collaterals.map(c => c.id === collateral.id ? { ...c, ...collateral, createdBy: c.createdBy } : c);

@@ -2321,7 +2321,7 @@ def test_casc3_remapping_solution_syncs_linked_collaterals():
     try:
         src = read_file("backend/routes/content.routes.ts")
         idx = src.index('action === "update"')
-        body = src[idx:idx + 900]
+        body = src[idx:idx + 1400]
         if "solution.customerNames !== undefined" not in body:
             fail(name, "solution update does not check for a customerNames remap"); return
         if "c.linkedSolutionId === solution.id" not in body:
@@ -3384,6 +3384,68 @@ def test_msui109_admin_users_allowed_portals_is_role_aware():
             fail(name, "form/edit state does not default Allowed Portals to empty"); return
         if 'allowedPortals: user.allowedPortals || []' not in src:
             fail(name, "startEdit forces a fallback to a non-empty default instead of showing what's actually stored"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui110_mapping_only_solution_update_is_gated_by_portal_access_not_ownership():
+    name = "MSUI110 (static): mapping an existing solution onto a portal (Map Solutions page) is gated by whether the admin can access that portal, not by who created the solution — but a real content edit (title/url/credentials) still requires ownership"
+    try:
+        src = read_file("backend/routes/content.routes.ts")
+        if "function isMappingOnlyChange" not in src:
+            fail(name, "no helper distinguishing a mapping-only change from a content edit"); return
+        if "function mappingPermissionError" not in src:
+            fail(name, "no helper checking portal access for a mapping-only change"); return
+        idx = src.index('router.post("/solutions"')
+        body = src[idx:idx + 1600]
+        if "isMappingOnlyChange(solution, target)" not in body:
+            fail(name, "solutions update does not branch on isMappingOnlyChange"); return
+        if "mappingPermissionError(solution, target, db, adminEmail, isSuperAdmin)" not in body:
+            fail(name, "solutions update does not check mappingPermissionError for mapping-only changes"); return
+        if 'target.createdBy && target.createdBy !== adminEmail && !isSuperAdmin' not in body:
+            fail(name, "a real content edit no longer falls back to the ownership check"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui111_mapping_only_collateral_update_is_gated_by_portal_access_too():
+    name = "MSUI111 (static): the same mapping-vs-content-edit distinction applies to collaterals, not just solutions"
+    try:
+        src = read_file("backend/routes/content.routes.ts")
+        idx = src.index('router.post("/collaterals"')
+        body = src[idx:idx + 1600]
+        if "isMappingOnlyChange(collateral, target)" not in body:
+            fail(name, "collaterals update does not branch on isMappingOnlyChange"); return
+        if "mappingPermissionError(collateral, target, db, adminEmail, isSuperAdmin)" not in body:
+            fail(name, "collaterals update does not check mappingPermissionError for mapping-only changes"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui112_can_map_to_portal_name_reserves_all_for_superadmin():
+    name = "MSUI112 (static): only a superadmin can map something to 'all' portals at once; a specific portal name is checked via canAccessPortal, and an unrecognized/legacy name is let through rather than blocked"
+    try:
+        src = read_file("backend/routes/content.routes.ts")
+        idx = src.index("function canMapToPortalName")
+        body = src[idx:idx + 400]
+        if 'if (name === "all") return isSuperAdmin;' not in body:
+            fail(name, "'all' is not reserved for superadmins"); return
+        if "canAccessPortal(portal, adminEmail, isSuperAdmin, db.users || [])" not in body:
+            fail(name, "a specific portal name is not checked via canAccessPortal"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui113_admin_database_update_alert_shows_the_real_backend_error():
+    name = "MSUI113 (static): App.tsx's generic 'database persistence' alert now shows the actual backend error message when one is present, instead of always hiding it behind a generic message"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        if 'alert(resData.error || "Encountered failure during database persistence updates.")' not in src:
+            fail(name, "the failure alert does not fall through to the real backend error message"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -4581,6 +4643,10 @@ TESTS = [
     test_msui107_database_endpoints_filter_users_by_role,
     test_msui108_login_refetches_scoped_data_for_the_new_session,
     test_msui109_admin_users_allowed_portals_is_role_aware,
+    test_msui110_mapping_only_solution_update_is_gated_by_portal_access_not_ownership,
+    test_msui111_mapping_only_collateral_update_is_gated_by_portal_access_too,
+    test_msui112_can_map_to_portal_name_reserves_all_for_superadmin,
+    test_msui113_admin_database_update_alert_shows_the_real_backend_error,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

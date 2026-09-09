@@ -520,7 +520,7 @@ export default function App() {
       if (resData.success) {
         applyDatabase(resData.database);
       } else {
-        alert("Encountered failure during database persistence updates.");
+        alert(resData.error || "Encountered failure during database persistence updates.");
       }
     } catch (err) {
       console.error("Administrative update failed:", err);
