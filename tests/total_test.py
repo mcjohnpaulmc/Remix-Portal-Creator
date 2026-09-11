@@ -2302,15 +2302,17 @@ def test_casc2_content_routes_uses_shared_cascade_helper():
 
 
 def test_casc2_portal_delete_removes_orphaned_solutions():
-    name = "CASC2c (static): deleting a portal deletes solutions left with no remaining portal mapping, instead of leaving them to read as 'mapped to all'"
+    name = "CASC2c (static): deleting a portal deletes solutions left with no remaining portal mapping, instead of leaving them to read as 'mapped to all' — but only ones that WERE mapped to the deleted portal, not every already-unmapped solution in the system"
     try:
         src = read_file("backend/routes/subdomains.routes.ts")
         idx = src.index("Remove the deleted portal's slug from all content mappings")
-        body = src[idx:idx + 1500]
+        body = src[idx:idx + 2500]
         if "orphanedSolutionIds" not in body:
             fail(name, "no orphaned-solution detection found after stripping the deleted portal's slug"); return
         if "deleteSolutionCascade(db, orphanId)" not in body:
             fail(name, "orphaned solutions are not cascade-deleted"); return
+        if "solutionsBeforeStrip" not in body or "wasMappedHere" not in body:
+            fail(name, "orphan detection does not check that the solution was actually mapped to the deleted portal beforehand — this regresses to deleting every already-unmapped solution in the system on any portal delete"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -3446,6 +3448,24 @@ def test_msui113_admin_database_update_alert_shows_the_real_backend_error():
         src = read_file("frontend/src/App.tsx")
         if 'alert(resData.error || "Encountered failure during database persistence updates.")' not in src:
             fail(name, "the failure alert does not fall through to the real backend error message"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui114_portal_delete_orphan_sweep_only_catches_solutions_mapped_to_that_portal():
+    name = "MSUI114 (static): deleting a portal must not cascade-delete a solution that was ALREADY unmapped beforehand (e.g. a Map Subdomain utility living in the Hub Repository) just because it also has empty customerNames — regression for the bug that deleted unrelated solutions on every unrelated portal delete"
+    try:
+        src = read_file("backend/routes/subdomains.routes.ts")
+        idx = src.index("Remove the deleted portal's slug from all content mappings")
+        body = src[idx:idx + 2500]
+        # The orphan filter must consult a pre-strip snapshot and require that the
+        # solution's OWN customerNames/customerName included targetId before the
+        # strip — not just check the post-strip emptiness in isolation.
+        if "solutionsBeforeStrip.get(s.id)" not in body:
+            fail(name, "orphan detection does not look up each solution's pre-strip state"); return
+        if "before.customerNames || (before.customerName ? [before.customerName] : [])).includes(targetId)" not in body:
+            fail(name, "orphan detection does not confirm the solution was actually mapped to the deleted portal before treating it as orphaned by this deletion"); return
         ok(name)
     except Exception as e:
         fail(name, str(e))
@@ -4647,6 +4667,7 @@ TESTS = [
     test_msui111_mapping_only_collateral_update_is_gated_by_portal_access_too,
     test_msui112_can_map_to_portal_name_reserves_all_for_superadmin,
     test_msui113_admin_database_update_alert_shows_the_real_backend_error,
+    test_msui114_portal_delete_orphan_sweep_only_catches_solutions_mapped_to_that_portal,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

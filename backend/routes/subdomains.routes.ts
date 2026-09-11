@@ -354,9 +354,21 @@ router.post("/subdomains", async (req, res) => {
     // their own linked collaterals and any deployed HTML app) rather than
     // leaving them behind with nowhere to be shown. A solution still mapped to
     // at least one other portal just loses this slug, same as before.
+    //
+    // Crucially, "orphaned" must mean this deletion is what emptied it — a
+    // solution that was ALREADY unmapped beforehand (e.g. every "Map Subdomain"
+    // utility, which lives in the Hub Repository unmapped to any portal by
+    // design) must not get swept up just because it also happens to have no
+    // customerNames. Without this check, deleting ANY portal anywhere in the
+    // system silently deleted every already-unmapped solution along with it.
+    const solutionsBeforeStrip = new Map((db.solutions || []).map(s => [s.id, s]));
     db.solutions = stripSlug(db.solutions || []);
     const orphanedSolutionIds = db.solutions
-      .filter(s => (!s.customerNames || s.customerNames.length === 0) && !s.customerName)
+      .filter(s => {
+        const before = solutionsBeforeStrip.get(s.id);
+        const wasMappedHere = !!before && (before.customerNames || (before.customerName ? [before.customerName] : [])).includes(targetId);
+        return wasMappedHere && (!s.customerNames || s.customerNames.length === 0) && !s.customerName;
+      })
       .map(s => s.id);
     let cascadedSolutionCollaterals = 0;
     for (const orphanId of orphanedSolutionIds) {
