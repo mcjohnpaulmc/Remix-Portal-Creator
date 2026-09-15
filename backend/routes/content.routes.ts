@@ -282,7 +282,13 @@ router.post("/projects/current", async (req, res) => {
     });
   } else if (action === "update") {
     const target = db.currentProjects.find(p => p.id === project.id);
-    if (target?.createdBy && target.createdBy !== adminEmail && !isSuperAdmin) {
+    if (!target) {
+      return res.status(404).json({ error: "Project not found." });
+    }
+    if (isMappingOnlyChange(project, target)) {
+      const mapError = mappingPermissionError(project, target, db, adminEmail, isSuperAdmin);
+      if (mapError) return res.status(403).json({ error: mapError });
+    } else if (target.createdBy && target.createdBy !== adminEmail && !isSuperAdmin) {
       return res.status(403).json({ error: "You do not have permission to modify this project." });
     }
     db.currentProjects = db.currentProjects.map(p => p.id === project.id ? { ...p, ...project, createdBy: p.createdBy } : p);
@@ -339,7 +345,13 @@ router.post("/projects/upcoming", async (req, res) => {
     });
   } else if (action === "update") {
     const target = db.upcomingProjects.find(p => p.id === project.id);
-    if (target?.createdBy && target.createdBy !== adminEmail && !isSuperAdmin) {
+    if (!target) {
+      return res.status(404).json({ error: "Project not found." });
+    }
+    if (isMappingOnlyChange(project, target)) {
+      const mapError = mappingPermissionError(project, target, db, adminEmail, isSuperAdmin);
+      if (mapError) return res.status(403).json({ error: mapError });
+    } else if (target.createdBy && target.createdBy !== adminEmail && !isSuperAdmin) {
       return res.status(403).json({ error: "You do not have permission to modify this project." });
     }
     db.upcomingProjects = db.upcomingProjects.map(p => p.id === project.id ? { ...p, ...project, createdBy: p.createdBy } : p);

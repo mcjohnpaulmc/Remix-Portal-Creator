@@ -3471,6 +3471,48 @@ def test_msui114_portal_delete_orphan_sweep_only_catches_solutions_mapped_to_tha
         fail(name, str(e))
 
 
+def test_msui115_project_visibility_filter_honors_customer_names_array_and_all():
+    name = "MSUI115 (static): a published Current/Upcoming Project card must display on a portal when it is mapped via the plural customerNames array (multi-select or 'All (Global)' checkbox) — not just when the singular customerName field happens to equal the subdomain, which silently hid multi-portal/'all'-mapped project cards"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        idx = src.index("const isProjectVisibleOnSubdomain")
+        body = src[idx:idx + 700]
+        if "proj.customerNames && proj.customerNames.length > 0" not in body:
+            fail(name, "visibility check does not prefer the plural customerNames array"); return
+        if 'n === "all" || n.toLowerCase() === subdomain.toLowerCase()' not in body:
+            fail(name, "visibility check does not honor an 'all' entry alongside a direct subdomain match"); return
+        if "visibleCurrentProjects = currentProjects" not in src or "visibleUpcomingProjects = upcomingProjects" not in src:
+            fail(name, "current/upcoming project lists no longer defined"); return
+        idx2 = src.index("visibleCurrentProjects = currentProjects")
+        body2 = src[idx2:idx2 + 200]
+        if "isProjectVisibleOnSubdomain" not in body2:
+            fail(name, "visibleCurrentProjects does not use the shared visibility helper"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui116_mapping_only_project_update_is_gated_by_portal_access_not_ownership():
+    name = "MSUI116 (static): re-mapping an existing Current/Upcoming Project onto a portal is gated by whether the admin can access that portal, not by who created the project — same fix already applied to solutions/collaterals, now applied to projects/current and projects/upcoming"
+    try:
+        src = read_file("backend/routes/content.routes.ts")
+        idx1 = src.index('router.post("/projects/current"')
+        body1 = src[idx1:idx1 + 1200]
+        if "isMappingOnlyChange(project, target)" not in body1:
+            fail(name, "projects/current update does not branch on isMappingOnlyChange"); return
+        if "mappingPermissionError(project, target, db, adminEmail, isSuperAdmin)" not in body1:
+            fail(name, "projects/current update does not check mappingPermissionError for mapping-only changes"); return
+        idx2 = src.index('router.post("/projects/upcoming"')
+        body2 = src[idx2:idx2 + 1200]
+        if "isMappingOnlyChange(project, target)" not in body2:
+            fail(name, "projects/upcoming update does not branch on isMappingOnlyChange"); return
+        if "mappingPermissionError(project, target, db, adminEmail, isSuperAdmin)" not in body2:
+            fail(name, "projects/upcoming update does not check mappingPermissionError for mapping-only changes"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 def test_msui104_visible_users_for_role_hides_admins_from_regular_admins():
     name = "MSUI104 (static): visibleUsersForRole shows a regular admin only viewer-role users — never other admins or superadmins, not even themselves"
     try:
@@ -4668,6 +4710,8 @@ TESTS = [
     test_msui112_can_map_to_portal_name_reserves_all_for_superadmin,
     test_msui113_admin_database_update_alert_shows_the_real_backend_error,
     test_msui114_portal_delete_orphan_sweep_only_catches_solutions_mapped_to_that_portal,
+    test_msui115_project_visibility_filter_honors_customer_names_array_and_all,
+    test_msui116_mapping_only_project_update_is_gated_by_portal_access_not_ownership,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

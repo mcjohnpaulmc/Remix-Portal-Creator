@@ -164,12 +164,20 @@ export default function App() {
   const visibleCollaterals = collaterals
     .filter((col) => col.enabled !== false)
     .filter((col) => subdomain === "all" || !col.customerName || col.customerName === "all" || col.customerName.toLowerCase() === subdomain.toLowerCase());
+  const isProjectVisibleOnSubdomain = (proj: { customerName?: string; customerNames?: string[] }) => {
+    if (subdomain === "all") return true;
+    const names = proj.customerNames && proj.customerNames.length > 0
+      ? proj.customerNames
+      : (proj.customerName ? [proj.customerName] : []);
+    if (names.length === 0) return true;
+    return names.some((n) => n === "all" || n.toLowerCase() === subdomain.toLowerCase());
+  };
   const visibleCurrentProjects = currentProjects
     .filter((proj) => proj.enabled !== false)
-    .filter((proj) => subdomain === "all" || proj.customerName.toLowerCase() === subdomain.toLowerCase());
+    .filter(isProjectVisibleOnSubdomain);
   const visibleUpcomingProjects = upcomingProjects
     .filter((proj) => proj.enabled !== false)
-    .filter((proj) => subdomain === "all" || proj.customerName.toLowerCase() === subdomain.toLowerCase());
+    .filter(isProjectVisibleOnSubdomain);
 
   // Solution card credentials states
   const [cardExpandedCreds, setCardExpandedCreds] = useState<Record<string, boolean>>({});
