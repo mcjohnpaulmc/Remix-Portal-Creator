@@ -4463,6 +4463,34 @@ def test_msui68_collateral_thumbnails_pass_classified_kind_not_solutions():
         fail(name, str(e))
 
 
+def test_msui120_admin_console_has_no_outer_box_and_a_pinned_sidebar():
+    name = "MSUI120 (static): the admin console no longer sits inside a margined/rounded/bordered white box (mx-4 my-6 border shadow-lg rounded-3xl) — sidebar and content now run edge-to-edge. The sidebar is pinned via position:sticky (md:sticky md:top-16, capped to the viewport height) rather than being trapped in a bounded-height flex-scroll chain — that approach was tried and verified broken under real content in a live browser check (a flex column's overflow-y-auto child sizes to its own content instead of clipping, so the page just grew past the viewport and scrolled the sidebar away with it anyway). Sticky was verified live: after scrolling the window well past the sidebar's own height, its bounding-rect top/bottom stayed pinned exactly at the header's height."
+    try:
+        src = read_file("frontend/src/App.tsx")
+        idx = src.index("ADMINISTRATIVE CONTROL CONSOLE")
+        body = src[idx:idx + 1100]
+        if "mx-4 my-6" in body or "rounded-3xl" in body or "shadow-lg" in body:
+            fail(name, "the admin console still has the boxed-in margin/rounded/shadow styling"); return
+        if "md:sticky" not in body or "md:top-16" not in body:
+            fail(name, "the sidebar is not sticky-positioned below the header"); return
+        if "md:h-[calc(100vh-4rem)]" not in body or "md:overflow-y-auto" not in body:
+            fail(name, "the sticky sidebar is not capped to the viewport height with its own internal scroll"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui121_cloud_deployments_status_footer_removed_from_sidebar():
+    name = "MSUI121 (static): the decorative 'Cloud Deployments / Active Node 12-US' status footer is removed from the bottom of the admin console sidebar"
+    try:
+        src = read_file("frontend/src/App.tsx")
+        if "Cloud Deployments" in src or "Active Node 12-US" in src:
+            fail(name, "the Cloud Deployments status footer is still present"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 # ── run all tests ─────────────────────────────────────────────────────────────
 
 TESTS = [
@@ -4772,6 +4800,8 @@ TESTS = [
     test_msui117_map_solutions_all_portal_checkbox_is_editable_per_portal,
     test_msui118_map_solutions_popups_are_portaled_to_document_body,
     test_msui119_portal_snapshot_explicit_mapping_bypasses_creator_ownership_check,
+    test_msui120_admin_console_has_no_outer_box_and_a_pinned_sidebar,
+    test_msui121_cloud_deployments_status_footer_removed_from_sidebar,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

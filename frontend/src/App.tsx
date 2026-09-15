@@ -1634,9 +1634,14 @@ export default function App() {
           </div>
         ) : (
           // ============================== ADMINISTRATIVE CONTROL CONSOLE ==============================
-          <div className="mx-4 my-6 bg-white border border-slate-100 shadow-lg rounded-3xl overflow-hidden flex-1 flex flex-col md:flex-row text-left">
-            {/* Sidebar navigation */}
-            <div className="w-full md:w-64 bg-slate-950 text-slate-200 border-r border-slate-900 p-6 flex flex-col justify-between shrink-0">
+          <div className="bg-white flex-1 flex flex-col md:flex-row text-left">
+            {/* Sidebar navigation — sticky (not a bounded-height flex chain, which broke
+                under real content: a flex column's overflow-y-auto child sizes to its own
+                content instead of clipping to the parent, so the "internal scroll" approach
+                just grew the whole page anyway). Sticky pins it in the viewport as the page
+                scrolls, capped to the viewport height so it scrolls its OWN nav internally
+                on a short screen instead of pushing off-screen. */}
+            <div className="w-full md:w-64 bg-slate-950 text-slate-200 border-r border-slate-900 p-6 flex flex-col shrink-0 md:sticky md:top-16 md:self-start md:h-[calc(100vh-4rem)] md:overflow-y-auto custom-scroll">
               <div className="space-y-6">
                 <div>
                   <span className="text-[10px] font-mono tracking-widest text-slate-500 uppercase font-semibold">
@@ -1673,23 +1678,13 @@ export default function App() {
                   ))}
                 </nav>
               </div>
-
-              {/* Status footer inside sidebar */}
-              <div className="pt-6 border-t border-slate-900">
-                <div className="bg-slate-900 p-3.5 rounded-xl border border-slate-800 flex items-center gap-2.5">
-                  <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <div className="text-[10px] font-mono">
-                    <span className="block text-slate-500 uppercase">Cloud Deployments</span>
-                    <span className="text-slate-200">Active Node 12-US</span>
-                  </div>
-                </div>
-              </div>
             </div>
 
-             {/* Central console body */}
-            <div className="flex-1 flex flex-col overflow-hidden bg-slate-50/40">
+             {/* Central console body — scrolls with the normal page; the sidebar stays
+                 in view via its own sticky positioning above. */}
+            <div className="flex-1 flex flex-col bg-slate-50/40">
 
-              <div className="flex-1 px-6 md:px-8 pb-6 md:pb-8 overflow-y-auto custom-scroll">
+              <div className="flex-1 px-6 md:px-8 pb-6 md:pb-8">
               <AnimatePresence mode="wait">
                 <motion.div
                   key={adminActiveTab}
