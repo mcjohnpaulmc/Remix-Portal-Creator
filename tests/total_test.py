@@ -3513,6 +3513,63 @@ def test_msui116_mapping_only_project_update_is_gated_by_portal_access_not_owner
         fail(name, str(e))
 
 
+def test_msui117_map_solutions_all_portal_checkbox_is_editable_per_portal():
+    name = "MSUI117 (static): a solution mapped to 'all portals' is no longer a permanently-checked, disabled checkbox in the Map Solutions popup — an admin can uncheck it to remove that one solution from just this portal, tracked via a removedFromAll set instead of being blocked outright"
+    try:
+        src = read_file("frontend/src/components/AdminMapSolutions.tsx")
+        if "const [removedFromAll, setRemovedFromAll] = useState<Set<string>>(new Set());" not in src:
+            fail(name, "no removedFromAll state to track per-portal opt-outs from an 'all' mapping"); return
+        idx = src.index("const checked = mappedViaAll ? !removedFromAll.has(sol.id) : selectedToMap.has(sol.id);")
+        body = src[idx:idx + 900]
+        if "disabled={mappedViaAll}" in body:
+            fail(name, "the 'all portals' checkbox is still hard-disabled"); return
+        if "setRemovedFromAll((prev) =>" not in body:
+            fail(name, "unchecking an 'all portals' solution does not toggle removedFromAll"); return
+        idx2 = src.index("const handleMapSelected = async () => {")
+        body2 = src[idx2:idx2 + 900]
+        if "if (!removedFromAll.has(sol.id)) continue;" not in body2:
+            fail(name, "handleMapSelected does not skip 'all'-mapped solutions the admin left checked"); return
+        if "subdomains.map((s) => s.name).filter((n) => n !== mapPortal.name)" not in body2:
+            fail(name, "handleMapSelected does not convert an opted-out 'all' mapping into an explicit list of every other portal"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui118_map_solutions_popups_are_portaled_to_document_body():
+    name = "MSUI118 (static): the Map Solutions page's popups (view/map/edit) render via createPortal into document.body — they previously rendered inside a framer-motion tab wrapper that applies a transform, which turns their `fixed` positioning into being relative to that ancestor instead of the viewport, trapping the popup under the sticky topbar"
+    try:
+        src = read_file("frontend/src/components/AdminMapSolutions.tsx")
+        if 'import { createPortal } from "react-dom";' not in src:
+            fail(name, "createPortal is not imported"); return
+        if src.count("document.body") < 3:
+            fail(name, "expected the view/map/edit popups to each portal into document.body"); return
+        if "{createPortal(\n      <AnimatePresence>" not in src:
+            fail(name, "the view popup is not portaled"); return
+        if "{mapPortal && createPortal(" not in src:
+            fail(name, "the map popup is not portaled"); return
+        if "{editingSolution && createPortal(" not in src:
+            fail(name, "the edit popup is not portaled"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
+def test_msui119_portal_snapshot_explicit_mapping_bypasses_creator_ownership_check():
+    name = "MSUI119 (static): buildPortalSnapshot must show a solution/collateral/project on a portal it is EXPLICITLY mapped to via customerNames, regardless of who created it — that mapping was already permission-checked at mapping time (mappingPermissionError). Only the broad 'all' sentinel still needs the creator-ownership check, to stop it broadcasting across admins. Regression for a portal mapped to 7 solutions only showing 3."
+    try:
+        src = read_file("backend/portal/snapshot.ts")
+        idx = src.index("const matchesSlug = (item: any, names: string[]) => {")
+        body = src[idx:idx + 300]
+        if "if (names.includes(slug)) return true;" not in body:
+            fail(name, "an explicit mapping to this slug is no longer trusted outright"); return
+        if 'if (names.includes("all")) return isOwnedByPortalCreator(item);' not in body:
+            fail(name, "the 'all' sentinel no longer goes through the creator-ownership check"); return
+        ok(name)
+    except Exception as e:
+        fail(name, str(e))
+
+
 def test_msui104_visible_users_for_role_hides_admins_from_regular_admins():
     name = "MSUI104 (static): visibleUsersForRole shows a regular admin only viewer-role users — never other admins or superadmins, not even themselves"
     try:
@@ -4712,6 +4769,9 @@ TESTS = [
     test_msui114_portal_delete_orphan_sweep_only_catches_solutions_mapped_to_that_portal,
     test_msui115_project_visibility_filter_honors_customer_names_array_and_all,
     test_msui116_mapping_only_project_update_is_gated_by_portal_access_not_ownership,
+    test_msui117_map_solutions_all_portal_checkbox_is_editable_per_portal,
+    test_msui118_map_solutions_popups_are_portaled_to_document_body,
+    test_msui119_portal_snapshot_explicit_mapping_bypasses_creator_ownership_check,
     # MS4c last — it exhausts the rate-limit window and would block earlier login tests
     test_ms4_hub_login_returns_429_after_limit,
 ]

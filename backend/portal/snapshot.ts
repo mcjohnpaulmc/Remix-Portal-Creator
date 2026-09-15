@@ -19,20 +19,30 @@ export function buildPortalSnapshot(
     (db.users || []).map(u => [u.email, u.allowedPortals || []] as const)
   );
 
-  // An item's owner and the portal's owner must agree before the item can appear on
-  // that portal — this holds even for a "map to all portals" selection, so "all" only
-  // ever broadcasts within the creator's own portals (or one a Super Admin granted
-  // them via their own allowedPortals), never into another admin's. Items or portals
-  // with no owner (pre-isolation legacy data) stay visible to everyone, matching the
-  // existing backward-compat behavior.
+  // The broad "map to all portals" sentinel is isolation-sensitive: without a check
+  // here, ticking "All (Global)" on a solution would broadcast it into every admin's
+  // portal, not just the creator's own. So "all" only ever reaches the creator's own
+  // portals (or one a Super Admin granted them via their own allowedPortals). Items
+  // or portals with no owner (pre-isolation legacy data) stay visible to everyone,
+  // matching the existing backward-compat behavior.
+  //
+  // An EXPLICIT mapping to this specific portal (this slug named directly in
+  // customerNames) is different — Map Solutions already permission-checks that at
+  // mapping time (mappingPermissionError in content.routes.ts, gated by the mapping
+  // admin's own portal access, not the content's creator). Re-checking ownership here
+  // would just hide a mapping that was already legitimately authorized, which is what
+  // made a portal explicitly mapped to 7 solutions only display 3 of them.
   const isOwnedByPortalCreator = (item: any) => {
     if (!item.createdBy || !portalOwner || item.createdBy === portalOwner) return true;
     const granted = allowedPortalsByEmail.get(item.createdBy) || [];
     return granted.includes("all") || granted.includes(slug);
   };
 
-  const matchesSlug = (item: any, names: string[]) =>
-    (names.includes(slug) || names.includes("all")) && isOwnedByPortalCreator(item);
+  const matchesSlug = (item: any, names: string[]) => {
+    if (names.includes(slug)) return true;
+    if (names.includes("all")) return isOwnedByPortalCreator(item);
+    return false;
+  };
 
   return {
     slug,

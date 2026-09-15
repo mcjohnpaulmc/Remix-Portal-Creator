@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { X, Eye, EyeOff, Edit2, Trash2, Link2, RefreshCw, ExternalLink, Search, SlidersHorizontal, ChevronDown } from "lucide-react";
 import { Solution, Collateral, SubdomainPortal } from "../../../shared/types";
@@ -60,6 +61,10 @@ export function AdminMapSolutions({
   const [viewPortal, setViewPortal] = useState<PortalRow | null>(null);
   const [mapPortal, setMapPortal] = useState<PortalRow | null>(null);
   const [selectedToMap, setSelectedToMap] = useState<Set<string>>(new Set());
+  // Solutions mapped via the "all" sentinel that the admin has unchecked for THIS
+  // portal specifically — on submit these get pulled out of "all" and converted to
+  // an explicit list of every other portal, so they keep showing everywhere else.
+  const [removedFromAll, setRemovedFromAll] = useState<Set<string>>(new Set());
   const [mapping, setMapping] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [editingSolution, setEditingSolution] = useState<Solution | null>(null);
@@ -112,21 +117,34 @@ export function AdminMapSolutions({
       solutions.filter((s) => namesOf(s).includes(row.name)).map((s) => s.id)
     );
     setSelectedToMap(initial);
+    setRemovedFromAll(new Set());
     setMapPortal(row);
+  };
+
+  const closeMap = () => {
+    setMapPortal(null);
+    setRemovedFromAll(new Set());
   };
 
   // Syncs each solution's mapping to this one portal to match the checkbox
   // state — adds it for newly-checked solutions, removes it for unchecked ones
   // that were previously mapped here, and leaves everything else untouched.
-  // Solutions mapped via "all" are skipped entirely (see openMap above). The
-  // backend re-syncs each solution's linked collaterals to match automatically.
+  // A solution mapped via "all" that got unchecked here is pulled out of "all"
+  // and converted to an explicit list of every OTHER portal, so it keeps
+  // showing everywhere else and only disappears from this one. The backend
+  // re-syncs each solution's linked collaterals to match automatically.
   const handleMapSelected = async () => {
     if (!mapPortal) return;
     setMapping(true);
     try {
       for (const sol of solutions) {
         const names = namesOf(sol);
-        if (names.includes("all")) continue;
+        if (names.includes("all")) {
+          if (!removedFromAll.has(sol.id)) continue;
+          const updated = subdomains.map((s) => s.name).filter((n) => n !== mapPortal.name);
+          await onRefresh("update", { ...sol, customerNames: updated, customerName: updated[0] || "" });
+          continue;
+        }
         const isMapped = names.includes(mapPortal.name);
         const shouldBeMapped = selectedToMap.has(sol.id);
         if (isMapped === shouldBeMapped) continue;
@@ -136,7 +154,7 @@ export function AdminMapSolutions({
         await onRefresh("update", { ...sol, customerNames: updated, customerName: updated[0] || "" });
       }
       await onReload?.();
-      setMapPortal(null);
+      closeMap();
     } finally {
       setMapping(false);
     }
@@ -327,7 +345,12 @@ export function AdminMapSolutions({
       </div>
 
       {/* View popup — expanded portal card, 2-column grid, existing hide/edit/delete actions.
-          Shares a layoutId with the row it was opened from for a seamless expand/close. */}
+          Shares a layoutId with the row it was opened from for a seamless expand/close.
+          Portaled to document.body — this component renders inside an ancestor that
+          framer-motion applies a transform to (the admin tab's page-transition wrapper
+          in App.tsx), which turns `fixed` into positioning relative to that ancestor
+          instead of the viewport and traps the overlay under the sticky topbar. */}
+      {createPortal(
       <AnimatePresence>
       {viewPortal && (() => {
         const rowSolutions = solutionsForPortal(solutions, viewPortal);
@@ -464,15 +487,18 @@ export function AdminMapSolutions({
           </motion.div>
         );
       })()}
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body
+      )}
 
       {/* Map Solution popup — the full Solution Repository as a checkbox list,
           scoped to this one portal. No Mobius/TechMobius import cards here —
-          that's what the Onboard Solution page is for. */}
-      {mapPortal && (
+          that's what the Onboard Solution page is for. Portaled to document.body,
+          see the View popup's comment above for why. */}
+      {mapPortal && createPortal(
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs"
-          onClick={() => setMapPortal(null)}
+          onClick={closeMap}
         >
           <div
             className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden"
@@ -481,9 +507,9 @@ export function AdminMapSolutions({
             <div className="p-4 border-b border-slate-100 flex items-center justify-between shrink-0">
               <div>
                 <span className="text-sm font-bold text-slate-900">Map Solutions to {mapPortal.displayName}</span>
-                <p className="text-[10.5px] text-slate-400 mt-0.5">Check solutions to map them here — uncheck to remove them from this portal only.</p>
+                <p className="text-[10.5px] text-slate-400 mt-0.5">Check solutions to map them here — uncheck to remove them from this portal only. Unchecking an "all portals" solution only removes it from this portal, not the others.</p>
               </div>
-              <button type="button" onClick={() => setMapPortal(null)} className="text-slate-400 hover:text-slate-600 transition-colors">
+              <button type="button" onClick={closeMap} className="text-slate-400 hover:text-slate-600 transition-colors">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -502,7 +528,7 @@ export function AdminMapSolutions({
                   {solutions.map((sol) => {
                     const names = namesOf(sol);
                     const mappedViaAll = names.includes("all");
-                    const checked = mappedViaAll || selectedToMap.has(sol.id);
+                    const checked = mappedViaAll ? !removedFromAll.has(sol.id) : selectedToMap.has(sol.id);
                     const collateralCount = collaterals.filter((c) => c.linkedSolutionId === sol.id).length;
                     return (
                       <tr key={sol.id} className="hover:bg-slate-50/70 transition-colors">
@@ -510,16 +536,23 @@ export function AdminMapSolutions({
                           <input
                             type="checkbox"
                             checked={checked}
-                            disabled={mappedViaAll}
                             onChange={() => {
+                              if (mappedViaAll) {
+                                setRemovedFromAll((prev) => {
+                                  const next = new Set(prev);
+                                  next.has(sol.id) ? next.delete(sol.id) : next.add(sol.id);
+                                  return next;
+                                });
+                                return;
+                              }
                               setSelectedToMap((prev) => {
                                 const next = new Set(prev);
                                 next.has(sol.id) ? next.delete(sol.id) : next.add(sol.id);
                                 return next;
                               });
                             }}
-                            className="h-3.5 w-3.5 accent-orange-600 disabled:opacity-40"
-                            title={mappedViaAll ? "Mapped to all portals — edit from the solution's Edit form" : undefined}
+                            className="h-3.5 w-3.5 accent-orange-600"
+                            title={mappedViaAll ? "Mapped to all portals — uncheck to remove it from this portal only" : undefined}
                           />
                         </td>
                         <td className="px-4 py-2.5 font-semibold text-slate-800 truncate max-w-[240px]">
@@ -549,15 +582,17 @@ export function AdminMapSolutions({
                 onClick={handleMapSelected}
                 className="px-5 py-2 bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold rounded-lg transition-colors disabled:opacity-50"
               >
-                {mapping ? "Mapping…" : `Map ${selectedToMap.size} Selected`}
+                {mapping ? "Saving…" : "Save Changes"}
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Edit popup — reuses the onboarding form component in edit mode */}
-      {editingSolution && (
+      {/* Edit popup — reuses the onboarding form component in edit mode. Portaled to
+          document.body, see the View popup's comment above for why. */}
+      {editingSolution && createPortal(
         <div
           className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
           onClick={() => setEditingSolution(null)}
@@ -571,7 +606,8 @@ export function AdminMapSolutions({
               onClose={() => setEditingSolution(null)}
             />
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
