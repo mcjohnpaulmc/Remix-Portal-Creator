@@ -993,22 +993,6 @@ export default function App() {
             </button>
           )}
 
-          {/* Discreet Admin Toggle — only shown on the Hub, never on customer portals */}
-          {isHub && viewMode === "admin" && (
-            <button
-              onClick={() => {
-                setViewMode("user");
-                if (window.location.pathname === "/admin") {
-                  window.history.pushState(null, "", "/");
-                }
-                window.location.hash = "";
-              }}
-              className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-[11px] font-semibold transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
-            >
-              <Compass className="h-3.5 w-3.5 text-slate-400" />
-              Exit Admin Console
-            </button>
-          )}
         </div>
       </header>
 

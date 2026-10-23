@@ -272,12 +272,16 @@ export function AdminMapSolutions({
           if (viewPortal?.id === row.id) return null;
           const rowSolutions = solutionsForPortal(solutions, row);
           return (
+            // Hover is a border glow, not a scale. A scale transform grew the card
+            // past the content column and painted it over the sidebar (and forced a
+            // horizontal page scrollbar); it also fought this element's own layoutId
+            // projection, which left the card visibly offset mid-animation. A
+            // box-shadow stays inside the column's padding and moves nothing.
             <motion.div
               key={row.id}
               layoutId={`portal-row-${row.id}`}
-              whileHover={{ scale: 1.012 }}
               transition={{ duration: 0.2 }}
-              className="bg-white rounded-2xl border border-slate-100 shadow-2xs p-4"
+              className="bg-white rounded-2xl border border-slate-100 shadow-2xs p-4 transition-[border-color,box-shadow] duration-200 hover:border-orange-300 hover:shadow-[0_0_0_1px_rgba(249,115,22,0.30),0_0_16px_2px_rgba(249,115,22,0.18)]"
             >
               <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
                 <div className="flex items-center gap-2 min-w-0">
