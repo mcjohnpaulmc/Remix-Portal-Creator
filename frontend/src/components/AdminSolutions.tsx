@@ -164,7 +164,10 @@ export function AdminSolutions({
 
   return (
     <div id="admin-solutions-view" className="space-y-6">
-      <form onSubmit={handleSubmit} className="p-6 bg-white rounded-2xl border border-slate-100 shadow-xs space-y-5">
+      {/* Wide and short by design: the fields sit in two compact columns beside the
+          thumbnail panel, with attachments spread across the full width underneath,
+          so the whole form fits a laptop viewport without the popup scrolling. */}
+      <form onSubmit={handleSubmit} className="p-5 bg-white rounded-2xl border border-slate-100 shadow-xs space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div className="flex items-center gap-3">
             <button
@@ -188,15 +191,19 @@ export function AdminSolutions({
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* 12-column grid: the six text fields pack two-per-row down the left half
+            while the thumbnail panel spans those same three rows on the right, and
+            attachments run full width underneath. That turns a tall single stack
+            into four short rows. */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-x-5 gap-y-3.5">
           {!editingId && (
-            <p className="md:col-span-2 text-[10px] text-slate-400 leading-relaxed">
+            <p className="lg:col-span-12 text-[10px] text-slate-400 leading-relaxed">
               Saves to the <strong className="text-slate-500 font-semibold">Solution Repository</strong> — map it to one or more portals afterward from the Map Solutions page.
             </p>
           )}
 
           {/* Title */}
-          <div>
+          <div className="lg:col-span-3">
             <label className="block text-xs font-medium text-slate-500 mb-1">
               Solution Name / Title
             </label>
@@ -211,7 +218,7 @@ export function AdminSolutions({
           </div>
 
           {/* URL */}
-          <div>
+          <div className="lg:col-span-3">
             <label className="block text-xs font-medium text-slate-500 mb-1 flex items-center gap-1">
               <Globe className="h-3 w-3" /> Application URL <span className="text-slate-400 font-normal">(optional)</span>
             </label>
@@ -224,16 +231,17 @@ export function AdminSolutions({
             />
           </div>
 
-          {/* Thumbnail Upload Redesign */}
-          <div className="md:col-span-2 space-y-3">
+          {/* Thumbnail Upload Redesign — right half of the form, spanning the three
+              rows the text fields occupy on the left. */}
+          <div className="lg:col-span-6 lg:row-span-3 space-y-2">
             <label className="block text-xs font-semibold text-slate-700 flex items-center gap-1.5 uppercase tracking-wider text-[11px] font-mono">
               <Image className="h-4 w-4 text-orange-500" /> Visual Card Thumbnail Setup
               <span className="text-slate-400 normal-case font-sans font-normal tracking-normal">(optional)</span>
             </label>
 
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
               {/* Visual Preview area */}
-              <div className="md:col-span-4 flex flex-col justify-between p-3.5 bg-slate-50 border border-slate-200 rounded-xl min-h-[140px] items-center text-center">
+              <div className="md:col-span-5 flex flex-col justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl items-center text-center">
                 <span className="text-[10px] uppercase font-mono font-bold text-slate-400 block mb-2 tracking-wider">Live Thumbnail Preview</span>
                 {thumbnail ? (
                   <div className="relative group w-full max-w-[150px] aspect-video rounded-lg overflow-hidden border border-slate-200 shadow-xs">
@@ -265,10 +273,10 @@ export function AdminSolutions({
               </div>
 
               {/* Upload & Choose Input area */}
-              <div className="md:col-span-8 flex flex-col justify-center space-y-3">
+              <div className="md:col-span-7 flex flex-col justify-center space-y-2.5">
                 <div
                   onClick={() => document.getElementById("solution-thumbnail-input")?.click()}
-                  className="border-2 border-dashed border-slate-200 hover:border-slate-400 bg-white hover:bg-slate-50/50 rounded-xl p-5 text-center cursor-pointer transition-all duration-150 group"
+                  className="border-2 border-dashed border-slate-200 hover:border-slate-400 bg-white hover:bg-slate-50/50 rounded-xl p-3.5 text-center cursor-pointer transition-all duration-150 group"
                 >
                   <input
                     type="file"
@@ -294,9 +302,9 @@ export function AdminSolutions({
                     }}
                     className="hidden"
                   />
-                  <Upload className="h-6 w-6 text-slate-400 group-hover:text-slate-600 mx-auto mb-2 transition-colors duration-150" />
+                  <Upload className="h-5 w-5 text-slate-400 group-hover:text-slate-600 mx-auto mb-1.5 transition-colors duration-150" />
                   <p className="text-xs text-slate-700 font-bold font-sans">Upload image from local computer</p>
-                  <p className="text-[10px] text-slate-400 mt-1">Accepts PNG, JPG, JPEG, WEBP or GIF (Will convert to fast-loading static reference asset)</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">PNG, JPG, JPEG, WEBP or GIF</p>
                 </div>
 
                 {/* Preset and URL toggle options */}
@@ -326,7 +334,7 @@ export function AdminSolutions({
           </div>
 
           {/* Tags */}
-          <div>
+          <div className="lg:col-span-3">
             <label className="block text-xs font-medium text-slate-500 mb-1 flex items-center gap-1">
               <Tag className="h-3 w-3" /> Tag Categories (comma separated)
             </label>
@@ -340,7 +348,7 @@ export function AdminSolutions({
           </div>
 
           {/* Credentials Description */}
-          <div>
+          <div className="lg:col-span-3">
             <label className="block text-xs font-medium text-slate-500 mb-1 flex items-center gap-1">
               <Shield className="h-3 w-3" /> Credentials Instruction / Context
             </label>
@@ -354,7 +362,7 @@ export function AdminSolutions({
           </div>
 
           {/* Username Prefill */}
-          <div>
+          <div className="lg:col-span-3">
             <label className="block text-xs font-medium text-slate-500 mb-1 flex items-center gap-1">
               <Key className="h-3 w-3" /> Username prefill (Optional)
             </label>
@@ -368,7 +376,7 @@ export function AdminSolutions({
           </div>
 
           {/* Password Prefill */}
-          <div>
+          <div className="lg:col-span-3">
             <label className="block text-xs font-medium text-slate-500 mb-1 flex items-center gap-1">
               <Key className="h-3 w-3" /> Password prefill (Optional)
             </label>
@@ -381,17 +389,20 @@ export function AdminSolutions({
             />
           </div>
 
-          {/* Custom Dual Upload Shelf */}
-          <div className="md:col-span-2 space-y-2 border-t border-slate-100 pt-4">
+          {/* Custom Dual Upload Shelf — full width, with the heading and tab selector
+              beside the panel rather than stacked above it, which keeps this section
+              to a single short row. */}
+          <div className="lg:col-span-12 border-t border-slate-100 pt-3 grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
+            <div className="md:col-span-4 space-y-2">
             <span className="text-[10px] font-mono font-bold text-teal-650 bg-teal-50 px-2 py-0.5 rounded uppercase tracking-wider inline-block">
-              📂 CONNECT SUPPORTING ARCHITECTURE (DUAL INGESTION)
+              📂 CONNECT SUPPORTING ARCHITECTURE
             </span>
             <label className="block text-xs font-semibold text-slate-500">
               Attach Supporting Deliverables or Resource folders
             </label>
 
             {/* Tab Selector */}
-            <div className="flex gap-2 border-b border-slate-200 pb-2">
+            <div className="flex gap-2 pb-1">
               <button
                 type="button"
                 onClick={() => setUploadTab("local")}
@@ -411,9 +422,10 @@ export function AdminSolutions({
                 <Link2 className="h-3.5 w-3.5" /> Google Drive Link URL
               </button>
             </div>
+            </div>
 
             {/* Dynamic Inner Panel */}
-            <div className="bg-slate-50/70 p-4 rounded-xl border border-dashed border-slate-200 text-left">
+            <div className="md:col-span-8 bg-slate-50/70 p-3 rounded-xl border border-dashed border-slate-200 text-left">
               {uploadTab === "local" ? (
                 <div className="space-y-3">
                   <div className="flex flex-col items-center justify-center p-4 bg-white rounded-lg border border-slate-200 text-center hover:bg-slate-50 transition-colors pointer-events-auto relative">

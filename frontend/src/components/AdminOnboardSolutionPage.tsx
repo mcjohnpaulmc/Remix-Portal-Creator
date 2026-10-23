@@ -376,7 +376,7 @@ export function AdminOnboardSolutionPage({
             >
               <motion.div
                 layoutId="onboard-solution-card"
-                className="w-full max-w-4xl rounded-3xl"
+                className="w-full max-w-6xl rounded-3xl"
                 onClick={(e) => e.stopPropagation()}
               >
                 <AdminSolutions

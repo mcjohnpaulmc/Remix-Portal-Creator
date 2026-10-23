@@ -60,6 +60,7 @@ import { CurrentProjectsDashboard } from "./components/CurrentProjectsDashboard"
 import { UpcomingProjectsDashboard } from "./components/UpcomingProjectsDashboard";
 import { HeroCarousel } from "./components/HeroCarousel";
 import { AdminUsers } from "./components/AdminUsers";
+import { SidebarStats } from "./components/SidebarStats";
 import { CollateralFilterType, COLLATERAL_FILTER_OPTIONS, classifyCollateralType } from "./utils/collateralType";
 import { useEscapeKey } from "./utils/useEscapeKey";
 
@@ -1724,6 +1725,14 @@ export default function App() {
                     </button>
                   ))}
                 </nav>
+
+                <SidebarStats
+                  portals={subdomainsList}
+                  solutions={solutions}
+                  collaterals={collaterals}
+                  currentProjects={currentProjects}
+                  opportunities={upcomingProjects}
+                />
               </div>
             </div>
 

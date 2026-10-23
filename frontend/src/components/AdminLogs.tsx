@@ -5,7 +5,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { UserLog } from "../../../shared/types";
-import { Search, Download, ChevronDown, RefreshCw } from "lucide-react";
+import { Search, Download, ChevronDown, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 
 interface AdminLogsProps {
   logs: UserLog[];
@@ -47,6 +47,20 @@ export function AdminLogs({ logs, onReload }: AdminLogsProps) {
       (log.subdomain ? subdomainFilter.includes(log.subdomain) : false);
     return matchesSearch && matchesSubdomain;
   });
+
+  // Pagination — the log is append-only and grows without bound, so rendering it
+  // whole eventually means thousands of rows in one DOM pass.
+  const ROWS_PER_PAGE = 100;
+  const [page, setPage] = useState(0);
+  const pageCount = Math.max(1, Math.ceil(filteredLogs.length / ROWS_PER_PAGE));
+  // Searching or filtering changes what page 0 even means, and leaving the index
+  // where it was would strand the view on a page past the end of the new results.
+  useEffect(() => {
+    setPage(0);
+  }, [search, subdomainFilter]);
+  const safePage = Math.min(page, pageCount - 1);
+  const pageStart = safePage * ROWS_PER_PAGE;
+  const visibleLogs = filteredLogs.slice(pageStart, pageStart + ROWS_PER_PAGE);
 
   // Calculate quick metrics
   const uniqueEmails = Array.from(new Set(logs.map((l) => l.email).filter(Boolean)));
@@ -233,7 +247,7 @@ export function AdminLogs({ logs, onReload }: AdminLogsProps) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs text-slate-700 font-mono">
-              {filteredLogs.map((log) => {
+              {visibleLogs.map((log) => {
                 const isGatewayEvent =
                   log.action?.includes("Granted") || log.action?.includes("Login");
                 const isSystemEvent = log.action?.includes("System");
@@ -284,6 +298,54 @@ export function AdminLogs({ logs, onReload }: AdminLogsProps) {
             </tbody>
           </table>
         </div>
+
+        {/* Pager — only earns its space once there is more than one page. */}
+        {filteredLogs.length > ROWS_PER_PAGE && (
+          <div className="flex items-center justify-between gap-3 px-4.5 py-3 border-t border-slate-100 flex-wrap">
+            <span className="text-[11px] font-mono text-slate-400">
+              Showing <span className="text-slate-700 font-bold">{pageStart + 1}</span>–
+              <span className="text-slate-700 font-bold">{pageStart + visibleLogs.length}</span> of{" "}
+              <span className="text-slate-700 font-bold">{filteredLogs.length}</span> entries
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPage(0)}
+                disabled={safePage === 0}
+                className="px-2.5 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-600 text-[11px] font-semibold rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                First
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={safePage === 0}
+                className="flex items-center gap-1 px-2.5 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-600 text-[11px] font-semibold rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" /> Previous
+              </button>
+              <span className="text-[11px] font-mono text-slate-500 px-1">
+                Page {safePage + 1} / {pageCount}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                disabled={safePage >= pageCount - 1}
+                className="flex items-center gap-1 px-2.5 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-600 text-[11px] font-semibold rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Next <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage(pageCount - 1)}
+                disabled={safePage >= pageCount - 1}
+                className="px-2.5 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-600 text-[11px] font-semibold rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Last
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
