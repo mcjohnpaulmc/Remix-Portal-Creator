@@ -136,44 +136,53 @@ export function AdminOnboardSolutionPage({
         </p>
       </div>
 
+      {/* Each card morphs into its own popup through a shared layoutId, so the card
+          has to unmount while that popup is open. The grid cells are therefore always
+          rendered and only their contents toggle — otherwise the grid collapsed to a
+          single column and the surviving card slid across to fill the gap, then slid
+          back on close. */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {openPopup !== "onboard" && (
-          <motion.button
-            layoutId="onboard-solution-card"
-            type="button"
-            onClick={() => setOpenPopup("onboard")}
-            className="text-left p-5 bg-white border border-slate-200 rounded-2xl shadow-xs hover:shadow-md hover:border-orange-300 transition-shadow duration-200 cursor-pointer flex items-center gap-4"
-          >
-            <div className="h-10 w-10 shrink-0 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center">
-              <PlusCircle className="h-5 w-5 text-orange-600" />
-            </div>
-            <div>
-              <h4 className="text-base font-bold text-orange-600">Map/Onboard Solution</h4>
-              <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
-                Map a subdomain to an already-public app, or manually register a new solution to the repository.
-              </p>
-            </div>
-          </motion.button>
-        )}
+        <div className="flex">
+          {openPopup !== "onboard" && (
+            <motion.button
+              layoutId="onboard-solution-card"
+              type="button"
+              onClick={() => setOpenPopup("onboard")}
+              className="w-full text-left p-5 bg-white border border-slate-200 rounded-2xl shadow-xs hover:shadow-md hover:border-orange-300 transition-shadow duration-200 cursor-pointer flex items-center gap-4"
+            >
+              <div className="h-10 w-10 shrink-0 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center">
+                <PlusCircle className="h-5 w-5 text-orange-600" />
+              </div>
+              <div>
+                <h4 className="text-base font-bold text-orange-600">Map/Onboard Solution</h4>
+                <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                  Map a subdomain to an already-public app, or manually register a new solution to the repository.
+                </p>
+              </div>
+            </motion.button>
+          )}
+        </div>
 
-        {openPopup !== "deploy" && (
-          <motion.button
-            layoutId="deploy-solution-card"
-            type="button"
-            onClick={() => setOpenPopup("deploy")}
-            className="text-left p-5 bg-gradient-to-br from-slate-900 to-blue-950 border border-blue-900/50 rounded-2xl shadow-md hover:shadow-lg transition-shadow duration-200 cursor-pointer flex items-center gap-4"
-          >
-            <div className="h-10 w-10 shrink-0 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center">
-              <Rocket className="h-5 w-5 text-orange-400" />
-            </div>
-            <div>
-              <h4 className="text-base font-bold text-orange-400">Deploy Solution</h4>
-              <p className="text-[11px] text-slate-300 mt-0.5 leading-snug">
-                Upload a self-contained HTML app and host it on its own subdomain.
-              </p>
-            </div>
-          </motion.button>
-        )}
+        <div className="flex">
+          {openPopup !== "deploy" && (
+            <motion.button
+              layoutId="deploy-solution-card"
+              type="button"
+              onClick={() => setOpenPopup("deploy")}
+              className="w-full text-left p-5 bg-gradient-to-br from-slate-900 to-blue-950 border border-blue-900/50 rounded-2xl shadow-md hover:shadow-lg transition-shadow duration-200 cursor-pointer flex items-center gap-4"
+            >
+              <div className="h-10 w-10 shrink-0 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center">
+                <Rocket className="h-5 w-5 text-orange-400" />
+              </div>
+              <div>
+                <h4 className="text-base font-bold text-orange-400">Deploy Solution</h4>
+                <p className="text-[11px] text-slate-300 mt-0.5 leading-snug">
+                  Upload a self-contained HTML app and host it on its own subdomain.
+                </p>
+              </div>
+            </motion.button>
+          )}
+        </div>
       </div>
 
       {/* Solution Repository — every solution in the hub, regardless of how many
