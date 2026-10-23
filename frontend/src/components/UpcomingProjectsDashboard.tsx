@@ -73,7 +73,7 @@ export function UpcomingProjectsDashboard({ projects, userEmail }: UpcomingProje
           >
             <div>
               <h3 className="font-display font-medium text-lg text-slate-900 leading-tight">
-                Upcoming Opportunities pending proposal / approval
+                Opportunities pending proposal / approval
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
                 Review proposed system concepts, architectural approaches, pricing packages, and pilot rollout timelines.

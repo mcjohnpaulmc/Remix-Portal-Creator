@@ -40,11 +40,19 @@ export function HeroCarousel({ items, onLink }: HeroCarouselProps) {
       case "project-current":
         return "Active Customer Engagement";
       case "project-upcoming":
-        return "Proposal Pipeline";
+        return "Opportunity";
       case "solution":
         return "Specialized Enterprise Product";
       case "collateral":
         return "Grounding Case Study Research";
+      case "page-solutions":
+        return "Solutions Catalogue";
+      case "page-collaterals":
+        return "Collaterals Catalogue";
+      case "page-opportunities":
+        return "Opportunities";
+      case "page-current-projects":
+        return "Active Engagements";
       default:
         return "Featured Spotlights";
     }

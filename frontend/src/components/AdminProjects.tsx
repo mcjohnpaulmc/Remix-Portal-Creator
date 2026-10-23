@@ -547,7 +547,7 @@ export function AdminProjects({
             Client Subdomain Portals & Engagement Desks
           </h3>
           <p className="text-xs text-slate-500 mt-1">
-            Publish client-specific delivery timelines, SLA volume metrics, audit clarifications, and upcoming pilot scopes.
+            Publish client-specific delivery timelines, SLA volume metrics, audit clarifications, and opportunity scopes.
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -1241,7 +1241,7 @@ export function AdminProjects({
               <div className="space-y-4 animate-fade-in">
                 <div className="p-5 bg-white border border-slate-100 rounded-2xl shadow-3xs space-y-4">
                   <h4 className="text-xs font-mono font-semibold text-slate-900 border-b border-slate-50 pb-2 mb-2 uppercase tracking-wide">
-                    📦 Proposal Pipeline & Opportunities Specifics
+                    📦 Opportunity Specifics
                   </h4>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1512,7 +1512,7 @@ export function AdminProjects({
             activeSubTab === "upcoming" ? "bg-white text-slate-900 shadow-3xs" : "text-slate-500 hover:text-slate-900"
           }`}
         >
-          💡 Upcoming Pipelines ({upcomingProjects.length})
+          💡 Opportunities ({upcomingProjects.length})
         </button>
       </div>
 
@@ -1689,7 +1689,7 @@ export function AdminProjects({
 
           {upcomingProjects.length === 0 && (
             <div className="text-center p-8 bg-slate-50 rounded-2xl border border-dashed border-slate-205 font-sans">
-              <p className="text-xs text-slate-450 font-mono">No upcoming opportunity cards published yet.</p>
+              <p className="text-xs text-slate-450 font-mono">No opportunity cards published yet.</p>
             </div>
           )}
         </div>

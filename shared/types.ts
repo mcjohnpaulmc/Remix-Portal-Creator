@@ -155,8 +155,23 @@ export interface CarouselItem {
   title: string;
   description: string;
   imageUrl: string;
-  linkType: "subdomain" | "project-current" | "project-upcoming" | "solution" | "collateral" | "none";
-  linkTarget: string; // Target ID or name
+  // "page-*" link types send the visitor to a whole catalogue tab rather than one
+  // record, and ignore linkTarget. They back the hero's one-card-per-page layout
+  // (Solutions / Collaterals / Opportunities), which stays valid no matter how the
+  // underlying content changes — unlike an id-based link, which breaks the moment
+  // the item it points at is deleted or unmapped from the portal.
+  linkType:
+    | "subdomain"
+    | "project-current"
+    | "project-upcoming"
+    | "solution"
+    | "collateral"
+    | "page-solutions"
+    | "page-collaterals"
+    | "page-opportunities"
+    | "page-current-projects"
+    | "none";
+  linkTarget: string; // Target ID or name; unused by the "page-*" types
   customerName?: string;
   customerNames?: string[];
 }

@@ -339,8 +339,8 @@ router.post("/projects/upcoming", async (req, res) => {
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
       email: adminEmail || "admin@mobiusservices.co.in",
-      action: "Upcoming Project Created",
-      details: `Upcoming engagement "${newProj.name}" added for customer: ${newProj.customerName}.`,
+      action: "Opportunity Created",
+      details: `Opportunity "${newProj.name}" added for customer: ${newProj.customerName}.`,
       date: new Date().toISOString()
     });
   } else if (action === "update") {
@@ -358,8 +358,8 @@ router.post("/projects/upcoming", async (req, res) => {
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
       email: adminEmail || "admin@mobiusservices.co.in",
-      action: "Upcoming Project Updated",
-      details: `Upcoming engagement "${project.name}" details revised.`,
+      action: "Opportunity Updated",
+      details: `Opportunity "${project.name}" details revised.`,
       date: new Date().toISOString()
     });
   } else if (action === "delete") {
@@ -371,8 +371,8 @@ router.post("/projects/upcoming", async (req, res) => {
     db.userLogs.unshift({
       id: `log-${Date.now()}`,
       email: adminEmail || "admin@mobiusservices.co.in",
-      action: "Upcoming Project Deleted",
-      details: `Upcoming engagement with ID "${project.id}" deleted.`,
+      action: "Opportunity Deleted",
+      details: `Opportunity with ID "${project.id}" deleted.`,
       date: new Date().toISOString()
     });
   }

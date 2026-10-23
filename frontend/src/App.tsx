@@ -803,6 +803,40 @@ export default function App() {
   const [heroPublishDone, setHeroPublishDone] = useState(false);
   const [heroRefreshing, setHeroRefreshing] = useState(false);
 
+  // Drafts all three hero slides from the content this portal actually publishes.
+  // The result lands in editCarousel (the unsaved editor state) rather than being
+  // written straight to the database, so the admin reviews it and presses Save.
+  const [generatingCarousel, setGeneratingCarousel] = useState(false);
+  const handleGenerateHeroCarousel = async () => {
+    setGeneratingCarousel(true);
+    try {
+      const res = await adminFetch("/api/admin/generate-hero-carousel", {
+        method: "POST",
+        body: JSON.stringify({ portal: selectedAdminSubdomain }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert(data.error || "Could not draft the hero slides.");
+        return;
+      }
+      // Keep whatever backdrop each slot already shows — the model writes copy,
+      // not imagery, and silently swapping a chosen image would be a surprise.
+      setEditCarousel((prev) =>
+        (data.slides as CarouselItem[]).map((slide, i) => ({
+          ...slide,
+          imageUrl: prev[i]?.imageUrl || HERO_BACKDROP_PRESETS[i % HERO_BACKDROP_PRESETS.length].url,
+          customerName: prev[i]?.customerName,
+          customerNames: prev[i]?.customerNames,
+        }))
+      );
+      showToast("Hero slides drafted — review them and press Save.");
+    } catch {
+      alert("Server error drafting the hero slides.");
+    } finally {
+      setGeneratingCarousel(false);
+    }
+  };
+
   // Portal Settings modal
   const [portalSettingsTarget, setPortalSettingsTarget] = useState<SubdomainPortal | null>(null);
   const [settingsDisplayName, setSettingsDisplayName] = useState("");
@@ -1143,8 +1177,16 @@ export default function App() {
                       setSubdomain(proj.customerName);
                       setCurrentTab("upcomingProjects");
                     } else {
-                      alert(`Upcoming proposal for '${target}' was not found.`);
+                      alert(`Opportunity '${target}' was not found.`);
                     }
+                  } else if (type === "page-solutions") {
+                    setCurrentTab("solutions");
+                  } else if (type === "page-collaterals") {
+                    setCurrentTab("collaterals");
+                  } else if (type === "page-opportunities") {
+                    setCurrentTab("upcomingProjects");
+                  } else if (type === "page-current-projects") {
+                    setCurrentTab("currentProjects");
                   }
                 }}
               />
@@ -1195,7 +1237,7 @@ export default function App() {
                       : "text-slate-500 hover:text-slate-800"
                   }`}
                 >
-                  Upcoming Opportunities
+                  Opportunities
                 </button>
               </nav>
 
@@ -2107,9 +2149,24 @@ export default function App() {
                             <h4 className="text-xs font-mono font-bold text-slate-400 uppercase tracking-widest">
                               🎠 Dynamic Hero Spotlight Slides (3 Slots)
                             </h4>
-                            <span className="text-[9px] bg-orange-50 text-orange-700 px-2 py-0.5 rounded font-mono font-bold">
-                              {carousel.length} Slide Definitions Active
-                            </span>
+                            <div className="flex items-center gap-2">
+                              {/* Drafts into the editor only — the admin still has to
+                                  press Save below, so a draft they dislike never
+                                  overwrites live copy. */}
+                              <button
+                                type="button"
+                                onClick={handleGenerateHeroCarousel}
+                                disabled={generatingCarousel}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 hover:bg-orange-500 text-white text-[11px] font-semibold rounded-lg transition-colors disabled:opacity-50"
+                                title="Draft all three slides from this portal's solutions, collaterals and opportunities"
+                              >
+                                <Sparkles className={`h-3.5 w-3.5 ${generatingCarousel ? "animate-pulse" : ""}`} />
+                                {generatingCarousel ? "Drafting…" : "Generate with AI"}
+                              </button>
+                              <span className="text-[9px] bg-orange-50 text-orange-700 px-2 py-0.5 rounded font-mono font-bold">
+                                {carousel.length} Slide Definitions Active
+                              </span>
+                            </div>
                           </div>
 
                           {/* Subdomain Selection Dropdown (Visibility Context) */}
@@ -2228,12 +2285,20 @@ export default function App() {
                                         }}
                                         className="w-full px-2.5 py-1.5 border border-slate-200 bg-white rounded-lg text-xs text-slate-700"
                                       >
+                                        <optgroup label="Open a whole page">
+                                          <option value="page-solutions">Solutions catalogue page</option>
+                                          <option value="page-collaterals">Collaterals catalogue page</option>
+                                          <option value="page-opportunities">Opportunities page</option>
+                                          <option value="page-current-projects">Active engagements page</option>
+                                        </optgroup>
+                                        <optgroup label="Open a single item">
+                                          <option value="solution">Launch Onboarded Solution Modal</option>
+                                          <option value="collateral">Launch Compiled Case Study Modal</option>
+                                          <option value="project-current">View Active Engagement details</option>
+                                          <option value="project-upcoming">View a single Opportunity</option>
+                                          <option value="subdomain">Simulate Subdomain Portal change</option>
+                                        </optgroup>
                                         <option value="none">No Link (Static Slide Display)</option>
-                                        <option value="subdomain">Simulate Subdomain Portal change</option>
-                                        <option value="solution">Launch Onboarded Solution Modal</option>
-                                        <option value="collateral">Launch Compiled Case Study Modal</option>
-                                        <option value="project-current">View Active Engagement details</option>
-                                        <option value="project-upcoming">View Upcoming Proposal pipeline</option>
                                       </select>
                                     </div>
 
@@ -2241,9 +2306,11 @@ export default function App() {
                                       <label className="block text-[10px] font-bold text-slate-500 mb-1">
                                         CTA Target Destination Item
                                       </label>
-                                      {slide.linkType === "none" ? (
+                                      {slide.linkType === "none" || slide.linkType.startsWith("page-") ? (
                                         <div className="px-3 py-1.5 bg-slate-100 rounded-lg text-xs text-slate-400 font-mono select-none">
-                                          No linking assigned
+                                          {slide.linkType === "none"
+                                            ? "No linking assigned"
+                                            : "Whole page — no item to choose"}
                                         </div>
                                       ) : (
                                         <select
