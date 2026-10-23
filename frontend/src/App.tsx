@@ -950,11 +950,15 @@ export default function App() {
             <h1 className="font-bold text-base md:text-lg tracking-tight text-slate-855">
               Mobius <span className="text-orange-600 font-bold">Knowledge Services</span>
             </h1>
-            <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 mt-0.5 select-none text-left">
-              <span className="text-[10px] font-mono text-slate-400 leading-none">
-                Portal: <strong className="text-orange-600 font-mono">{subdomain}</strong>.mobiusservices.io
-              </span>
-            </div>
+            {/* Identifies which customer portal you're looking at — meaningless on the
+                hub itself, which isn't any one portal, so it's shown only on portals. */}
+            {!isHub && (
+              <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 mt-0.5 select-none text-left">
+                <span className="text-[10px] font-mono text-slate-400 leading-none">
+                  Portal: <strong className="text-orange-600 font-mono">{subdomain}</strong>.mobiusservices.io
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1641,7 +1645,7 @@ export default function App() {
                 just grew the whole page anyway). Sticky pins it in the viewport as the page
                 scrolls, capped to the viewport height so it scrolls its OWN nav internally
                 on a short screen instead of pushing off-screen. */}
-            <div className="w-full md:w-64 bg-slate-950 text-slate-200 border-r border-slate-900 p-6 flex flex-col shrink-0 md:sticky md:top-16 md:self-start md:h-[calc(100vh-4rem)] md:overflow-y-auto custom-scroll">
+            <div className="w-full md:w-64 bg-slate-950 text-slate-200 p-6 flex flex-col shrink-0 md:sticky md:top-16 md:self-start md:h-[calc(100vh-4rem)] md:overflow-y-auto custom-scroll">
               <div className="space-y-6">
                 <div>
                   <span className="text-[10px] font-mono tracking-widest text-slate-500 uppercase font-semibold">
@@ -1684,7 +1688,7 @@ export default function App() {
                  in view via its own sticky positioning above. */}
             <div className="flex-1 flex flex-col bg-slate-50/40">
 
-              <div className="flex-1 px-6 md:px-8 pb-6 md:pb-8">
+              <div className="flex-1 px-6 md:px-8 pt-6 md:pt-8 pb-6 md:pb-8">
               <AnimatePresence mode="wait">
                 <motion.div
                   key={adminActiveTab}
@@ -1755,7 +1759,11 @@ export default function App() {
 
                   {/* Case 4: Hosting Subdomains Customizer */}
                   {adminActiveTab === "subdomain" && (
-                    <div className="space-y-6">
+                    // Full-height column so Step 2 can absorb whatever vertical space is
+                    // left below Step 1 instead of leaving the console half empty.
+                    // 8rem = the 4rem header above this area plus this area's own 2rem
+                    // top and 2rem bottom padding.
+                    <div className="flex flex-col gap-6 min-h-[calc(100vh-8rem)]">
                       <div className="text-left">
                         <h3 className="font-display text-base font-bold text-slate-950 flex items-center gap-1.5">
                           🚀 Customer Portals Launch Pad
@@ -1765,9 +1773,9 @@ export default function App() {
                         </p>
                       </div>
 
-                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                      <div className="flex-1 min-h-0 flex flex-col gap-6">
                         {/* Provisioning Form */}
-                        <div className="lg:col-span-5 p-5 bg-white border border-slate-100 rounded-2xl shadow-3xs space-y-4 h-fit text-left">
+                        <div className="w-full p-5 bg-white border border-slate-100 rounded-2xl shadow-3xs space-y-4 text-left">
                           <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-sm font-mono tracking-widest uppercase inline-block">
                             Step 1: Create New Portal
                           </span>
@@ -1784,40 +1792,44 @@ export default function App() {
                             }}
                             className="space-y-4"
                           >
-                            <div>
-                              <label className="block text-xs font-semibold text-slate-500 mb-1">
-                                Customer / Client Name
-                              </label>
-                              <input
-                                type="text"
-                                value={newSubdomainDisplayName}
-                                onChange={(e) => setNewSubdomainDisplayName(e.target.value)}
-                                placeholder="E.g., Unilever APAC"
-                                className="w-full px-3 py-2 border border-slate-205 rounded-lg text-xs text-slate-905 focus:outline-hidden"
-                                required
-                              />
-                            </div>
-
-                            <div>
-                              <label className="block text-xs font-semibold text-slate-500 mb-1">
-                                Unique Slotted Subdomain Slug
-                              </label>
-                              <div className="relative">
+                            {/* Side by side on wide screens — the panel spans the full
+                                console width now, and one stretched column would waste it. */}
+                            <div className="grid gap-4 md:grid-cols-2">
+                              <div>
+                                <label className="block text-xs font-semibold text-slate-500 mb-1">
+                                  Customer / Client Name
+                                </label>
                                 <input
                                   type="text"
-                                  value={newSubdomainSlug}
-                                  onChange={(e) => setNewSubdomainSlug(e.target.value)}
-                                  placeholder="unilever"
-                                  className="w-full pl-3 pr-36 py-2 border border-slate-205 rounded-lg text-xs text-slate-905 font-mono focus:outline-hidden"
+                                  value={newSubdomainDisplayName}
+                                  onChange={(e) => setNewSubdomainDisplayName(e.target.value)}
+                                  placeholder="E.g., Unilever APAC"
+                                  className="w-full px-3 py-2 border border-slate-205 rounded-lg text-xs text-slate-905 focus:outline-hidden"
                                   required
                                 />
-                                <div className="absolute right-3 top-2.5 text-[9.5px] font-mono text-slate-400 select-none">
-                                  .mobiusservices.io
-                                </div>
                               </div>
-                              <span className="block text-[9.5px] text-slate-400 leading-normal mt-1">
-                                Lowercase alphanumeric letters only. Becomes the customized entryway URL for the portal.
-                              </span>
+
+                              <div>
+                                <label className="block text-xs font-semibold text-slate-500 mb-1">
+                                  Unique Slotted Subdomain Slug
+                                </label>
+                                <div className="relative">
+                                  <input
+                                    type="text"
+                                    value={newSubdomainSlug}
+                                    onChange={(e) => setNewSubdomainSlug(e.target.value)}
+                                    placeholder="unilever"
+                                    className="w-full pl-3 pr-36 py-2 border border-slate-205 rounded-lg text-xs text-slate-905 font-mono focus:outline-hidden"
+                                    required
+                                  />
+                                  <div className="absolute right-3 top-2.5 text-[9.5px] font-mono text-slate-400 select-none">
+                                    .mobiusservices.io
+                                  </div>
+                                </div>
+                                <span className="block text-[9.5px] text-slate-400 leading-normal mt-1">
+                                  Lowercase alphanumeric letters only. Becomes the customized entryway URL for the portal.
+                                </span>
+                              </div>
                             </div>
 
                             <button
@@ -1885,8 +1897,8 @@ export default function App() {
                         </div>
 
                         {/* List of active customer portals */}
-                        <div className="lg:col-span-7 p-6 bg-slate-900 text-slate-105 border border-slate-800 rounded-2xl shadow-md text-left space-y-4 flex flex-col justify-between">
-                          <div>
+                        <div className="w-full flex-1 min-h-0 p-6 bg-slate-900 text-slate-105 border border-slate-800 rounded-2xl shadow-md text-left flex flex-col">
+                          <div className="flex-1 min-h-0 flex flex-col">
                             <div className="flex items-center justify-between mb-1">
                               <span className="text-[10px] bg-slate-800 text-white px-2.5 py-0.5 rounded-sm font-mono tracking-widest uppercase inline-block">
                                 Step 2: Onboard Assets & Configure
@@ -1903,7 +1915,7 @@ export default function App() {
                               </button>
                             </div>
 
-                            <div className="mt-3 space-y-3 max-h-80 overflow-y-auto custom-scroll pr-1.5 font-mono text-xs">
+                            <div className="mt-3 space-y-3 flex-1 min-h-0 overflow-y-auto custom-scroll pr-1.5 font-mono text-xs">
                               {subdomainsList.map((portal) => (
                                 <div
                                   key={portal.id}
@@ -1934,6 +1946,17 @@ export default function App() {
                                   </div>
 
                                   <div className="flex items-center gap-1.5 shrink-0 font-sans">
+                                    {/* Who created this portal. Legacy portals predate
+                                        createdBy and simply have nothing to show. */}
+                                    {portal.createdBy && (
+                                      <span
+                                        className="hidden lg:block max-w-[180px] truncate text-[10px] font-mono text-slate-400 mr-1"
+                                        title={`Created by ${portal.createdBy}`}
+                                      >
+                                        {portal.createdBy}
+                                      </span>
+                                    )}
+
                                     {/* Live / Sleep toggle */}
                                     {(() => {
                                       const isStarting = startingPortals.has(portal.id);
@@ -2038,7 +2061,7 @@ export default function App() {
                             </div>
                           </div>
 
-                          <div className="pt-3 border-t border-slate-800/80 text-[10px] text-slate-400 leading-normal font-sans">
+                          <div className="mt-4 pt-3 border-t border-slate-800/80 text-[10px] text-slate-400 leading-normal font-sans">
                             💡 <strong>Getting started</strong>: Create a portal above — with or without a subdomain. Then use the context filter bar on other tabs to scope solutions, collaterals, and projects to a specific portal. Changes deploy automatically to live portals.
                           </div>
                         </div>
