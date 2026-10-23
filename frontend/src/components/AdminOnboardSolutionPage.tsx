@@ -4,13 +4,26 @@
  */
 
 import React, { useState } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { PlusCircle, Rocket, Link2, Download } from "lucide-react";
+import { useEscapeKey } from "../utils/useEscapeKey";
 import { Solution, Collateral, SubdomainPortal } from "../../../shared/types";
 import { AdminSolutions } from "./AdminSolutions";
 import { DeploySolutionForm } from "./DeploySolutionForm";
 import { EditSolutionQuickPopup } from "./EditSolutionQuickPopup";
 import { MapSubdomainPanel } from "./MapSubdomainPanel";
+
+// Shared popup backdrop. `items-start` + pt-24 drops the card clear of the 4rem
+// top bar instead of centring it, so the bar stays visible — and blurred — behind
+// the overlay. The overlay itself scrolls, so a tall card is reachable without
+// the card needing its own max-height.
+const OVERLAY_BASE =
+  "fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center px-4 pt-24 pb-10 overflow-y-auto";
+const OVERLAY_CLASS = `${OVERLAY_BASE} z-[60]`;
+// Stacks above OVERLAY_CLASS — opened from within the repository table, which can
+// itself sit under one of the feature popups.
+const OVERLAY_CLASS_TOP = `${OVERLAY_BASE} z-[70]`;
 
 interface AdminOnboardSolutionPageProps {
   solutions: Solution[];
@@ -33,11 +46,14 @@ export function AdminOnboardSolutionPage({
   adminUserEmail = "",
   onNotify,
 }: AdminOnboardSolutionPageProps) {
-  const [openPopup, setOpenPopup] = useState<"onboard" | "deploy" | null>(null);
+  const [openPopup, setOpenPopup] = useState<"map" | "onboard" | "deploy" | null>(null);
   const [updatingRepo, setUpdatingRepo] = useState(false);
   const [editingSolution, setEditingSolution] = useState<Solution | null>(null);
   const [repoFilter, setRepoFilter] = useState<"all" | "onboarded" | "deployed">("all");
   const subdomainProp = subdomains.map((s) => ({ id: s.id, name: s.name, displayName: s.displayName }));
+
+  useEscapeKey(openPopup !== null, () => setOpenPopup(null));
+  useEscapeKey(editingSolution !== null, () => setEditingSolution(null));
 
   // "Map to solution repository" left unticked when mapping a subdomain keeps a
   // solution out of this whole section (counts included) — it's still a normal,
@@ -136,12 +152,33 @@ export function AdminOnboardSolutionPage({
         </p>
       </div>
 
-      {/* Each card morphs into its own popup through a shared layoutId, so the card
-          has to unmount while that popup is open. The grid cells are therefore always
-          rendered and only their contents toggle — otherwise the grid collapsed to a
-          single column and the surviving card slid across to fill the gap, then slid
-          back on close. */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* One card per feature, each morphing into its own popup through a shared
+          layoutId — so the card has to unmount while that popup is open. The grid
+          cells are therefore always rendered and only their contents toggle,
+          otherwise the grid collapsed and the surviving cards slid across to fill
+          the gap, then slid back on close. */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="flex">
+          {openPopup !== "map" && (
+            <motion.button
+              layoutId="map-subdomain-card"
+              type="button"
+              onClick={() => setOpenPopup("map")}
+              className="w-full text-left p-5 bg-white border border-slate-200 rounded-2xl shadow-xs hover:shadow-md hover:border-orange-300 transition-shadow duration-200 cursor-pointer flex items-center gap-4"
+            >
+              <div className="h-10 w-10 shrink-0 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center">
+                <Link2 className="h-5 w-5 text-orange-600" />
+              </div>
+              <div>
+                <h4 className="text-base font-bold text-orange-600">Map Subdomain</h4>
+                <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                  Point a new subdomain at an app that already has a public IP — no upload, no hosting here.
+                </p>
+              </div>
+            </motion.button>
+          )}
+        </div>
+
         <div className="flex">
           {openPopup !== "onboard" && (
             <motion.button
@@ -154,9 +191,9 @@ export function AdminOnboardSolutionPage({
                 <PlusCircle className="h-5 w-5 text-orange-600" />
               </div>
               <div>
-                <h4 className="text-base font-bold text-orange-600">Map/Onboard Solution</h4>
+                <h4 className="text-base font-bold text-orange-600">Onboard Solution</h4>
                 <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
-                  Map a subdomain to an already-public app, or manually register a new solution to the repository.
+                  Manually register a new solution into the repository, with thumbnail, tags and credentials.
                 </p>
               </div>
             </motion.button>
@@ -298,65 +335,91 @@ export function AdminOnboardSolutionPage({
         </div>
       </div>
 
-      <AnimatePresence>
-        {openPopup === "onboard" && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
-            onClick={() => setOpenPopup(null)}
-          >
+      {/* Every popup below is portaled to document.body. This component renders
+          inside App.tsx's admin page-transition wrapper, which framer-motion gives
+          a transform — and a transformed ancestor makes `fixed` resolve against
+          that ancestor instead of the viewport, which is what pinned these
+          overlays below the sticky top bar and left it unblurred. From body they
+          cover the whole viewport, top bar included. OVERLAY_CLASS also starts the
+          card below the bar rather than centring it, so the blurred bar stays
+          visible behind the popup. */}
+      {createPortal(
+        <AnimatePresence>
+          {openPopup === "map" && (
             <motion.div
-              layoutId="onboard-solution-card"
-              className="w-full max-w-7xl max-h-[88vh] overflow-y-auto rounded-3xl"
-              onClick={(e) => e.stopPropagation()}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className={OVERLAY_CLASS}
+              onClick={() => setOpenPopup(null)}
             >
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+              <motion.div
+                layoutId="map-subdomain-card"
+                className="w-full max-w-2xl rounded-3xl"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <MapSubdomainPanel
                   onReload={onReload}
                   onClose={() => setOpenPopup(null)}
                 />
+              </motion.div>
+            </motion.div>
+          )}
+
+          {openPopup === "onboard" && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className={OVERLAY_CLASS}
+              onClick={() => setOpenPopup(null)}
+            >
+              <motion.div
+                layoutId="onboard-solution-card"
+                className="w-full max-w-4xl rounded-3xl"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <AdminSolutions
                   solutions={solutions}
                   onRefresh={onRefresh}
                   adminUserEmail={adminUserEmail}
                   onClose={() => setOpenPopup(null)}
                 />
-              </div>
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
+          )}
 
-        {openPopup === "deploy" && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
-            onClick={() => setOpenPopup(null)}
-          >
+          {openPopup === "deploy" && (
             <motion.div
-              layoutId="deploy-solution-card"
-              className="w-full max-w-4xl max-h-[88vh] overflow-y-auto rounded-3xl"
-              onClick={(e) => e.stopPropagation()}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className={OVERLAY_CLASS}
+              onClick={() => setOpenPopup(null)}
             >
-              <DeploySolutionForm
-                subdomains={subdomainProp}
-                onReload={onReload}
-                onClose={() => setOpenPopup(null)}
-              />
+              <motion.div
+                layoutId="deploy-solution-card"
+                className="w-full max-w-4xl rounded-3xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <DeploySolutionForm
+                  subdomains={subdomainProp}
+                  onReload={onReload}
+                  onClose={() => setOpenPopup(null)}
+                />
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
 
-      {editingSolution && (
+      {editingSolution && createPortal(
         <div
-          className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          className={OVERLAY_CLASS_TOP}
           onClick={() => setEditingSolution(null)}
         >
-          <div className="w-full max-w-2xl max-h-[88vh] overflow-y-auto rounded-3xl" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-2xl rounded-3xl" onClick={(e) => e.stopPropagation()}>
             <EditSolutionQuickPopup
               solution={editingSolution}
               onRefresh={onRefresh}
@@ -365,7 +428,8 @@ export function AdminOnboardSolutionPage({
               onNotify={onNotify}
             />
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

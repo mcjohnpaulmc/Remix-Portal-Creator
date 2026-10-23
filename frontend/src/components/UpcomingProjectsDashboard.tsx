@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { UpcomingProject } from "../../../shared/types";
 import { motion, AnimatePresence } from "motion/react";
+import { useEscapeKey } from "../utils/useEscapeKey";
 
 interface UpcomingProjectsDashboardProps {
   projects: UpcomingProject[];
@@ -25,6 +26,8 @@ const LIFECYCLE_STAGES = [
 
 export function UpcomingProjectsDashboard({ projects, userEmail }: UpcomingProjectsDashboardProps) {
   const [selectedProj, setSelectedProj] = useState<UpcomingProject | null>(null);
+
+  useEscapeKey(selectedProj !== null, () => setSelectedProj(null));
 
   const handleDocumentAction = (item: { name: string; size: string; type: string; category?: string; content?: string }) => {
     if (item.content && item.content.includes("http")) {

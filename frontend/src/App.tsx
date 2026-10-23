@@ -61,6 +61,22 @@ import { UpcomingProjectsDashboard } from "./components/UpcomingProjectsDashboar
 import { HeroCarousel } from "./components/HeroCarousel";
 import { AdminUsers } from "./components/AdminUsers";
 import { CollateralFilterType, COLLATERAL_FILTER_OPTIONS, classifyCollateralType } from "./utils/collateralType";
+import { useEscapeKey } from "./utils/useEscapeKey";
+
+// Backdrop choices for the hero spotlight slides. Every URL here was checked to
+// resolve before being added — a dead Unsplash id renders as an empty slide.
+const HERO_BACKDROP_PRESETS: { label: string; url: string }[] = [
+  { label: "🧠 AI / neural abstract", url: "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&q=80&w=800" },
+  { label: "🔌 Circuit board macro", url: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800" },
+  { label: "💾 Processor / chip", url: "https://images.unsplash.com/photo-1591488320449-011701bb6704?auto=format&fit=crop&q=80&w=800" },
+  { label: "🤖 Robotics / automation", url: "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?auto=format&fit=crop&q=80&w=800" },
+  { label: "🖥️ Data centre / servers", url: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&q=80&w=800" },
+  { label: "📊 Analytics dashboard", url: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&q=80&w=800" },
+  { label: "📽️ Presentation / briefing", url: "https://images.unsplash.com/photo-1515187029135-18ee286d815b?auto=format&fit=crop&q=80&w=800" },
+  { label: "⌨️ Engineering workspace", url: "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&q=80&w=800" },
+  { label: "🌐 Global network", url: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&q=80&w=800" },
+  { label: "⚙️ Hardware / components", url: "https://images.unsplash.com/photo-1555617981-dac3880eac6e?auto=format&fit=crop&q=80&w=800" },
+];
 
 export default function App() {
   // Global API states
@@ -387,18 +403,15 @@ export default function App() {
     return () => es.close();
   }, [isHub]);
 
-  // Close auth overlays on Escape key
-  useEffect(() => {
-    if (!authNeededItem && !showLoginModal) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setAuthNeededItem(null);
-        setShowLoginModal(false);
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [authNeededItem, showLoginModal]);
+  // Escape closes every overlay this component owns. Each hook only binds a
+  // listener while its own overlay is open, so whichever is on screen is the one
+  // that responds.
+  useEscapeKey(!!authNeededItem || showLoginModal, () => {
+    setAuthNeededItem(null);
+    setShowLoginModal(false);
+  });
+  useEscapeKey(!!selectedSolution, () => setSelectedSolution(null));
+  useEscapeKey(!!selectedCollateral, () => setSelectedCollateral(null));
 
   // Post dynamic analytic page-view logs directly to server
   const logUserAction = async (action: string, details: string) => {
@@ -795,6 +808,10 @@ export default function App() {
   const [settingsDisplayName, setSettingsDisplayName] = useState("");
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
+
+  // Declared here rather than beside the other Escape bindings above, which run
+  // before portalSettingsTarget exists.
+  useEscapeKey(!!portalSettingsTarget, () => setPortalSettingsTarget(null));
 
   // Portal subdomain rename — separate from the display-name "Save Settings"
   // above, since it drives its own DNS/IIS server-side migration.
@@ -1929,18 +1946,20 @@ export default function App() {
                                     </span>
                                   </div>
 
-                                  <div className="flex items-center gap-1.5 shrink-0 font-sans">
-                                    {/* Who created this portal. Legacy portals predate
-                                        createdBy and simply have nothing to show. */}
+                                  {/* Who created this portal, centred between the portal's
+                                      identity and its action buttons. Shown in full — an
+                                      elided address is useless for telling two admins
+                                      apart. Legacy portals predate createdBy and show
+                                      nothing. */}
+                                  <div className="hidden lg:flex flex-1 min-w-0 justify-center px-3">
                                     {portal.createdBy && (
-                                      <span
-                                        className="hidden lg:block max-w-[180px] truncate text-[10px] font-mono text-slate-400 mr-1"
-                                        title={`Created by ${portal.createdBy}`}
-                                      >
+                                      <span className="text-[10px] font-mono text-slate-400 whitespace-nowrap">
                                         {portal.createdBy}
                                       </span>
                                     )}
+                                  </div>
 
+                                  <div className="flex items-center gap-1.5 shrink-0 font-sans">
                                     {/* Live / Sleep toggle */}
                                     {(() => {
                                       const isStarting = startingPortals.has(portal.id);
@@ -2174,18 +2193,11 @@ export default function App() {
                                         onChange={(e) => updateSlideField("imageUrl", e.target.value)}
                                         className="w-full px-2.5 py-1.5 border border-slate-200 bg-white rounded-lg text-xs text-slate-700"
                                       >
-                                        <option value="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&q=80&w=800">
-                                          🏭 Logistics Warehouse Grid preset
-                                        </option>
-                                        <option value="https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800">
-                                          ⚡ Modern AI Data Grid preset
-                                        </option>
-                                        <option value="https://images.unsplash.com/photo-1431540015161-0bf868a2d407?auto=format&fit=crop&q=80&w=800">
-                                          👔 Global Corporate Boardroom preset
-                                        </option>
-                                        <option value="https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&q=80&w=800">
-                                          💻 Enterprise Analytics Consulting preset
-                                        </option>
+                                        {HERO_BACKDROP_PRESETS.map((preset) => (
+                                          <option key={preset.url} value={preset.url}>
+                                            {preset.label}
+                                          </option>
+                                        ))}
                                       </select>
                                     </div>
                                   </div>

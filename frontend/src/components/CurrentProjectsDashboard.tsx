@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { CurrentProject } from "../../../shared/types";
 import { motion, AnimatePresence } from "motion/react";
+import { useEscapeKey } from "../utils/useEscapeKey";
 
 interface CurrentProjectsDashboardProps {
   projects: CurrentProject[];
@@ -22,6 +23,8 @@ interface CurrentProjectsDashboardProps {
 
 export function CurrentProjectsDashboard({ projects, userEmail }: CurrentProjectsDashboardProps) {
   const [selectedProj, setSelectedProj] = useState<CurrentProject | null>(null);
+
+  useEscapeKey(selectedProj !== null, () => setSelectedProj(null));
 
   // Dynamic file download or Google Drive link opening
   const handleDocumentAction = (item: { name: string; size: string; type: string; content?: string }) => {

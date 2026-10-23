@@ -10,6 +10,7 @@ import { X, Eye, EyeOff, Edit2, Trash2, Link2, RefreshCw, ExternalLink, Search, 
 import { Solution, Collateral, SubdomainPortal } from "../../../shared/types";
 import { SafeImage } from "./SafeImage";
 import { AdminSolutions } from "./AdminSolutions";
+import { useEscapeKey } from "../utils/useEscapeKey";
 
 interface AdminMapSolutionsProps {
   solutions: Solution[];
@@ -69,6 +70,12 @@ export function AdminMapSolutions({
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [editingSolution, setEditingSolution] = useState<Solution | null>(null);
 
+  // Escape closes whichever of these is open; the hook only binds a listener while
+  // its own popup is open, so the innermost one wins without extra bookkeeping.
+  useEscapeKey(editingSolution !== null, () => setEditingSolution(null));
+  useEscapeKey(mapPortal !== null, () => setMapPortal(null));
+  useEscapeKey(viewPortal !== null, () => setViewPortal(null));
+
   // Search + portal checkbox filter — empty portalFilter set means "All Portals".
   const [searchQuery, setSearchQuery] = useState("");
   const [portalFilter, setPortalFilter] = useState<Set<string>>(new Set());
@@ -85,10 +92,17 @@ export function AdminMapSolutions({
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const rows: PortalRow[] = [
-    ...subdomains.map((s) => ({ id: s.id, name: s.name, displayName: s.displayName, portal: s })),
-    { id: "__unmapped__", name: "", displayName: "Hub Repository (Unmapped)", isUnmapped: true },
-  ];
+  // Portals only. The "Hub Repository (Unmapped)" pseudo-row used to be listed here
+  // too, but unmapped solutions already have their own home on the Onboard Solution
+  // page's Solution Repository table, and this page is about portals specifically.
+  // PortalRow keeps its isUnmapped flag — the filter bar and solutionsForPortal
+  // still understand it, so restoring the row is a one-line change.
+  const rows: PortalRow[] = subdomains.map((s) => ({
+    id: s.id,
+    name: s.name,
+    displayName: s.displayName,
+    portal: s,
+  }));
 
   const filterKey = (row: PortalRow) => (row.isUnmapped ? "__unmapped__" : row.name);
 
@@ -232,15 +246,6 @@ export function AdminMapSolutions({
                     {s.displayName}
                   </label>
                 ))}
-                <label className="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-500 cursor-pointer hover:bg-slate-50 rounded-md select-none">
-                  <input
-                    type="checkbox"
-                    checked={portalFilter.has("__unmapped__")}
-                    onChange={() => togglePortalFilter("__unmapped__")}
-                    className="h-3.5 w-3.5 accent-orange-600"
-                  />
-                  Hub Repository
-                </label>
               </div>
             )}
           </div>
@@ -363,12 +368,12 @@ export function AdminMapSolutions({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs"
+            className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-24 pb-10 bg-slate-900/50 backdrop-blur-sm"
             onClick={() => setViewPortal(null)}
           >
             <motion.div
               layoutId={`portal-row-${viewPortal.id}`}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden"
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[calc(100vh-8.5rem)] flex flex-col overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="p-4 border-b border-slate-100 flex items-center justify-between shrink-0">
@@ -501,11 +506,11 @@ export function AdminMapSolutions({
           see the View popup's comment above for why. */}
       {mapPortal && createPortal(
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-24 pb-10 bg-slate-900/50 backdrop-blur-sm"
           onClick={closeMap}
         >
           <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden"
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[calc(100vh-8.5rem)] flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-4 border-b border-slate-100 flex items-center justify-between shrink-0">
@@ -598,10 +603,10 @@ export function AdminMapSolutions({
           document.body, see the View popup's comment above for why. */}
       {editingSolution && createPortal(
         <div
-          className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          className="fixed inset-0 z-[70] bg-slate-900/60 backdrop-blur-sm flex items-start justify-center px-4 pt-24 pb-10 overflow-y-auto"
           onClick={() => setEditingSolution(null)}
         >
-          <div className="w-full max-w-6xl max-h-[88vh] overflow-y-auto rounded-3xl" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-6xl rounded-3xl" onClick={(e) => e.stopPropagation()}>
             <AdminSolutions
               solutions={solutions}
               onRefresh={onRefresh}
