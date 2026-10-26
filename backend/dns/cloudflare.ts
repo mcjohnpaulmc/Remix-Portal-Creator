@@ -4,13 +4,13 @@
  * Set SERVER_PUBLIC_IP in .env, or the server's public IP is auto-detected via api.ipify.org.
  */
 
-import { CLOUDFLARE_API_TOKEN, SERVER_PUBLIC_IP } from "../config";
+import { CLOUDFLARE_API_TOKEN } from "../config";
+import { getOwnPublicIp } from "../utils/selfHost";
 import { logger } from "../logger";
 
 const CF_BASE = "https://api.cloudflare.com/client/v4";
 
 let cachedZoneId: string | null = null;
-let cachedServerIp: string | null = null;
 
 function cfHeaders() {
   return {
@@ -39,19 +39,10 @@ async function getZoneId(domain: string): Promise<string | null> {
   }
 }
 
+// Delegated to utils/selfHost so the hub has one answer to "what is my public IP",
+// shared with the reverse-proxy hairpin handling that depends on the same value.
 async function getServerIp(): Promise<string | null> {
-  if (SERVER_PUBLIC_IP) return SERVER_PUBLIC_IP;
-  if (cachedServerIp) return cachedServerIp;
-  try {
-    const res = await fetch("https://api.ipify.org?format=json");
-    const json: any = await res.json();
-    cachedServerIp = json.ip;
-    logger.info("Cloudflare", `Auto-detected server public IP: ${cachedServerIp}`);
-    return cachedServerIp;
-  } catch (err: any) {
-    logger.error("Cloudflare", `getServerIp error: ${err?.message}`);
-    return null;
-  }
+  return getOwnPublicIp();
 }
 
 async function findRecord(zoneId: string, fqdn: string): Promise<string | null> {

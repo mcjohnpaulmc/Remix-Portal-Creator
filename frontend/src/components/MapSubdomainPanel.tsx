@@ -45,6 +45,10 @@ export function MapSubdomainPanel({ onReload, onClose }: MapSubdomainPanelProps)
       const data = await res.json();
       if (data.ok) {
         setTestState("public");
+        // Set when the app turned out to be hosted on this same server and was
+        // confirmed over loopback — worth saying, since the address the admin
+        // typed is not the one the proxy will actually dial.
+        setTestReason(data.reason || "");
       } else {
         setTestState("not-public");
         setTestReason(data.reason || "URL is not publicly reachable.");
@@ -128,7 +132,8 @@ export function MapSubdomainPanel({ onReload, onClose }: MapSubdomainPanelProps)
           </div>
           {testState === "public" && (
             <p className="text-[10px] text-emerald-600 mt-1 flex items-center gap-1">
-              <CheckCircle2 className="h-3 w-3 shrink-0" /> URL is publicly reachable.
+              <CheckCircle2 className="h-3 w-3 shrink-0" />
+              {testReason || "URL is publicly reachable."}
             </p>
           )}
           {testState === "not-public" && (

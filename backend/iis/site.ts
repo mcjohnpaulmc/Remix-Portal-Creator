@@ -9,6 +9,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { IIS_PORTALS_DIR } from "../config";
+import { toReachableOrigin } from "../utils/selfHost";
 import { logger } from "../logger";
 
 function runPS(lines: string[]): Promise<string> {
@@ -192,12 +193,21 @@ export async function ensureMappedUrlIisSite(slug: string, fqdn: string, targetO
   const siteName = `mapurl-${slug}`;
   const siteDir = path.join(IIS_PORTALS_DIR, siteName);
 
+  // An origin pointing at this server's own public IP has to become loopback
+  // before it reaches the rewrite rule: IIS runs on this machine, and this
+  // machine cannot connect to its own public address (no NAT hairpin), so the
+  // proxy would 502 on every request. Applied here rather than at the call sites
+  // so every path that (re)builds this site — initial mapping and later solution
+  // edits alike — gets a target that actually resolves.
+  const effectiveOrigin = await toReachableOrigin(targetOrigin);
+
   fs.mkdirSync(siteDir, { recursive: true });
-  fs.writeFileSync(path.join(siteDir, "web.config"), reverseProxyToOriginWebConfigXml(targetOrigin), "utf-8");
+  fs.writeFileSync(path.join(siteDir, "web.config"), reverseProxyToOriginWebConfigXml(effectiveOrigin), "utf-8");
 
   try {
     const hasCert = await createOrRecreateWebsite(siteName, siteDir, fqdn);
-    logger.info("IIS", `Mapped-URL site "${siteName}" ready — ${fqdn} → ${targetOrigin} (SSL: ${hasCert ? "bound" : "no cert found"})`);
+    const via = effectiveOrigin === targetOrigin ? "" : ` (via ${effectiveOrigin} — same-server origin)`;
+    logger.info("IIS", `Mapped-URL site "${siteName}" ready — ${fqdn} → ${targetOrigin}${via} (SSL: ${hasCert ? "bound" : "no cert found"})`);
   } catch (err: any) {
     logger.error("IIS", `Failed to create mapped-URL site "${siteName}": ${err?.message}`);
   }

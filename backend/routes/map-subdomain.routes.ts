@@ -14,6 +14,7 @@ import { autoDeployLivePortals } from "../portal/deploy";
 import { ensureDnsRecord } from "../dns/cloudflare";
 import { ensureMappedUrlIisSite } from "../iis/site";
 import { buildAdminSafeDbView } from "../utils/dbView";
+import { isOwnServerHost } from "../utils/selfHost";
 import { isSuperAdminRole } from "../auth";
 import { logger } from "../logger";
 
@@ -31,6 +32,20 @@ function isPrivateOrLoopbackIp(ip: string): boolean {
     /^169\.254\./.test(ip) ||
     ip === "0.0.0.0"
   );
+}
+
+// Single GET against a URL; resolves false on any error or a 6s timeout.
+function probeUrl(target: URL): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    const client = target.protocol === "https:" ? https : http;
+    const req = client.request(target, { method: "GET", timeout: 6000 }, (r) => {
+      r.destroy();
+      resolve(true);
+    });
+    req.on("error", () => resolve(false));
+    req.on("timeout", () => { req.destroy(); resolve(false); });
+    req.end();
+  });
 }
 
 // POST /test-public-url — checks that a URL resolves to a public (non-private,
@@ -65,21 +80,33 @@ router.post("/test-public-url", async (req, res) => {
     return res.json({ ok: false, reason: "Address is private/internal, not publicly reachable." });
   }
 
-  const reachable = await new Promise<boolean>((resolve) => {
-    const client = parsed.protocol === "https:" ? https : http;
-    const testReq = client.request(parsed, { method: "GET", timeout: 6000 }, (r) => {
-      r.destroy();
-      resolve(true);
-    });
-    testReq.on("error", () => resolve(false));
-    testReq.on("timeout", () => { testReq.destroy(); resolve(false); });
-    testReq.end();
-  });
-
-  if (!reachable) {
-    return res.json({ ok: false, reason: "URL did not respond." });
+  if (await probeUrl(parsed)) {
+    return res.json({ ok: true });
   }
-  res.json({ ok: true });
+
+  // A direct probe failing does not prove the app is down. This server cannot
+  // connect to its OWN public IP (the NAT in front of it does not hairpin), so an
+  // app hosted on this very machine and published at http://<our public ip>:<port>
+  // looks dead from in here while answering fine from anywhere else. Confirm that
+  // specific case over loopback rather than blocking a mapping that would work —
+  // the IIS rule for it is rewritten to loopback too (see ensureMappedUrlIisSite).
+  if (await isOwnServerHost(parsed.hostname)) {
+    const loopback = new URL(parsed.toString());
+    loopback.hostname = "127.0.0.1";
+    if (await probeUrl(loopback)) {
+      logger.info(
+        "map-subdomain",
+        `${raw} did not answer directly but is this server; confirmed on ${loopback.origin}.`
+      );
+      return res.json({
+        ok: true,
+        viaLoopback: true,
+        reason: "Reachable. This app runs on this server, so it will be proxied over loopback.",
+      });
+    }
+  }
+
+  res.json({ ok: false, reason: "URL did not respond." });
 });
 
 // POST /map-subdomain — reverse-proxies a new subdomain straight to an already-
