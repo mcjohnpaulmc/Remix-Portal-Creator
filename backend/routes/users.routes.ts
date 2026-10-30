@@ -33,6 +33,7 @@ router.post("/users", (req, res) => {
   if (!db.users) db.users = [];
 
   const requesterIsSuperAdmin = isSuperAdminRole((req as any).userRole);
+  const requesterEmail: string | undefined = (req as any).adminEmail;
 
   if (action === "create") {
     if (!user.email || !user.name || !user.password) {
@@ -58,6 +59,10 @@ router.post("/users", (req, res) => {
       enabled: true,
       createdAt: new Date().toISOString(),
       allowedPortals: Array.isArray(user.allowedPortals) ? user.allowedPortals : undefined,
+      // Scopes who may see and manage this account from here on — see
+      // visibleUsersForRole. A server-to-server call (ADMIN_TOKEN, no session)
+      // has no email, which leaves the account superadmin-only by design.
+      createdBy: requesterEmail || undefined,
     };
     db.users.unshift(newUser);
     db.userLogs.unshift({
@@ -75,7 +80,7 @@ router.post("/users", (req, res) => {
     // A regular admin may only ever act on viewers — never another admin or
     // superadmin, even one they somehow got the id for (an old cached page,
     // a log entry, etc.) — mirrors what they're allowed to even see in the list.
-    if (!canManageUser(target, requesterIsSuperAdmin)) {
+    if (!canManageUser(target, requesterIsSuperAdmin, requesterEmail)) {
       return res.status(403).json({ error: "You do not have permission to modify this account." });
     }
     if (user.role !== undefined && user.role !== target?.role) {
@@ -112,7 +117,7 @@ router.post("/users", (req, res) => {
     if (delTarget?.isSystem) {
       return res.status(403).json({ error: "System accounts cannot be deleted." });
     }
-    if (!canManageUser(delTarget, requesterIsSuperAdmin)) {
+    if (!canManageUser(delTarget, requesterIsSuperAdmin, requesterEmail)) {
       return res.status(403).json({ error: "You do not have permission to delete this account." });
     }
     db.users = db.users.filter(u => u.id !== user.id);
@@ -135,7 +140,8 @@ router.post("/users", (req, res) => {
 
   const safeUsers: PortalUser[] = visibleUsersForRole(
     (db.users || []).map(({ passwordHash: _ph, ...safe }) => safe),
-    requesterIsSuperAdmin
+    requesterIsSuperAdmin,
+    requesterEmail
   );
   res.json({ success: true, users: safeUsers });
 });

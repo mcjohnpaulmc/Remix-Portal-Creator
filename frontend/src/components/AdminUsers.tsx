@@ -1,7 +1,25 @@
 import React, { useState } from "react";
-import { Users, Plus, Trash2, Eye, EyeOff, Shield, User, Check, X, Edit2, ToggleLeft, ToggleRight, RefreshCw } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Users, Plus, Trash2, Eye, EyeOff, Shield, User, Check, X, Edit2, ToggleLeft, ToggleRight, RefreshCw, Info, Clock, UserCheck, Activity } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { PortalUser } from "../../../shared/types";
+import { useEscapeKey } from "../utils/useEscapeKey";
+
+// Absolute timestamp plus a plain-language gap, because "who last used this
+// account" is usually a recency question ("is this dormant?") rather than a
+// calendar one.
+function formatWhen(iso: string | undefined): { absolute: string; relative: string } {
+  if (!iso) return { absolute: "—", relative: "" };
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) return { absolute: "—", relative: "" };
+  const mins = Math.floor((Date.now() - then.getTime()) / 60000);
+  let relative: string;
+  if (mins < 1) relative = "just now";
+  else if (mins < 60) relative = `${mins} minute${mins === 1 ? "" : "s"} ago`;
+  else if (mins < 1440) { const h = Math.floor(mins / 60); relative = `${h} hour${h === 1 ? "" : "s"} ago`; }
+  else { const d = Math.floor(mins / 1440); relative = `${d} day${d === 1 ? "" : "s"} ago`; }
+  return { absolute: then.toLocaleString(), relative };
+}
 
 interface AdminUsersProps {
   users: PortalUser[];
@@ -33,6 +51,10 @@ export function AdminUsers({ users, adminFetch, onRefresh, currentUserRole, subd
   const [formError, setFormError] = useState("");
   const [formSuccess, setFormSuccess] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+
+  // Account info popup — provenance and activity for one user.
+  const [infoUser, setInfoUser] = useState<PortalUser | null>(null);
+  useEscapeKey(infoUser !== null, () => setInfoUser(null));
 
   // Edit state
   const [editId, setEditId] = useState<string | null>(null);
@@ -403,6 +425,16 @@ export function AdminUsers({ users, adminFetch, onRefresh, currentUserRole, subd
                       </div>
 
                       <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Provenance + activity. Sits outside the isSystem branch so
+                            the system account can be inspected too, even though it
+                            can't be toggled, edited or deleted. */}
+                        <button
+                          onClick={() => setInfoUser(user)}
+                          className="p-1.5 text-slate-400 hover:text-orange-500 transition-colors"
+                          title="Account details"
+                        >
+                          <Info className="h-3.5 w-3.5" />
+                        </button>
                         {user.isSystem ? (
                           <span className="text-[10px] text-slate-400 italic select-none px-2">Protected</span>
                         ) : (
@@ -443,9 +475,83 @@ export function AdminUsers({ users, adminFetch, onRefresh, currentUserRole, subd
         )}
       </div>
 
+      {/* Account info popup. Portaled to document.body — this renders inside
+          App.tsx's admin page-transition wrapper, which framer-motion gives a
+          transform, and a transformed ancestor makes `fixed` resolve against
+          that ancestor instead of the viewport. */}
+      {infoUser && createPortal(
+        <div
+          className="fixed inset-0 z-[70] bg-slate-900/60 backdrop-blur-sm flex items-start justify-center px-4 pt-24 pb-10 overflow-y-auto"
+          onClick={() => setInfoUser(null)}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.97 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
+              <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">Account Details</span>
+              <button
+                onClick={() => setInfoUser(null)}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+                title="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-4">
+              <div>
+                <p className="text-sm font-bold text-slate-900">{infoUser.name}</p>
+                <p className="text-xs font-mono text-slate-400">{infoUser.email}</p>
+              </div>
+
+              {[
+                {
+                  icon: <UserCheck className="h-3.5 w-3.5 text-orange-500" />,
+                  label: "Onboarded by",
+                  value: infoUser.createdBy || "Not recorded",
+                  hint: infoUser.createdBy
+                    ? undefined
+                    : "This account predates creator tracking and no matching entry was found in the audit log.",
+                  mono: !!infoUser.createdBy,
+                },
+                {
+                  icon: <Clock className="h-3.5 w-3.5 text-orange-500" />,
+                  label: "Created",
+                  value: formatWhen(infoUser.createdAt).absolute,
+                  hint: formatWhen(infoUser.createdAt).relative,
+                },
+                {
+                  icon: <Activity className="h-3.5 w-3.5 text-orange-500" />,
+                  label: "Last active",
+                  value: infoUser.lastActiveAt ? formatWhen(infoUser.lastActiveAt).absolute : "Never signed in",
+                  hint: infoUser.lastActiveAt
+                    ? formatWhen(infoUser.lastActiveAt).relative
+                    : infoUser.role === "viewer"
+                      ? "Viewers sign in on their assigned portal, not the hub."
+                      : undefined,
+                },
+              ].map((row) => (
+                <div key={row.label} className="flex items-start gap-2.5">
+                  <div className="mt-0.5 shrink-0">{row.icon}</div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-mono uppercase tracking-wider text-slate-400">{row.label}</p>
+                    <p className={`text-xs text-slate-800 break-all ${row.mono ? "font-mono" : ""}`}>{row.value}</p>
+                    {row.hint && <p className="text-[10px] text-slate-400 mt-0.5">{row.hint}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        </div>,
+        document.body
+      )}
+
       <div className="text-[10px] text-slate-400 leading-relaxed p-3 bg-slate-50 rounded-xl border border-slate-100">
         <Shield className="h-3 w-3 inline mr-1 text-orange-400" />
-        <strong>Permissions:</strong> Viewer users can only log into the portal(s) they're allowed on to view solutions/collaterals — they have no hub access at all, and cannot onboard anyone. Admin users can manage the portals they create, plus any extra ones a Super Admin grants them via that same <strong>Allowed Portals</strong> setting, and can onboard viewers (but not other admins). Super Admins can additionally view and edit every admin's portals, solutions, and collaterals, and are the only role that can onboard another admin or superadmin, or grant an admin extra portal access. Passwords are stored as bcrypt hashes.
+        <strong>Permissions:</strong> Viewer users can only log into the portal(s) they're allowed on to view solutions/collaterals — they have no hub access at all, and cannot onboard anyone. Admin users see and manage only the viewers they personally onboarded — another admin's users are hidden from them entirely. They can manage the portals they create, plus any extra ones a Super Admin grants them via that same <strong>Allowed Portals</strong> setting, and can onboard viewers (but not other admins). Super Admins can additionally view and edit every admin's portals, solutions, and collaterals, and are the only role that can onboard another admin or superadmin, or grant an admin extra portal access. Passwords are stored as bcrypt hashes.
       </div>
     </div>
   );

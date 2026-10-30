@@ -36,6 +36,26 @@ function clearSessionCookie(res: any): void {
   });
 }
 
+/**
+ * Stamps lastActiveAt on a successful authentication, in the live cache and on
+ * disk, and replicates to S3. Both login paths call it: the hub for admins, and
+ * verify-credentials for viewers, who have no hub access at all and would
+ * otherwise never show any activity.
+ */
+function recordActivity(email: string): void {
+  const now = new Date().toISOString();
+  const cached = getUsersCache();
+  const cachedUser = cached?.find(u => u.email === email);
+  if (cachedUser) cachedUser.lastActiveAt = now;
+
+  const db = readDatabase();
+  const idx = (db.users || []).findIndex((u: InternalUser) => u.email === email);
+  if (idx === -1) return;
+  db.users![idx].lastActiveAt = now;
+  writeDatabase(db);
+  s3SyncUsers(db.users || []).catch(() => {});
+}
+
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 50,
@@ -77,6 +97,8 @@ router.post("/api/login", loginLimiter, (req, res) => {
   if (user.role === "viewer") {
     return res.status(403).json({ error: "Viewer accounts cannot access the hub. Please log in from your assigned portal instead." });
   }
+
+  recordActivity(normalized);
 
   // Log to local DB (non-blocking)
   const db = readDatabase();
@@ -150,6 +172,8 @@ router.post("/api/internal/verify-credentials", (req, res) => {
   if (restricted && portal && !user.allowedPortals!.includes(portal)) {
     return res.status(403).json({ error: "Your account is not authorized to access this portal." });
   }
+
+  recordActivity(normalized);
 
   res.json({ success: true, email: normalized, name: user.name, role: user.role });
 });

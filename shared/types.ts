@@ -198,6 +198,17 @@ export interface PortalUser {
   // Has no effect on whether a user can reach the hub admin console at all — that
   // is gated by role alone (viewers can never log into the hub, see auth.routes.ts).
   allowedPortals?: string[];
+  // Email of the admin who onboarded this account. Scopes who may see and manage
+  // it: a regular admin only ever sees the viewers they personally created (see
+  // visibleUsersForRole in backend/utils/dbView.ts). Accounts predating this
+  // field are backfilled from the audit log at startup; anything still unowned
+  // after that is visible to Super Admins only, since "unknown owner" must not
+  // mean "everyone's".
+  createdBy?: string;
+  // Last time this account authenticated anywhere — the hub for admins, a
+  // customer portal for viewers (who have no hub access at all). Surfaced in the
+  // account info popup in User Management.
+  lastActiveAt?: string;
 }
 
 export interface AppState {

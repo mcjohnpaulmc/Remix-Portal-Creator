@@ -68,6 +68,8 @@ export async function seedDefaultAdmin(): Promise<void> {
     logger.info("Auth", `System admin enforced: ${SYSTEM_ADMIN_EMAIL}`);
   }
 
+  backfillUserCreators(db);
+
   writeDatabase(db);
 
   // Populate the in-memory cache so login works immediately from S3 data
@@ -75,4 +77,59 @@ export async function seedDefaultAdmin(): Promise<void> {
 
   // Push the authoritative merged list back to S3 (best-effort)
   s3SyncUsers(db.users).catch(() => {});
+}
+
+// "User Created" audit entries name the created account inside parentheses, e.g.
+//   User "Jane Doe" (jane@acme.com) onboarded with role: viewer.
+const CREATED_USER_EMAIL = /\(([^)\s]+@[^)\s]+)\)/;
+
+/**
+ * backfillUserCreators — recovers createdBy for accounts that predate the field,
+ * by reading it back out of the audit log.
+ *
+ * Without this, every existing account would be left unowned, and since an
+ * unowned account is visible to superadmins only (see visibleUsersForRole),
+ * they would all disappear from the admin who actually onboarded them. The log
+ * already records who created whom, so the ownership is recoverable rather than
+ * guessed. Anything with no matching log entry stays unowned, which is the safe
+ * direction: hidden from regular admins until a superadmin sorts it out.
+ *
+ * Mutates `db` in place; the caller persists. Idempotent — accounts that
+ * already have a createdBy are never touched.
+ */
+export function backfillUserCreators(db: ReturnType<typeof readDatabase>): number {
+  const needsOwner = (db.users || []).filter(u => !u.createdBy && !u.isSystem);
+  if (needsOwner.length === 0) return 0;
+
+  // Oldest first, so that if an account was somehow created more than once the
+  // most recent entry is the one that sticks.
+  const creationLogs = (db.userLogs || [])
+    .filter(l => l.action === "User Created")
+    .slice()
+    .reverse();
+
+  const ownerByEmail = new Map<string, string>();
+  for (const log of creationLogs) {
+    const match = CREATED_USER_EMAIL.exec(log.details || "");
+    if (match && log.email) ownerByEmail.set(match[1].toLowerCase(), log.email);
+  }
+
+  let filled = 0;
+  for (const user of needsOwner) {
+    const owner = ownerByEmail.get(user.email.toLowerCase());
+    if (owner) {
+      user.createdBy = owner;
+      filled++;
+    }
+  }
+
+  const stillUnowned = needsOwner.length - filled;
+  logger.info(
+    "Auth",
+    `Backfilled createdBy for ${filled} user(s) from the audit log` +
+    (stillUnowned > 0
+      ? `; ${stillUnowned} account(s) have no creation record and stay visible to Super Admins only.`
+      : ".")
+  );
+  return filled;
 }

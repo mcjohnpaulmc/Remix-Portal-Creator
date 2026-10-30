@@ -41,7 +41,8 @@ router.get("/api/database", requireAnyAuth, (req, res) => {
 
   const safeUsers: PortalUser[] = visibleUsersForRole(
     (safeDb.users || []).map(({ passwordHash: _ph, ...safe }: any) => safe),
-    isSuperAdmin
+    isSuperAdmin,
+    userEmail
   );
 
   const filteredSubdomains = (isSuperAdmin || userRole === "admin")
