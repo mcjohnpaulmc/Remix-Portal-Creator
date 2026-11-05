@@ -4,12 +4,45 @@
  */
 
 import React, { useState } from "react";
-import { Link2, Globe, CheckCircle2, XCircle } from "lucide-react";
+import { Link2, Globe, CheckCircle2, XCircle, ShieldAlert, ArrowRight } from "lucide-react";
 
 interface MapSubdomainPanelProps {
   onReload?: () => Promise<void>;
   onClose: () => void;
 }
+
+/**
+ * Shown before the mapping form every time this panel opens.
+ *
+ * Mapping a subdomain only changes the address the app is served from — it
+ * cannot change anything the app itself does. Every item below is a failure
+ * that looks like the hub broke the app but is actually the app, or a service
+ * it depends on, refusing the new origin. They are listed here because each one
+ * surfaces only *after* a mapping succeeds, with an error message that points
+ * nowhere near the cause.
+ */
+const GUIDELINES: { title: string; body: string }[] = [
+  {
+    title: "The app must already be publicly reachable",
+    body: "This creates a reverse proxy, not hosting. The app has to be live and answering on its own address first — the Test button on the next screen confirms that.",
+  },
+  {
+    title: "A separate API must allow the new domain (CORS)",
+    body: "If the app calls an API on a different domain, that API has to add your new subdomain to its allowed origins. Otherwise the page loads normally but every request fails with \"Failed to fetch\".",
+  },
+  {
+    title: "Sign-in providers keep their own domain allowlist",
+    body: "Firebase, Google, Auth0 and similar will block login from an unrecognised domain. Add the new subdomain under the provider's authorised domains — in Firebase that's Authentication → Settings → Authorized domains.",
+  },
+  {
+    title: "Addresses compiled into the frontend will not change",
+    body: "Many apps bake their API address in at build time. If that address is wrong for the new domain, only a rebuild fixes it — the ideal is a same-origin path like /api, which then works on any domain you map.",
+  },
+  {
+    title: "The subdomain is public the moment it is mapped",
+    body: "Anything the app exposes becomes reachable from the internet. To undo a mapping, delete its entry from the Solution Repository — that removes the DNS record and the proxy together.",
+  },
+];
 
 // Left panel of the "Map/Onboard Solution" popup — points a brand-new subdomain
 // straight at an already-public external app (reverse proxy, no upload, no
@@ -22,6 +55,10 @@ export function MapSubdomainPanel({ onReload, onClose }: MapSubdomainPanelProps)
   const [subdomainSlug, setSubdomainSlug] = useState("");
   const [addToRepository, setAddToRepository] = useState(true);
   const [mapping, setMapping] = useState(false);
+  // Guidelines gate the form every time, rather than once per admin. The cost is
+  // one click; the cost of missing them is a mapping that looks fine and fails
+  // somewhere else entirely.
+  const [stage, setStage] = useState<"guidelines" | "form">("guidelines");
 
   const handleUrlChange = (value: string) => {
     setTargetUrl(value);
@@ -95,16 +132,75 @@ export function MapSubdomainPanel({ onReload, onClose }: MapSubdomainPanelProps)
         ? "border-red-500 ring-1 ring-red-200"
         : "border-slate-200";
 
+  if (stage === "guidelines") {
+    return (
+      <div className="p-6 bg-white rounded-2xl shadow-xs space-y-5 h-full">
+        <div className="pb-3 border-b border-slate-100">
+          <span className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+            <ShieldAlert className="h-3.5 w-3.5 text-orange-500" />
+            Before you map a subdomain
+          </span>
+          <p className="text-xs text-slate-500 mt-1">
+            Mapping changes the address an app is served from — it cannot change what the app
+            does. These are the things that break afterwards, and who has to fix each one.
+          </p>
+        </div>
+
+        <ol className="space-y-3">
+          {GUIDELINES.map((g, i) => (
+            <li key={g.title} className="flex gap-3">
+              <span className="shrink-0 h-5 w-5 rounded-full bg-orange-50 border border-orange-100 text-orange-600 text-[10px] font-bold font-mono flex items-center justify-center mt-0.5">
+                {i + 1}
+              </span>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-slate-800 leading-snug">{g.title}</p>
+                <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5">{g.body}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+
+        <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3.5">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 border border-slate-200 hover:border-slate-350 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => setStage("form")}
+            className="px-5 py-2.5 bg-orange-600 hover:bg-orange-500 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5"
+          >
+            Continue <ArrowRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 bg-white rounded-2xl shadow-xs space-y-5 h-full">
-      <div className="pb-3 border-b border-slate-100">
-        <span className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-          <Link2 className="h-3.5 w-3.5 text-orange-500" />
-          Map Subdomain
-        </span>
-        <p className="text-xs text-slate-500 mt-1">
-          Point a new subdomain at an app that already has a public IP — no upload, no hosting here.
-        </p>
+      <div className="pb-3 border-b border-slate-100 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <span className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+            <Link2 className="h-3.5 w-3.5 text-orange-500" />
+            Map Subdomain
+          </span>
+          <p className="text-xs text-slate-500 mt-1">
+            Point a new subdomain at an app that already has a public IP — no upload, no hosting here.
+          </p>
+        </div>
+        {/* Re-read without losing what's already typed — the form state lives
+            above this branch, so returning here and continuing keeps it. */}
+        <button
+          type="button"
+          onClick={() => setStage("guidelines")}
+          className="shrink-0 text-[10px] font-semibold text-slate-400 hover:text-orange-600 hover:underline underline-offset-2 transition-colors"
+        >
+          Guidelines
+        </button>
       </div>
 
       <div className="space-y-4">
