@@ -13,6 +13,7 @@ import { AdminSolutions } from "./AdminSolutions";
 import { DeploySolutionForm } from "./DeploySolutionForm";
 import { EditSolutionQuickPopup } from "./EditSolutionQuickPopup";
 import { MapSubdomainPanel } from "./MapSubdomainPanel";
+import { UpdateDeployedSolutionPopup, isUpdatableHtmlApp } from "./UpdateDeployedSolutionPopup";
 
 // Shared popup backdrop. `items-start` + pt-24 drops the card clear of the 4rem
 // top bar instead of centring it, so the bar stays visible — and blurred — behind
@@ -49,11 +50,13 @@ export function AdminOnboardSolutionPage({
   const [openPopup, setOpenPopup] = useState<"map" | "onboard" | "deploy" | null>(null);
   const [updatingRepo, setUpdatingRepo] = useState(false);
   const [editingSolution, setEditingSolution] = useState<Solution | null>(null);
+  const [updatingSolution, setUpdatingSolution] = useState<Solution | null>(null);
   const [repoFilter, setRepoFilter] = useState<"all" | "onboarded" | "deployed">("all");
   const subdomainProp = subdomains.map((s) => ({ id: s.id, name: s.name, displayName: s.displayName }));
 
   useEscapeKey(openPopup !== null, () => setOpenPopup(null));
   useEscapeKey(editingSolution !== null, () => setEditingSolution(null));
+  useEscapeKey(updatingSolution !== null, () => setUpdatingSolution(null));
 
   // "Map to solution repository" left unticked when mapping a subdomain keeps a
   // solution out of this whole section (counts included) — it's still a normal,
@@ -311,14 +314,29 @@ export function AdminOnboardSolutionPage({
                     </td>
                     <td className="px-4 py-2.5 text-right text-slate-600">{collateralCount}</td>
                     <td className="px-4 py-2.5 text-right">
-                      <button
-                        type="button"
-                        onClick={() => setEditingSolution(sol)}
-                        className="inline-flex items-center px-2 py-1 border border-slate-200 rounded bg-slate-50 hover:bg-slate-100 text-slate-600 text-[10px] font-semibold transition-colors"
-                        title="Modify Solution"
-                      >
-                        Modify
-                      </button>
+                      <div className="inline-flex items-center gap-1.5">
+                        {/* Only offered for a hosted HTML app — a Map Subdomain
+                            entry carries the same deployedSlug field but proxies
+                            an external origin, so there is no file to replace. */}
+                        {isUpdatableHtmlApp(sol) && (
+                          <button
+                            type="button"
+                            onClick={() => setUpdatingSolution(sol)}
+                            className="inline-flex items-center px-2 py-1 border border-orange-200 rounded bg-orange-50 hover:bg-orange-100 text-orange-700 text-[10px] font-semibold transition-colors"
+                            title="Upload a new version of this app"
+                          >
+                            Update
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setEditingSolution(sol)}
+                          className="inline-flex items-center px-2 py-1 border border-slate-200 rounded bg-slate-50 hover:bg-slate-100 text-slate-600 text-[10px] font-semibold transition-colors"
+                          title="Modify Solution"
+                        >
+                          Modify
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -425,6 +443,23 @@ export function AdminOnboardSolutionPage({
               onRefresh={onRefresh}
               adminUserEmail={adminUserEmail}
               onClose={() => setEditingSolution(null)}
+              onNotify={onNotify}
+            />
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {updatingSolution && createPortal(
+        <div
+          className={OVERLAY_CLASS_TOP}
+          onClick={() => setUpdatingSolution(null)}
+        >
+          <div className="w-full max-w-xl rounded-3xl" onClick={(e) => e.stopPropagation()}>
+            <UpdateDeployedSolutionPopup
+              solution={updatingSolution}
+              onReload={onReload}
+              onClose={() => setUpdatingSolution(null)}
               onNotify={onNotify}
             />
           </div>

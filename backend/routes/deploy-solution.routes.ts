@@ -11,8 +11,8 @@ import { Solution } from "../../shared/types";
 import { DEPLOYED_SOLUTIONS_DIR } from "../config";
 import { readDatabase, writeDatabase } from "../storage/db";
 import { autoDeployLivePortals } from "../portal/deploy";
-import { ensureDnsRecord } from "../dns/cloudflare";
-import { ensureStaticHtmlIisSite } from "../iis/site";
+import { ensureDnsRecord, deleteDnsRecord } from "../dns/cloudflare";
+import { ensureStaticHtmlIisSite, removeStaticHtmlIisSite } from "../iis/site";
 import { buildAdminSafeDbView, canAccessPortal } from "../utils/dbView";
 import { isSuperAdminRole } from "../auth";
 import { logger } from "../logger";
@@ -160,6 +160,118 @@ router.post("/deploy-solution", (req: any, res: any, next: any) => {
     url: `https://${fqdn}`,
     dnsOk,
     solution: newSol,
+    database: buildAdminSafeDbView(db, adminEmail, isSuperAdmin),
+  });
+});
+
+// POST /update-deployed-solution — replaces the stored HTML of an already-deployed
+// standalone app, optionally moving it to a different subdomain at the same time.
+//
+// Only applies to solutions this hub actually hosts a file for. A "Map Subdomain"
+// entry also carries deployedSlug/deployedDomain but serves an external origin
+// through a reverse proxy (mappedExternalUrl), so there is no file to replace and
+// overwriting one would silently do nothing.
+router.post("/update-deployed-solution", (req: any, res: any, next: any) => {
+  upload.single("file")(req, res, (err: any) => {
+    if (err) return res.status(400).json({ error: err.message || "Upload failed." });
+    next();
+  });
+}, async (req: any, res: any) => {
+  const adminEmail = (req as any).adminEmail;
+  const isSuperAdmin = isSuperAdminRole((req as any).userRole);
+
+  if (!req.file) {
+    return res.status(400).json({ error: "An HTML file is required." });
+  }
+
+  const solutionId = String(req.body.solutionId || "").trim();
+  const db = readDatabase();
+  const target = (db.solutions || []).find(s => s.id === solutionId);
+
+  if (!target) return res.status(404).json({ error: "Solution not found." });
+  if (!target.deployedSlug) {
+    return res.status(400).json({ error: "This solution is not a deployed HTML app." });
+  }
+  if (target.mappedExternalUrl) {
+    return res.status(400).json({ error: "This subdomain proxies an external app — there is no hosted file to replace." });
+  }
+  // Content edits are owner-scoped, exactly as in content.routes.ts. Replacing the
+  // served file is the furthest thing from a mapping-only change, so no exception.
+  if (target.createdBy && target.createdBy !== adminEmail && !isSuperAdmin) {
+    return res.status(403).json({ error: "You do not have permission to modify this solution." });
+  }
+
+  const oldSlug = target.deployedSlug;
+  const domain = target.deployedDomain || "mobiusservices.io";
+  const requestedSlug = String(req.body.subdomain || "").trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
+  const newSlug = requestedSlug || oldSlug;
+  const slugChanged = newSlug !== oldSlug;
+
+  if (slugChanged) {
+    const taken = (db.subdomains || []).some(s => s.name === newSlug || s.id === newSlug) ||
+      (db.solutions || []).some(s => s.id !== target.id && s.deployedSlug === newSlug);
+    if (taken) {
+      return res.status(400).json({ error: `Subdomain "${newSlug}.${domain}" is already in use.` });
+    }
+  }
+
+  // Write the new file first. If this fails the app keeps serving the old version,
+  // which is the right outcome — nothing else has been touched yet.
+  const newDir = path.join(DEPLOYED_SOLUTIONS_DIR, newSlug);
+  try {
+    fs.mkdirSync(newDir, { recursive: true });
+    fs.writeFileSync(path.join(newDir, "index.html"), req.file.buffer);
+  } catch (err: any) {
+    logger.error(`update-solution-${newSlug}`, `Failed to write index.html: ${err?.message}`);
+    return res.status(500).json({ error: "Failed to store the uploaded file." });
+  }
+
+  const fqdn = `${newSlug}.${domain}`;
+  let dnsOk = true;
+
+  if (slugChanged) {
+    // Stand the new address up before tearing the old one down, so a failure here
+    // leaves the app reachable where it already was.
+    dnsOk = await ensureDnsRecord(newSlug, domain).catch(() => false);
+    await ensureStaticHtmlIisSite(newSlug, fqdn, newDir).catch(err =>
+      logger.error(`update-solution-${newSlug}`, `IIS site creation failed: ${err?.message}`)
+    );
+    await removeStaticHtmlIisSite(oldSlug).catch(() => {});
+    deleteDnsRecord(oldSlug, domain).catch(() => {});
+    try {
+      fs.rmSync(path.join(DEPLOYED_SOLUTIONS_DIR, oldSlug), { recursive: true, force: true });
+    } catch (err: any) {
+      logger.warn(`update-solution-${oldSlug}`, `Could not delete old directory: ${err?.message}`);
+    }
+  } else {
+    // Same slug: the file on disk is already replaced and IIS serves it straight
+    // from there, so the site only needs recreating if it went missing.
+    await ensureStaticHtmlIisSite(newSlug, fqdn, newDir).catch(err =>
+      logger.error(`update-solution-${newSlug}`, `IIS site refresh failed: ${err?.message}`)
+    );
+  }
+
+  target.deployedSlug = newSlug;
+  target.url = `https://${fqdn}`;
+
+  db.userLogs.unshift({
+    id: `log-${Date.now()}`,
+    email: adminEmail || "admin@mobiusservices.co.in",
+    action: "Standalone Solution Updated",
+    details: `Replaced the HTML for "${target.title}" at ${fqdn}` +
+      (slugChanged ? ` (moved from ${oldSlug}.${domain}; DNS: ${dnsOk ? "active" : "pending"}).` : "."),
+    date: new Date().toISOString(),
+  });
+
+  writeDatabase(db);
+  await autoDeployLivePortals(db);
+
+  res.json({
+    success: true,
+    url: `https://${fqdn}`,
+    dnsOk,
+    slugChanged,
+    solution: target,
     database: buildAdminSafeDbView(db, adminEmail, isSuperAdmin),
   });
 });
