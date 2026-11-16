@@ -164,6 +164,39 @@ router.post("/deploy-solution", (req: any, res: any, next: any) => {
   });
 });
 
+// GET /download-deployed-solution/:id — streams the stored index.html for a
+// deployed standalone app, so an admin can grab the current version (e.g. before
+// editing it, or just to keep a copy) without going to the live public URL.
+//
+// Deliberately not owner-scoped, unlike update-deployed-solution above — the
+// Solution Repository table already shows this row, and its public URL, to every
+// admin regardless of who created it (mirrors the rest of the repository list;
+// see content.routes.ts' mapping-only vs. ownership-gated split). The file is
+// already reachable by anyone on the internet at that URL, so restricting who on
+// the hub can download the identical bytes would protect nothing.
+router.get("/download-deployed-solution/:id", (req, res) => {
+  const target = (readDatabase().solutions || []).find(s => s.id === req.params.id);
+  if (!target) return res.status(404).json({ error: "Solution not found." });
+  if (!target.deployedSlug || target.mappedExternalUrl) {
+    return res.status(400).json({ error: "This solution has no hosted file to download." });
+  }
+
+  const filePath = path.join(DEPLOYED_SOLUTIONS_DIR, target.deployedSlug, "index.html");
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: "The stored file could not be found on disk." });
+  }
+
+  const downloadName = `${target.deployedSlug}.html`;
+  res.setHeader("Content-Type", "text/html");
+  // attachment, not inline — this hub origin has nothing to fear from its own
+  // admin's browser rendering the file (unlike the BLOCKED_EXTENSIONS guard in
+  // upload.routes.ts, which stops an admin's upload reaching the Hub Repository's
+  // shared thumbnail storage), but a GET hitting this route directly should save
+  // the file rather than execute it inline on whatever page linked here.
+  res.setHeader("Content-Disposition", `attachment; filename="${downloadName}"`);
+  res.sendFile(filePath);
+});
+
 // POST /update-deployed-solution — replaces the stored HTML of an already-deployed
 // standalone app, optionally moving it to a different subdomain at the same time.
 //

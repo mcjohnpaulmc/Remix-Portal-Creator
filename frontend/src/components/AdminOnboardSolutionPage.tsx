@@ -315,18 +315,33 @@ export function AdminOnboardSolutionPage({
                     <td className="px-4 py-2.5 text-right text-slate-600">{collateralCount}</td>
                     <td className="px-4 py-2.5 text-right">
                       <div className="inline-flex items-center gap-1.5">
-                        {/* Only offered for a hosted HTML app — a Map Subdomain
-                            entry carries the same deployedSlug field but proxies
-                            an external origin, so there is no file to replace. */}
+                        {/* Download and Update share the same condition — both only
+                            make sense for a hosted HTML app. A Map Subdomain entry
+                            carries the same deployedSlug field but proxies an
+                            external origin: there is no file on this server to
+                            fetch or replace. A plain anchor (not a click handler)
+                            so the browser's native download flow handles it — this
+                            is a same-origin GET, so the session cookie rides along
+                            without any fetch/adminFetch plumbing. */}
                         {isUpdatableHtmlApp(sol) && (
-                          <button
-                            type="button"
-                            onClick={() => setUpdatingSolution(sol)}
-                            className="inline-flex items-center px-2 py-1 border border-orange-200 rounded bg-orange-50 hover:bg-orange-100 text-orange-700 text-[10px] font-semibold transition-colors"
-                            title="Upload a new version of this app"
-                          >
-                            Update
-                          </button>
+                          <>
+                            <a
+                              href={`/api/admin/download-deployed-solution/${sol.id}`}
+                              download
+                              className="inline-flex items-center px-2 py-1 border border-slate-200 rounded bg-slate-50 hover:bg-slate-100 text-slate-600 text-[10px] font-semibold transition-colors"
+                              title="Download the current HTML file"
+                            >
+                              Download
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => setUpdatingSolution(sol)}
+                              className="inline-flex items-center px-2 py-1 border border-orange-200 rounded bg-orange-50 hover:bg-orange-100 text-orange-700 text-[10px] font-semibold transition-colors"
+                              title="Upload a new version of this app"
+                            >
+                              Update
+                            </button>
+                          </>
                         )}
                         <button
                           type="button"
